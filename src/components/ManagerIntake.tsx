@@ -25,12 +25,15 @@ import {
   extractInvoice,
   invoiceMissing,
   pdfToImage,
+  readPdf,
   readInvoice,
 } from "../lib/invoiceScan";
 import { Festive } from "./Festive";
 const ImeiScanner = lazy(() => import("./ImeiScanner"));
 // Loaded up front so the sound plays the moment a check fails.
 const errorAudio = typeof Audio === "undefined" ? null : new Audio(errorSound);
+// Text inside a PDF can't be blurry; recorded as a clearly sharp score.
+const PDF_SHARPNESS = 9999;
 const MISMATCH = "Data mismatch";
 const EMPTY = {
   name: "",
@@ -115,10 +118,13 @@ export function ManagerIntake() {
   } | null>(null);
   function readFile(file: File) {
     if (scan.current?.file !== file) {
-      const result = (async () =>
-        readInvoice(
-          file.type === "application/pdf" ? await pdfToImage(file) : file,
-        ))();
+      const result = (async () => {
+        if (file.type !== "application/pdf") return readInvoice(file);
+        const text = await readPdf(file);
+        return text
+          ? { text, sharpness: PDF_SHARPNESS }
+          : readInvoice(await pdfToImage(file));
+      })();
       scan.current = { file, result };
     }
     return scan.current.result;

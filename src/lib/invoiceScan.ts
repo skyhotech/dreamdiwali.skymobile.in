@@ -137,12 +137,55 @@ export async function readInvoice(file: Blob) {
     void worker.terminate();
   }
 }
-/** First page of a PDF as a sharp image. Runs on this device only: the PDF
- *  is held in memory for the check and never uploaded. */
-export async function pdfToImage(file: Blob) {
+type TextPiece = { str: string; transform: number[] };
+// A PDF made by billing software holds its words: reading them is instant and
+// exact. Scanned PDFs hold only a picture, so they go through OCR instead.
+const MIN_PDF_TEXT = 40;
+const LINE_TOLERANCE = 4;
+async function loadPdf() {
   const pdfjs = await import("pdfjs-dist");
   const worker = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+  return pdfjs;
+}
+export async function readPdf(file: Blob) {
+  const pdfjs = await loadPdf();
+  const task = pdfjs.getDocument({ data: await file.arrayBuffer() });
+  try {
+    const page = await (await task.promise).getPage(1);
+    const pieces = (await page.getTextContent()).items.filter(
+      (i): i is TextPiece & typeof i => "str" in i && Boolean(i.str.trim()),
+    );
+    // Top to bottom, then left to right, joining pieces on one printed line.
+    pieces.sort(
+      (a, b) =>
+        b.transform[5] - a.transform[5] || a.transform[4] - b.transform[4],
+    );
+    const lines: { y: number; parts: typeof pieces }[] = [];
+    for (const p of pieces) {
+      const line = lines.find(
+        (l) => Math.abs(l.y - p.transform[5]) < LINE_TOLERANCE,
+      );
+      if (line) line.parts.push(p);
+      else lines.push({ y: p.transform[5], parts: [p] });
+    }
+    const text = lines
+      .map((l) =>
+        l.parts
+          .sort((a, b) => a.transform[4] - b.transform[4])
+          .map((p) => p.str.trim())
+          .join(" "),
+      )
+      .join("\n");
+    return text.length >= MIN_PDF_TEXT ? text : "";
+  } finally {
+    void task.destroy();
+  }
+}
+/** First page of a PDF as a sharp image. Runs on this device only: the PDF
+ *  is held in memory for the check and never uploaded. */
+export async function pdfToImage(file: Blob) {
+  const pdfjs = await loadPdf();
   const task = pdfjs.getDocument({ data: await file.arrayBuffer() });
   const doc = await task.promise;
   try {
