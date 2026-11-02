@@ -202,7 +202,7 @@ _INVOICE_LABEL = re.compile(
 
 # Same idea for "IMEI NO: P-12568801-D"; a bill can list several.
 _IMEI_LABEL = re.compile(
-    r"(?:imei|serial)\s*(?:no|number|num)?\b\s*[.:;\-]*\s*([A-Z0-9][A-Z0-9\-]{3,})", re.I
+    r"(?:imei|serial)\s*(?:no|number|num)?\b\s*[.:;\-]*\s*([A-Z0-9][A-Z0-9_\-]{3,})", re.I
 )
 
 
@@ -218,7 +218,9 @@ def invoice_missing(text, data):
     """Whether the typed IMEI and invoice number match the bill; other fields
     are not compared. Kept in sync with invoiceMissing in src/lib/invoiceScan.ts."""
     missing = []
-    if not _printed(text, _IMEI_LABEL.findall(text), data["imei"]):
+    # P-12568801-D, P_12568801_D and 12568801 are the same serial.
+    want, imeis = _compact(data["imei"]), [_compact(v) for v in _IMEI_LABEL.findall(text)]
+    if not (any(want in v or v in want for v in imeis) if imeis else _printed(text, [], want)):
         missing.append("IMEI")
     if not _printed(text, _INVOICE_LABEL.findall(text)[:1], data["invoice_number"]):
         missing.append("invoice number")
@@ -253,7 +255,7 @@ class CustomerIntakeSerializer(serializers.Serializer):
     def validate_imei(self, value):
         value = value.upper()
         is_imei = len(value) == 15 and value.isdigit()
-        ok = imei_valid(value) if is_imei else re.fullmatch(r"[A-Z0-9][A-Z0-9-]{3,29}", value)
+        ok = imei_valid(value) if is_imei else re.fullmatch(r"[A-Z0-9][A-Z0-9_-]{3,29}", value)
         if not ok:
             raise serializers.ValidationError("This IMEI number is not valid.")
         return value

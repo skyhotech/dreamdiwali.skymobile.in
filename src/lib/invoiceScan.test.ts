@@ -46,6 +46,9 @@ test("an invoice fills in the form, and the result passes its own check", () => 
   });
   expect(invoiceMissing(text, f as typeof OK)).toEqual([]);
 });
+test.each(["P-12568801-D", "P_12568801_D", "12568801"])("serial %s matches", (imei) => {
+  expect(invoiceMissing(BILL, { ...OK, imei })).toEqual([]);
+});
 test("a flat image has no sharpness and hard edges have plenty", () => {
   const flat = new Float32Array(100).fill(128);
   const edges = Float32Array.from({ length: 100 }, (_, i) => (i % 2 ? 255 : 0));

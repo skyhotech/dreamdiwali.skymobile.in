@@ -14,7 +14,7 @@ const compact = (text: string) =>
 // The value printed after the label, e.g. "Invoice No : SI2627VLR31054".
 const INVOICE_LABEL = /invoice\s*(?:no|number|num)\b\s*[.:;\-]*\s*([A-Z0-9][A-Z0-9/\-]{3,})/i;
 // Same idea for "IMEI NO: P-12568801-D"; a bill can list several.
-const IMEI_LABEL = /(?:imei|serial)\s*(?:no|number|num)?\b\s*[.:;\-]*\s*([A-Z0-9][A-Z0-9\-]{3,})/gi;
+const IMEI_LABEL = /(?:imei|serial)\s*(?:no|number|num)?\b\s*[.:;\-]*\s*([A-Z0-9][A-Z0-9_\-]{3,})/gi;
 /** True when the value printed at a label, or failing that anywhere, matches. */
 function printed(text: string, labelled: string[], typed: string) {
   const want = compact(typed);
@@ -49,7 +49,11 @@ export function invoiceMissing(
 ) {
   const missing = [];
   const imeis = [...text.matchAll(IMEI_LABEL)].map((m) => m[1]);
-  if (!printed(text, imeis, f.imei)) missing.push("IMEI");
+  // P-12568801-D, P_12568801_D and 12568801 are the same serial.
+  const want = compact(f.imei);
+  const same = (v: string) => compact(v).includes(want) || want.includes(compact(v));
+  if (imeis.length ? !imeis.some(same) : !printed(text, [], f.imei))
+    missing.push("IMEI");
   const number = text.match(INVOICE_LABEL)?.[1];
   if (!printed(text, number ? [number] : [], f.invoice))
     missing.push("invoice number");

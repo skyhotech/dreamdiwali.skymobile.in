@@ -284,7 +284,7 @@ export function ManagerIntake() {
               placeholder="Type or scan"
               value={form.imei}
               onChange={(e) =>
-                change("imei", e.target.value.replace(/[^a-zA-Z0-9-]/g, "").toUpperCase())
+                change("imei", e.target.value.replace(/[^a-zA-Z0-9_-]/g, "").toUpperCase())
               }
             />
             <button

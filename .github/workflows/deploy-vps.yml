@@ -80,7 +80,9 @@ jobs:
             backend/ "$R:/opt/skymirror/backend/"
           rsync -az --delete public/frames/ "$R:/opt/skymirror/public/frames/"
           # Old code files stay, so pages open during a deploy keep working.
-          rsync -az dist/ "$R:/opt/skymirror/web/"
+          # index.html last: it must never point at code still uploading.
+          rsync -az --exclude index.html dist/ "$R:/opt/skymirror/web/"
+          rsync -az dist/index.html "$R:/opt/skymirror/web/"
           rsync -az --delete wheels/ "$R:/opt/skymirror/wheels/"
           rsync -az deploy/vps/remote-deploy.sh "$R:/opt/skymirror/remote-deploy.sh"
       - name: Install and restart
