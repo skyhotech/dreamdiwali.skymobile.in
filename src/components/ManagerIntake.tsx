@@ -28,6 +28,7 @@ import {
   readPdf,
   readInvoice,
 } from "../lib/invoiceScan";
+import { initialBranches, saveBranches } from "../lib/branches";
 import { Festive } from "./Festive";
 const ImeiScanner = lazy(() => import("./ImeiScanner"));
 // Loaded up front so the sound plays the moment a check fails.
@@ -47,10 +48,13 @@ const EMPTY = {
 // First screen in the store: the manager records a purchase, and once it
 // checks out sends the customer their spin link on WhatsApp.
 export function ManagerIntake() {
-  const [branches, setBranches] = useState<BranchOption[] | null>(null);
+  const [branches, setBranches] = useState<BranchOption[]>(initialBranches);
   const [error, setError] = useState("");
   const [form, setForm] = useState(EMPTY);
-  const [branch, setBranch] = useState<BranchOption | null>(null);
+  // A branch QR code opens the page with its store selected.
+  const [branch, setBranch] = useState<BranchOption | null>(
+    () => initialBranches().find((b) => b.slug === BRANCH) ?? null,
+  );
   const [search, setSearch] = useState("");
   const [picking, setPicking] = useState(false);
   const [image, setImage] = useState<File | null>(null);
@@ -81,13 +85,13 @@ export function ManagerIntake() {
       .then((list) => {
         if (!live) return;
         setBranches(list);
+        saveBranches(list);
         // A branch QR code opens the page with its store selected.
-        setBranch((b) => b ?? list.find((x) => x.slug === BRANCH) ?? null);
       })
       .catch((e: ApiError) => {
         if (!live) return;
-        setBranches([]);
-        fail(e.message);
+        // The built-in list still works; the server is checked again on submit.
+        console.warn(e.message);
       });
     return () => {
       live = false;
@@ -95,7 +99,7 @@ export function ManagerIntake() {
   }, [fail]);
   const matches = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return (branches ?? []).filter((b) => b.name.toLowerCase().includes(q));
+    return branches.filter((b) => b.name.toLowerCase().includes(q));
   }, [branches, search]);
   // Any edit means the sent link no longer matches what was checked.
   function change(field: keyof typeof EMPTY, value: string) {
@@ -358,7 +362,7 @@ export function ManagerIntake() {
                 ))}
                 {!matches.length && (
                   <li>
-                    {branches?.length
+                    {branches.length
                       ? "No branch found"
                       : "No branches yet. Add them in the admin dashboard."}
                   </li>
