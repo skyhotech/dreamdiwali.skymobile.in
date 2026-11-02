@@ -197,7 +197,7 @@ export default function CameraStudio() {
           !product,
         );
       // No blank photos, and a selfie must show a face (when the on-device
-      // face reader is running; otherwise the server's face check applies).
+      // reader is running, so an empty frame can't pass as a selfie).
       if (looksBlank(photo.image)) throw new Error(BLANK_PHOTO);
       if (
         !product &&

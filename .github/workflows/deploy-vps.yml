@@ -50,13 +50,6 @@ jobs:
           v=$(grep -o 'mysqlclient==[0-9.]*' backend/requirements.txt | cut -d= -f3)
           curl -fsSL -o "wheels/mysqlclient-$v.tar.gz" \
             "$(curl -fsS "https://pypi.org/pypi/mysqlclient/$v/json" | python -c "import json,sys;print([u['url'] for u in json.load(sys.stdin)['urls'] if u['packagetype']=='sdist'][0])")"
-      - name: Download face models for the VPS
-        if: steps.cfg.outputs.skip != 'true'
-        run: |
-          mkdir -p models
-          zoo=https://github.com/opencv/opencv_zoo/raw/main/models
-          curl -fsSL -o models/yunet.onnx "$zoo/face_detection_yunet/face_detection_yunet_2023mar.onnx"
-          curl -fsSL -o models/sface.onnx "$zoo/face_recognition_sface/face_recognition_sface_2021dec.onnx"
       - name: SSH key
         if: steps.cfg.outputs.skip != 'true'
         run: |
@@ -75,7 +68,6 @@ jobs:
             backend/ "$R:/opt/skymirror/backend/"
           rsync -az --delete public/frames/ "$R:/opt/skymirror/public/frames/"
           rsync -az --delete wheels/ "$R:/opt/skymirror/wheels/"
-          rsync -az models/ "$R:/opt/skymirror/models/"
           rsync -az deploy/vps/remote-deploy.sh "$R:/opt/skymirror/remote-deploy.sh"
       - name: Install and restart
         if: steps.cfg.outputs.skip != 'true'

@@ -229,7 +229,7 @@ export function SpinWheel({
               itself makes the browser skip the spin transition entirely. */}
           <div className="spin-sway">
             {/* The turn is on a plain div: phones animate it on the GPU,
-                so it keeps spinning even while the face check is busy. */}
+                so it keeps spinning even while the phone is busy. */}
             <div
               className="spin-wheel"
               style={{

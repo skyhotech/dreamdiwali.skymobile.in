@@ -630,34 +630,6 @@ test("a rate-limited spin explains itself at once instead of waiting", async ({
   );
   await expect(dialog.getByRole("button", { name: "Try again" })).toBeVisible();
 });
-test("a face that already claimed a gift sees a clear message", async ({
-  page,
-}) => {
-  await page.route("**/api/customers/spin/", (route) =>
-    route.fulfill({
-      status: 409,
-      json: {
-        detail:
-          "You have already claimed your Diwali gift. Each guest is eligible for one gift only. Thank you for celebrating with SKY!",
-        code: "face_registered",
-      },
-    }),
-  );
-  await mockCamera(page);
-  await takeSelfie(page);
-  await page
-    .getByRole("button", {
-      name: "Capture product and post on Instagram",
-      exact: true,
-    })
-    .click();
-  const dialog = page.getByRole("dialog", { name: "Spin the wheel" });
-  await dialog.getByRole("button", { name: "Tap to spin" }).click();
-  await expect(dialog.getByRole("alert")).toHaveText(
-    /already claimed your Diwali gift/,
-  );
-  await expect(dialog.getByRole("status")).not.toHaveText(/You won/);
-});
 test("reloading during the prize wheel cannot re-roll the prize", async ({
   page,
 }) => {
@@ -756,7 +728,9 @@ test("customers must enter a valid mobile number before the studio opens", async
     page.getByText("Enter a valid 10-digit mobile number."),
   ).toBeVisible();
   await field.fill("9123456789");
-  await expect(page.getByText(/agree to a selfie & face check/)).toBeVisible();
+  await expect(
+    page.getByText(/agree to a selfie — one gift per mobile number/),
+  ).toBeVisible();
   await go.click();
   await expect(page.locator(".camera-stage")).toBeVisible();
   expect(registered).toEqual(["9123456789"]);

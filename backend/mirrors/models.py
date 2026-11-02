@@ -144,7 +144,8 @@ class Customer(models.Model):
     reward = models.CharField(max_length=40, blank=True)
     # When the customer agreed to storing their selfie and face fingerprint.
     consent_at = models.DateTimeField(null=True, blank=True)
-    # 128-number face fingerprint from the selfie (face-api), used only to
+    # Face fingerprint from earlier versions (face matching is off); kept as
+    # history. Formerly used only to
     # spot one person spinning with several mobile numbers.
     face = models.JSONField(null=True, blank=True)
     # Earlier customer with the same face; this one received that prize.

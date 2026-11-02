@@ -295,7 +295,6 @@
               <div class="card stat"><span>Customers</span><b id="b-s-customers">–</b></div>
               <div class="card stat"><span>Today</span><b id="b-s-today">–</b></div>
               <div class="card stat"><span>Gifts given</span><b id="b-s-gifts">–</b></div>
-              <div class="card stat"><span>Repeat faces blocked</span><b id="b-s-repeat">–</b></div>
             </div>
             <div class="grid2">
               <div class="card"><b>Selfies, last 7 days</b><div class="bars" id="b-bars"></div></div>
@@ -693,7 +692,6 @@
     $("#b-s-customers").textContent = st.customers;
     $("#b-s-today").textContent = st.customers_today;
     $("#b-s-gifts").textContent = st.gifts;
-    $("#b-s-repeat").textContent = st.repeat_faces;
     $("#b-bars").innerHTML = bars(st.per_day);
     $("#b-rewards").innerHTML = rankRows(st.rewards.map((r) => ({ name: "🎁 " + rewardLabel(r.id), n: r.n })), "No gifts yet.");
     bPage = 1; $("#b-grid").innerHTML = "";

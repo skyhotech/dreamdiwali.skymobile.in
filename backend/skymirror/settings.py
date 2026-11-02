@@ -105,9 +105,6 @@ if os.environ.get("MYSQL_DATABASE"):
         "OPTIONS": {"charset": "utf8mb4", "init_command": "SET sql_mode='STRICT_TRANS_TABLES'"},
     }
 
-# OpenCV face models (yunet.onnx, sface.onnx) for the server-side face check.
-FACE_MODELS_DIR = Path(os.environ.get("FACE_MODELS_DIR") or BASE_DIR.parent / "models")
-
 # Public address of the selfie studio; branch links and QR codes point here.
 STUDIO_URL = (os.environ.get("STUDIO_URL") or "http://localhost:5173").rstrip("/")
 

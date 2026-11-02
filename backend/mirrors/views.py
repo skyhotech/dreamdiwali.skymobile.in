@@ -24,10 +24,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .images import POSTER_SIZE, SELFIE_SIZE, THUMB_SIZE, compressed_photo, optimized
-from .faces import FaceCheckUnavailable, fingerprint, same_person
 from .models import REWARD_IDS, Branch, Customer, Mirror
 from .serializers import (
-    NO_FACE_MESSAGE,
     BranchSerializer,
     PublicBranchSerializer,
     branch_link,
@@ -265,22 +263,9 @@ class CustomerRegister(APIView):
         )
 
 
-def _find_same_face(face, exclude_id):
-    """An earlier prize winner with the same face, if any."""
-    rows = (
-        Customer.objects.exclude(pk=exclude_id)
-        .exclude(reward="")
-        .filter(face__isnull=False, consent_at__isnull=False)
-        .values_list("id", "face")
-    )
-    for pk, other in rows.iterator():
-        if same_person(face, other):
-            return pk
-    return None
-
-
 class CustomerSpin(APIView):
-    """Picks the prize on the server: once per mobile number, and once per face."""
+    """Picks the prize on the server, once per mobile number. The selfie comes
+    with it: no photo, no spin."""
 
     authentication_classes = []
     permission_classes = [AllowAny]
@@ -300,16 +285,6 @@ class CustomerSpin(APIView):
             )
         try:
             raw = ser.validated_data["selfie"]
-            # The face is read here on the server: one gift per person.
-            try:
-                face = fingerprint(raw)
-            except FaceCheckUnavailable:
-                if not settings.DEBUG:
-                    raise
-                face = None  # local development without OpenCV
-            else:
-                if face is None:
-                    return Response({"face": [NO_FACE_MESSAGE]}, status=400)
             selfie = compressed_photo(raw, SELFIE_SIZE) or raw
             selfie_thumb = optimized(selfie, THUMB_SIZE, 78) or ""
         finally:
@@ -331,28 +306,8 @@ class CustomerSpin(APIView):
             if customer.reward:
                 customer.save(update_fields=[*photo_fields, "updated_at"])
                 return Response({"reward": customer.reward, "repeat": bool(customer.repeat_of_id)})
-            customer.face = face
-            match = face and _find_same_face(face, customer.pk)
-            if match:
-                # Same person, new number: no second gift. Staff see the link
-                # on the dashboard.
-                earlier = Customer.objects.get(pk=match)
-                customer.repeat_of = earlier
-                customer.save(update_fields=["face", "repeat_of", *photo_fields, "updated_at"])
-                return Response(
-                    {
-                        "detail": (
-                            "You have already claimed your Diwali gift. Each guest is "
-                            "eligible for one gift only. Thank you for celebrating with SKY!"
-                        ),
-                        "code": "face_registered",
-                    },
-                    status=status.HTTP_409_CONFLICT,
-                )
             customer.reward = secrets.choice(REWARD_IDS)
-            customer.save(
-                update_fields=["reward", "face", "repeat_of", *photo_fields, "updated_at"]
-            )
+            customer.save(update_fields=["reward", *photo_fields, "updated_at"])
         return Response({"reward": customer.reward, "repeat": False})
 
 

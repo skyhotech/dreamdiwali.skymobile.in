@@ -1,5 +1,3 @@
-import json
-
 from django.conf import settings
 from rest_framework import serializers
 
@@ -137,7 +135,6 @@ PHONE_REGEX = _phone_regex()
 
 
 MAX_UPLOAD_BYTES = 12 * 1024 * 1024
-FACE_SIZE = 128
 
 
 class PhoneSerializer(serializers.Serializer):
@@ -153,46 +150,18 @@ class RegisterSerializer(PhoneSerializer):
     def validate_consent(self, value):
         if not value:
             raise serializers.ValidationError(
-                "Please agree to the photo and face check to continue."
+                "Please agree to the selfie to continue."
             )
         return value
 
 
-NO_FACE_MESSAGE = (
-    "We couldn't see your face clearly. Please retake your selfie facing the camera."
-)
 
 
 NO_PHOTO_MESSAGE = "Take your selfie first, then spin for your gift."
 
 
-class FaceField(serializers.Field):
-    """128-number face fingerprint, as a list or (in a form upload) JSON text."""
-
-    default_error_messages = {"required": NO_FACE_MESSAGE, "null": NO_FACE_MESSAGE}
-
-    def to_internal_value(self, data):
-        if isinstance(data, str):
-            try:
-                data = json.loads(data)
-            except ValueError:
-                raise serializers.ValidationError(NO_FACE_MESSAGE)
-        if (
-            not isinstance(data, list)
-            or len(data) != FACE_SIZE
-            or not all(isinstance(x, (int, float)) and -2 <= x <= 2 for x in data)
-        ):
-            raise serializers.ValidationError(NO_FACE_MESSAGE)
-        return [float(x) for x in data]
-
-    def to_representation(self, value):
-        return value
-
-
 class SpinSerializer(PhoneSerializer):
-    # Every spin carries the selfie (no photo, no spin); the server reads the
-    # face from it. A fingerprint sent by older studio versions is ignored.
-    face = FaceField(required=False)
+    # Every spin carries the selfie: no photo, no spin.
     selfie = serializers.ImageField(
         validators=[lambda image: _limit_size(image)],
         error_messages={"required": NO_PHOTO_MESSAGE, "invalid": NO_PHOTO_MESSAGE,

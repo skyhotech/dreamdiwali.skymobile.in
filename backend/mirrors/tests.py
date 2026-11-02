@@ -1,13 +1,10 @@
 import io
-import random
 import shutil
 import tempfile
 
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
-from unittest import mock
-
 from django.test import TestCase, override_settings
 from PIL import Image
 
@@ -20,14 +17,6 @@ def jpeg(name="selfie.jpg"):
     out = io.BytesIO()
     Image.new("RGB", (640, 800), (180, 120, 90)).save(out, "JPEG")
     return SimpleUploadedFile(name, out.getvalue(), content_type="image/jpeg")
-
-
-def face(seed):
-    """A stand-in for the server's fingerprint of one person's face."""
-    rng = random.Random(seed)
-    v = [rng.uniform(-1, 1) for _ in range(128)]
-    n = sum(x * x for x in v) ** 0.5
-    return {"model": "sface", "v": [x / n for x in v]}
 
 
 @override_settings(MEDIA_ROOT=MEDIA, STUDIO_URL="https://studio.example")
@@ -48,17 +37,13 @@ class BranchFlowTests(TestCase):
             body["branch"] = branch
         return self.client.post("/api/customers/register/", body, content_type="application/json")
 
-    def spin(self, phone, seed, branch=None, selfie=True):
-        """Spin with a selfie whose face (read by the server) is person `seed`;
-        seed=None means the server finds no face in it."""
+    def spin(self, phone, branch=None, selfie=True):
         data = {"phone": phone}
         if selfie:
             data["selfie"] = jpeg()
         if branch:
             data["branch"] = branch
-        read = face(seed) if seed is not None else None
-        with mock.patch("mirrors.views.fingerprint", return_value=read):
-            return self.client.post("/api/customers/spin/", data)
+        return self.client.post("/api/customers/spin/", data)
 
     def test_slug_and_link_are_generated(self):
         self.assertEqual(self.branch.slug, "anna-nagar")
@@ -91,45 +76,30 @@ class BranchFlowTests(TestCase):
             {"slug": "anna-nagar", "name": "Anna Nagar"},
         )
 
+    def test_same_number_keeps_its_first_gift(self):
+        self.register("9845011111")
+        first = self.spin("9845011111").json()["reward"]
+        self.assertEqual(self.spin("9845011111").json()["reward"], first)
+
     def test_no_photo_no_spin(self):
         self.register("9845011111", "anna-nagar")
-        res = self.spin("9845011111", 1, selfie=False)
+        res = self.spin("9845011111", selfie=False)
         self.assertEqual(res.status_code, 400)
         self.assertIn("Take your selfie first", res.json()["selfie"][0])
         self.assertEqual(Customer.objects.get(phone="9845011111").reward, "")
 
-    def test_no_face_no_spin(self):
-        self.register("9845011111")
-        res = self.spin("9845011111", None)
-        self.assertEqual(res.status_code, 400)
-        self.assertIn("couldn't see your face", res.json()["face"][0])
-
     def test_spin_stores_the_selfie_under_the_branch(self):
         self.register("9845011111")
-        res = self.spin("9845011111", 1, branch="anna-nagar")
+        res = self.spin("9845011111", branch="anna-nagar")
         self.assertEqual(res.status_code, 200)
         c = Customer.objects.get(phone="9845011111")
         self.assertTrue(c.reward and c.selfie and c.selfie_thumb)
         self.assertEqual(c.branch, self.branch)
 
-    def test_different_people_both_win(self):
-        self.register("9845011111")
-        self.register("9845022222")
-        self.assertEqual(self.spin("9845011111", 1).status_code, 200)
-        self.assertEqual(self.spin("9845022222", 2).status_code, 200)
-
-    def test_same_face_new_number_gets_no_second_gift(self):
-        self.register("9845011111")
-        self.register("9845022222")
-        self.spin("9845011111", 1)
-        res = self.spin("9845022222", 1)
-        self.assertEqual(res.status_code, 409)
-        self.assertEqual(Customer.objects.get(phone="9845022222").reward, "")
-
     def test_branch_stats_qr_and_customer_filter(self):
         self.register("9845011111", "anna-nagar")
         self.register("9845022222")
-        self.spin("9845011111", 1)
+        self.spin("9845011111")
         self.client.force_login(self.staff)
         pk = self.branch.pk
         stats = self.client.get(f"/api/admin/branches/{pk}/stats/").json()

@@ -214,7 +214,7 @@ export function PhoneGate() {
           </motion.button>
           <motion.p variants={item} className="phone-notice">
             <ShieldCheck size={13} aria-hidden="true" /> By tapping Proceed you
-            agree to a selfie &amp; face check — one gift per person.
+            agree to a selfie — one gift per mobile number.
           </motion.p>
         </motion.form>
       </motion.div>

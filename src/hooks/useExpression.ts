@@ -16,7 +16,7 @@ export function useExpression(
   const [status, setStatus] = useState(""),
     [ready, setReady] = useState(false);
   /** Latest smile strength (0–1), hand gesture and when a face was last
-   *  seen (performance.now()), for hands-free capture and the face check. */
+   *  seen (performance.now()), for hands-free capture and the selfie check. */
   const cues = useRef({ smile: 0, gesture: "", faceAt: 0 });
   useEffect(() => {
     setReady(false);
