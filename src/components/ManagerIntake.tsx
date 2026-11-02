@@ -324,6 +324,10 @@ export function ManagerIntake() {
                 setSearch("");
                 setPicking(true);
               }}
+              onClick={() => {
+                setSearch("");
+                setPicking(true);
+              }}
               onBlur={() => setPicking(false)}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -334,9 +338,10 @@ export function ManagerIntake() {
                     key={b.slug}
                     role="option"
                     aria-selected={b.slug === branch?.slug}
-                    // Before the input's blur closes this list.
-                    onPointerDown={(e) => {
-                      e.preventDefault();
+                    // Keeps the input from blurring, which would close the
+                    // list before the tap lands; a scroll is not a tap.
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => {
                       setBranch(b);
                       setPicking(false);
                       setLink("");

@@ -3496,10 +3496,8 @@ html.no-pull-refresh body {
 .manager-branch {
   position: relative;
 }
+/* In the page flow: the scrolling card would clip a floating list. */
 .manager-options {
-  position: absolute;
-  z-index: 5;
-  inset: 100% 0 auto;
   max-height: 200px;
   margin: 4px 0 0;
   padding: 4px;
