@@ -35,7 +35,11 @@ export function SpinWheel({
   onClaim: (reward: Reward) => void;
   /** Resolves the prize id; the server decides it, once per customer.
    *  onQueue(true) while the customer waits in line because SKY is busy. */
-  getPrize: (onQueue: (waiting: boolean) => void) => Promise<string>;
+  getPrize: (progress: {
+    onQueue: (waiting: boolean) => void;
+    /** The face is read; the request is going to SKY now. */
+    onSending: () => void;
+  }) => Promise<string>;
 }) {
   const [rotation, setRotation] = useState(0);
   const [spinMs, setSpinMs] = useState(FALLBACK_SPIN_MS);
@@ -129,13 +133,22 @@ export function SpinWheel({
     try {
       // Never spin for ever: give up after a while and offer Try again.
       let watchdog = 0;
+      // The clock starts once the request goes to SKY: reading the face on
+      // a slow phone has its own limit and isn't counted here.
+      let since = 0;
       const prize = await Promise.race([
-        getPrize(onQueue).finally(() => window.clearInterval(watchdog)),
+        getPrize({
+          onQueue,
+          onSending: () => (since = performance.now()),
+        }).finally(() => window.clearInterval(watchdog)),
         new Promise<never>((_, reject) => {
-          const since = performance.now();
           // Waiting in the queue is fine; silence for too long is not.
           watchdog = window.setInterval(() => {
-            if (!queuedRef.current && performance.now() - since > MAX_WAIT_MS) {
+            if (
+              since &&
+              !queuedRef.current &&
+              performance.now() - since > MAX_WAIT_MS
+            ) {
               window.clearInterval(watchdog);
               reject(new Error("SKY is taking too long. Tap Try again."));
             }

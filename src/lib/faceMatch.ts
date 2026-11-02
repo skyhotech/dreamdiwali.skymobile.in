@@ -23,8 +23,10 @@ export function loadFaceModels() {
     });
   return loading;
 }
-// Generous: the first customer on a phone also downloads the 6 MB model.
-const TIMEOUT_MS = 20000;
+// Generous: a low-end phone may still be downloading the 6 MB model.
+const TIMEOUT_MS = 40000;
+// The face is read from a copy this size: same fingerprint, far less work.
+const READ_SIZE = 640;
 /** Returns the fingerprint, or null if no face is found or models are missing. */
 // One computation per selfie: the studio starts it right after the photo is
 // taken, so it is usually ready before the customer taps Spin.
@@ -47,9 +49,17 @@ async function computeFingerprint(
 ): Promise<number[] | null> {
   const work = (async () => {
     const faceapi = await loadFaceModels();
+    const scale = Math.min(
+      1,
+      READ_SIZE / Math.max(image.naturalWidth, image.naturalHeight),
+    );
+    const small = document.createElement("canvas");
+    small.width = Math.round(image.naturalWidth * scale);
+    small.height = Math.round(image.naturalHeight * scale);
+    small.getContext("2d")!.drawImage(image, 0, 0, small.width, small.height);
     const result = await faceapi
       .detectSingleFace(
-        image,
+        small,
         new faceapi.TinyFaceDetectorOptions({
           inputSize: 416,
           scoreThreshold: 0.5,

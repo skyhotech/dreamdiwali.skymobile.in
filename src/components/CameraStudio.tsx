@@ -498,14 +498,11 @@ export default function CameraStudio() {
       </aside>
       {spinOpen && (
         <SpinWheel
-          getPrize={async (onQueue) =>
-            spinPrize(
-              s.phone ?? "",
-              await faceFingerprint(s.selfie?.image),
-              s.selfie?.blob,
-              onQueue,
-            )
-          }
+          getPrize={async ({ onQueue, onSending }) => {
+            const face = await faceFingerprint(s.selfie?.image);
+            onSending();
+            return spinPrize(s.phone ?? "", face, s.selfie?.blob, onQueue);
+          }}
           onClaim={(r) => void claim(r)}
         />
       )}

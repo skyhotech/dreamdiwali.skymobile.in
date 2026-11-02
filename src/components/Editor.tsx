@@ -268,14 +268,11 @@ export default function Editor() {
     <div className="workspace editor-workspace">
       {wheelOpen && (
         <SpinWheel
-          getPrize={async (onQueue) =>
-            spinPrize(
-              s.phone ?? "",
-              await faceFingerprint(s.selfie?.image),
-              s.selfie?.blob,
-              onQueue,
-            )
-          }
+          getPrize={async ({ onQueue, onSending }) => {
+            const face = await faceFingerprint(s.selfie?.image);
+            onSending();
+            return spinPrize(s.phone ?? "", face, s.selfie?.blob, onQueue);
+          }}
           onClaim={(r) => {
             s.setReward(r.id);
             setWheelOpen(false);

@@ -3,7 +3,7 @@ import { MotionConfig } from "motion/react";
 import { PhoneGate } from "./components/PhoneGate";
 import { OfflineBanner } from "./components/StatusNotices";
 import { registerPhone } from "./lib/backend";
-import { faceFingerprint } from "./lib/faceMatch";
+import { faceFingerprint, loadFaceModels } from "./lib/faceMatch";
 import { useStudio } from "./lib/store";
 import { initializePhotoStorage } from "./lib/persistence";
 const CameraStudio = lazy(() => import("./components/CameraStudio"));
@@ -32,6 +32,16 @@ export default function App() {
   useEffect(() => {
     if (phone && selfieImage) void faceFingerprint(selfieImage);
   }, [phone, selfieImage]);
+  // Start fetching the face models once signed in (after the camera has had
+  // a moment to start), so they're ready by the time the selfie is taken.
+  useEffect(() => {
+    if (!phone) return;
+    const id = window.setTimeout(
+      () => void loadFaceModels().catch(() => {}),
+      2500,
+    );
+    return () => window.clearTimeout(id);
+  }, [phone]);
   useEffect(() => {
     let active = true;
     void initializePhotoStorage().then(() => {
