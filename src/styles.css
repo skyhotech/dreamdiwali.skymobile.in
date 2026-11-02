@@ -3569,5 +3569,6 @@ html.no-pull-refresh body {
   cursor: pointer;
 }
 .manager-card .phone-logo {
+  display: block;
   margin-inline: auto;
 }

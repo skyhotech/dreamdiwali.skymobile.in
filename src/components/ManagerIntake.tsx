@@ -9,6 +9,7 @@ import {
 } from "react";
 import { Camera, Check, MessageCircle, ScanLine, Upload, X } from "lucide-react";
 import skyLogo from "../assets/brand/sky.webp";
+import errorSound from "../assets/rewards/error.mp3";
 import { motion, useAnimationControls } from "motion/react";
 import {
   ApiError,
@@ -28,6 +29,8 @@ import {
 } from "../lib/invoiceScan";
 import { Festive } from "./Festive";
 const ImeiScanner = lazy(() => import("./ImeiScanner"));
+// Loaded up front so the sound plays the moment a check fails.
+const errorAudio = typeof Audio === "undefined" ? null : new Audio(errorSound);
 const MISMATCH = "Data mismatch";
 const EMPTY = {
   name: "",
@@ -58,6 +61,10 @@ export function ManagerIntake() {
   const fail = useCallback(
     (message: string) => {
       setError(message);
+      if (errorAudio) {
+        errorAudio.currentTime = 0;
+        void errorAudio.play().catch(() => {});
+      }
       void shake.start({
         x: [0, -10, 10, -7, 7, -3, 0],
         transition: { duration: 0.45 },
