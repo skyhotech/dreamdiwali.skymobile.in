@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Check, ShieldCheck } from "lucide-react";
-import skyLogo from "../assets/brand/sky.png";
+import skyLogo from "../assets/brand/sky.webp";
 import { AnimatePresence, motion, useAnimationControls } from "motion/react";
 import { PHONE_PATTERN, registerPhone } from "../lib/backend";
 import { useStudio } from "../lib/store";

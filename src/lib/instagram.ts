@@ -1,4 +1,4 @@
-import skyLogo from "../assets/brand/sky.png";
+import skyLogo from "../assets/brand/sky.webp";
 import { renderPoster, WIDTH, HEIGHT, type Composition } from "./renderer";
 // Instagram-style post chrome added around the finished poster. The poster
 // itself is drawn untouched between the header and footer bands.

@@ -11,9 +11,10 @@ UMask=0007
 WorkingDirectory=/opt/skymirror/backend
 EnvironmentFile=/etc/skymirror/.env
 # 1 vCPU / 1 GB: two workers keep one serving while the other compresses a
-# photo; threads cover slow uploads. Workers recycle to cap memory growth.
+# photo; threads cover slow uploads. --preload shares the loaded code between
+# workers, and they recycle to cap memory growth.
 ExecStart=/opt/skymirror/venv/bin/gunicorn skymirror.wsgi:application \
-  --bind 127.0.0.1:8000 --workers 2 --threads 4 --worker-class gthread \
+  --bind 127.0.0.1:8000 --workers 2 --threads 4 --worker-class gthread --preload \
   --timeout 60 --graceful-timeout 20 --max-requests 800 --max-requests-jitter 80 \
   --access-logfile - --error-logfile - --forwarded-allow-ips 127.0.0.1
 ExecReload=/bin/kill -HUP $MAINPID
