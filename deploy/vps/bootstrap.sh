@@ -10,7 +10,7 @@ apt-get install -y -q python3-venv python3-dev build-essential pkg-config rsync 
 id skymirror >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin skymirror
 id deployer >/dev/null 2>&1 || useradd -m -s /bin/bash deployer
 install -d -o deployer -g deployer /opt/skymirror /opt/skymirror/backend /opt/skymirror/web /opt/skymirror/public
-install -d -o skymirror -g skymirror /var/lib/skymirror /var/lib/skymirror/media /var/log/skymirror
+install -d -o skymirror -g skymirror /opt/skymirror/backend/staticfiles /var/lib/skymirror /var/lib/skymirror/media /var/log/skymirror
 install -d -m 700 /etc/skymirror /var/backups/skymirror /home/deployer/.ssh
 chown deployer:deployer /home/deployer/.ssh
 
