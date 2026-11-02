@@ -38,6 +38,12 @@ export function useExpression(
       smileCtx = smiling.getContext("2d")!,
       maskCtx = mask.getContext("2d")!;
     const portrait = createPortraitRenderer();
+    // Mid-range phones: smaller frames and less frequent AI keep the camera smooth.
+    const lowEnd =
+      (navigator.hardwareConcurrency || 8) <= 4 ||
+      ((navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8) <= 4;
+    const maxWidth = lowEnd ? 960 : 1280,
+      aiGap = lowEnd ? 320 : 180;
     let points: Point[] = [],
       lastFace = 0,
       lastSegment = 0,
@@ -97,7 +103,7 @@ export function useExpression(
           lastVideoTime = v.currentTime;
           try {
             const now = performance.now(),
-              w = Math.min(1280, v.videoWidth),
+              w = Math.min(maxWidth, v.videoWidth),
               h = Math.round((w * v.videoHeight) / v.videoWidth);
             if (base.width !== w || base.height !== h) {
               base.width = smiling.width = canvas.width = w;
@@ -108,7 +114,9 @@ export function useExpression(
             }
             baseCtx.drawImage(v, 0, 0, w, h);
             inputCtx.drawImage(base, 0, 0, input.width, input.height);
-            if (face && now - lastFace > 180) {
+            let ranAi = false;
+            if (face && now - lastFace > aiGap) {
+              ranAi = true;
               try {
                 const result = face.detectForVideo(input, now);
                 points =
@@ -122,7 +130,8 @@ export function useExpression(
               }
               lastFace = now;
             }
-            if (segmenter && now - lastSegment > 180) {
+            // Never both models in one frame: they take turns.
+            if (segmenter && !ranAi && now - lastSegment > aiGap) {
               try {
                 segmenter.segmentForVideo(input, now, (result) => {
                   const masks = result.confidenceMasks;
@@ -183,7 +192,7 @@ export function useExpression(
             );
             clearInterval(timer);
           }
-        }, 80);
+        }, lowEnd ? 100 : 80);
       } catch {
         if (!dead)
           setStatus("Camera effects unavailable. You can still take a photo.");

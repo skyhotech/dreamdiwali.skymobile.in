@@ -121,13 +121,23 @@ class RegisterSerializer(PhoneSerializer):
         return value
 
 
+NO_FACE_MESSAGE = (
+    "We couldn't see your face clearly. Please retake your selfie facing the camera."
+)
+
+
 class SpinSerializer(PhoneSerializer):
     face = serializers.ListField(
         child=serializers.FloatField(min_value=-2, max_value=2),
         min_length=FACE_SIZE,
         max_length=FACE_SIZE,
-        required=False,
-        allow_null=True,
+        # Every spin is face-checked: one gift per person, whatever the number.
+        error_messages={
+            "required": NO_FACE_MESSAGE,
+            "null": NO_FACE_MESSAGE,
+            "min_length": NO_FACE_MESSAGE,
+            "max_length": NO_FACE_MESSAGE,
+        },
     )
 
 

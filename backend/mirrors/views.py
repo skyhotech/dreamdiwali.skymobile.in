@@ -269,18 +269,27 @@ class CustomerSpin(APIView):
                 return Response({"phone": "Register this number first."}, status=400)
             if customer.reward:
                 return Response({"reward": customer.reward, "repeat": bool(customer.repeat_of_id)})
-            if face:
-                customer.face = [round(x, 5) for x in face]
-                match = _find_same_face(customer.face, customer.pk)
-                if match:
-                    # Same person, new number: give back the prize they already won.
-                    earlier = Customer.objects.get(pk=match)
-                    customer.reward = earlier.reward
-                    customer.repeat_of = earlier
-            if not customer.reward:
-                customer.reward = secrets.choice(REWARD_IDS)
+            customer.face = [round(x, 5) for x in face]
+            match = _find_same_face(customer.face, customer.pk)
+            if match:
+                # Same person, new number: no second gift. Staff see the link
+                # on the dashboard.
+                earlier = Customer.objects.get(pk=match)
+                customer.repeat_of = earlier
+                customer.save(update_fields=["face", "repeat_of", "updated_at"])
+                return Response(
+                    {
+                        "detail": (
+                            "You're already registered with the number ending "
+                            f"{(earlier.phone or '')[-2:] or '••'}. One gift per person."
+                        ),
+                        "code": "face_registered",
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            customer.reward = secrets.choice(REWARD_IDS)
             customer.save(update_fields=["reward", "face", "repeat_of", "updated_at"])
-        return Response({"reward": customer.reward, "repeat": bool(customer.repeat_of_id)})
+        return Response({"reward": customer.reward, "repeat": False})
 
 
 # --- Staff API used by /sky/mirror/admin/ -----------------------------------

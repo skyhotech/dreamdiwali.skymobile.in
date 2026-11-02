@@ -23,7 +23,8 @@ export function loadFaceModels() {
     });
   return loading;
 }
-const TIMEOUT_MS = 8000;
+// Generous: the first customer on a phone also downloads the 6 MB model.
+const TIMEOUT_MS = 20000;
 /** Returns the fingerprint, or null if no face is found or models are missing. */
 export async function faceFingerprint(
   image: HTMLImageElement | null | undefined,
