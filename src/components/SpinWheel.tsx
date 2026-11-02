@@ -5,7 +5,8 @@ import { REWARDS, preloadRewards, sounds, type Reward } from "../lib/rewards";
 const SLICE = 360 / REWARDS.length;
 // Length of process spin.mp3; replaced by the real duration once it loads.
 const FALLBACK_SPIN_MS = 2424;
-const TURNS = 5;
+// Full turns per spin.
+const SPIN_TURNS = 2;
 const BULBS = 16;
 const CONFETTI = 36;
 const COLORS = ["#d22856", "#d6a447", "#7a1631", "#f3cf7a"];
@@ -94,10 +95,8 @@ export function SpinWheel({
       }),
     [],
   );
-  // While the server decides the prize, the wheel already turns at a steady
-  // speed (a CSS transition, so it stays smooth even when the phone is busy).
-  const WAIT_DEG_PER_MS = 0.72;
-  const WAIT_MS = 60_000;
+  // The wheel turns from the tap (a CSS transition, smooth even when the phone
+  // is busy) and the prize, once known, decides where its two turns end.
   async function spin() {
     if (spinLock.current) return;
     spinLock.current = true;
@@ -105,17 +104,23 @@ export function SpinWheel({
     setPhase("spinning");
     const audio = spinAudio.current;
     // Start the sound inside the tap; phones block audio started later.
-    // It loops until the prize is known, then plays out as the wheel lands.
     if (audio) {
       audio.currentTime = 0;
-      audio.loop = true;
+      audio.loop = false;
       void audio.play().catch(() => {});
     }
-    const from = rotation;
+    // The wheel stops as the spin sound ends.
+    const ms =
+      audio && Number.isFinite(audio.duration) && audio.duration > 0
+        ? Math.round(audio.duration * 1000)
+        : FALLBACK_SPIN_MS;
+    // Two full turns from here, easing out; the prize only adjusts where
+    // they end, so the wheel never loops while waiting.
+    const base = Math.ceil(rotation / 360) * 360;
     const started = performance.now();
-    setSpinMs(WAIT_MS);
-    setEase("linear");
-    setRotation(from + WAIT_DEG_PER_MS * WAIT_MS);
+    setSpinMs(ms);
+    setEase(LANDING_EASE);
+    setRotation(base + SPIN_TURNS * 360);
     let index: number;
     try {
       // Never spin for ever: give up after a while and offer Try again.
@@ -136,31 +141,17 @@ export function SpinWheel({
       index = REWARDS.findIndex((r) => r.id === prize);
       if (index < 0) throw new Error("Unknown prize. Try again.");
     } catch (e) {
-      if (audio) {
-        audio.loop = false;
-        audio.pause();
-      }
-      const at = from + WAIT_DEG_PER_MS * (performance.now() - started);
-      setSpinMs(600);
-      setEase("ease-out");
-      setRotation(at + 60);
+      audio?.pause();
       setError((e as Error).message);
       setPhase("ready");
       spinLock.current = false;
       return;
     }
-    // Land when the current play-through of the spin sound ends.
-    let remaining = FALLBACK_SPIN_MS;
-    if (audio && Number.isFinite(audio.duration) && audio.duration > 0) {
-      audio.loop = false;
-      remaining = Math.round((audio.duration - audio.currentTime) * 1000);
-    }
-    remaining = Math.max(1800, remaining);
-    const at = from + WAIT_DEG_PER_MS * (performance.now() - started);
-    // At least two more turns, then the middle of the prize slice under the pointer.
+    // Same two turns, ending with the middle of the prize slice under the
+    // pointer. If the prize came late, this is one short final move.
     const landing = 360 - (index * SLICE + SLICE / 2);
-    let target = Math.ceil((at + 720) / 360) * 360 + landing;
-    if (target - at < 720) target += 360;
+    const target = base + SPIN_TURNS * 360 + landing;
+    const remaining = Math.max(1200, ms - (performance.now() - started));
     let done = false;
     const finish = () => {
       if (done) return;
@@ -181,10 +172,8 @@ export function SpinWheel({
         AUTO_CLAIM_MS,
       );
     };
-    // The transition restarts from the wheel's current angle, so it eases
-    // from full speed into the prize with no jump.
+    // The transition restarts from the wheel's current angle: no jump.
     setSpinMs(remaining);
-    setEase(LANDING_EASE);
     setRotation(target);
     timer.current = window.setTimeout(finish, remaining + 100);
   }

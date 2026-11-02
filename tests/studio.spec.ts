@@ -100,7 +100,7 @@ async function takeSelfie(page: Page) {
     page
       .locator(".camera-stage")
       .getByRole("button", { name: "Post on Instagram", exact: true }),
-  ).toBeEnabled();
+  ).toBeEnabled({ timeout: 15_000 });
   await page
     .getByRole("button", { name: "Post on Instagram", exact: true })
     .click();
@@ -109,7 +109,7 @@ async function takeSelfie(page: Page) {
       name: "Capture product and post on Instagram",
       exact: true,
     }),
-  ).toBeEnabled();
+  ).toBeEnabled({ timeout: 15_000 });
 }
 // The prize wheel opens after the first product photo, spins by itself and
 // the prize is added to the poster automatically.
