@@ -2,7 +2,6 @@ from django.conf import settings
 from rest_framework import serializers
 
 import re
-from decimal import Decimal, InvalidOperation
 
 from .models import Branch, Customer, CustomerEvent, Mirror, validate_rect
 
@@ -195,28 +194,11 @@ def _compact(text):
     return re.sub(r"[^A-Z0-9]", "", text.upper()).translate(_OCR_ALIKE)
 
 
-def _amounts(text):
-    found = set()
-    for token in re.findall(r"\d[\d,]*(?:\.\d{1,2})?", text):
-        try:
-            found.add(Decimal(token.replace(",", "")))
-        except InvalidOperation:
-            pass
-    return found
+def invoice_missing(text, invoice_number):
+    """Which typed details the invoice text doesn't contain: only the invoice
+    number is compared. Kept in sync with invoiceMissing in src/lib/invoiceScan.ts."""
+    return [] if _compact(invoice_number) in _compact(text) else ["invoice number"]
 
-
-def invoice_missing(text, imei, invoice_number, bill_value):
-    """Which typed details the invoice text doesn't contain. Kept in sync with
-    invoiceMissing in src/lib/invoiceScan.ts."""
-    compact = _compact(text)
-    missing = []
-    if _compact(imei) not in compact:
-        missing.append("IMEI")
-    if _compact(invoice_number) not in compact:
-        missing.append("invoice number")
-    if Decimal(bill_value) not in _amounts(text):
-        missing.append("bill value")
-    return missing
 
 
 class CustomerIntakeSerializer(serializers.Serializer):
@@ -238,9 +220,7 @@ class CustomerIntakeSerializer(serializers.Serializer):
     blur_score = serializers.FloatField(min_value=0)
 
     def validate(self, data):
-        missing = invoice_missing(
-            data["ocr_text"], data["imei"], data["invoice_number"], data["bill_value"]
-        )
+        missing = invoice_missing(data["ocr_text"], data["invoice_number"])
         if missing:
             raise serializers.ValidationError(
                 {"invoice_image": [f"Invoice does not show this {' or '.join(missing)}."]}

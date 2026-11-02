@@ -67,12 +67,11 @@ class BranchFlowTests(TestCase):
     def test_invoice_text_must_match_and_failures_are_tracked(self):
         res = self.check(ocr_text="Invoice IMEI Total 100.00")
         self.assertEqual(res.status_code, 400)
-        for word in ("IMEI", "invoice number", "bill value"):
-            self.assertIn(word, res.json()["invoice_image"][0])
+        self.assertIn("invoice number", res.json()["invoice_image"][0])
         self.assertEqual(CustomerEvent.objects.get().kind, "check_failed")
 
     def test_scanner_letter_mixups_still_match(self):
-        res = self.check(ocr_text=f"lNV-{IMEI} {IMEI.replace('0', 'O')} Rs 24,999")
+        res = self.check(ocr_text=f"lNV-{IMEI.replace('0', 'O')}")
         self.assertEqual(res.status_code, 200)
 
     def test_changed_details_replace_the_link(self):

@@ -1,15 +1,10 @@
 import { expect, test } from "vitest";
 import { invoiceMissing, sharpness } from "./invoiceScan";
-test("matching details pass despite commas and scanner mix-ups", () => {
-  const text = "Tax lNV-2041\nIMEI: 49O154 203237518\nTotal Rs 24,999.00";
-  expect(invoiceMissing(text, "490154203237518", "INV-2041", "24999")).toEqual([]);
+test("the invoice number matches despite scanner mix-ups", () => {
+  expect(invoiceMissing("Tax lNV-2041\nTotal", "INV-2041")).toEqual([]);
 });
-test("each wrong detail is named", () => {
-  expect(invoiceMissing("Total 100", "490154203237518", "Q7", "24999")).toEqual([
-    "IMEI",
-    "invoice number",
-    "bill value",
-  ]);
+test("a wrong invoice number is named", () => {
+  expect(invoiceMissing("Total 100", "Q7")).toEqual(["invoice number"]);
 });
 test("a flat image has no sharpness and hard edges have plenty", () => {
   const flat = new Float32Array(100).fill(128);

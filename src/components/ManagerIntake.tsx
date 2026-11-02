@@ -114,7 +114,7 @@ export function ManagerIntake() {
       // The full-size photo is read, since compressing would cost accuracy.
       setStage("Scanning invoice…");
       const { text, sharpness } = await readInvoice(image!);
-      const missing = invoiceMissing(text, form.imei, form.invoice, form.bill);
+      const missing = invoiceMissing(text, form.invoice);
       if (missing.length) {
         fail(`${MISMATCH}: Invoice does not show this ${missing.join(" or ")}.`);
         return;

@@ -11,25 +11,11 @@ const compact = (text: string) =>
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "")
     .replace(/[OILSB]/g, (c) => ALIKE[c]);
-function amounts(text: string) {
-  return (text.match(/\d[\d,]*(?:\.\d{1,2})?/g) ?? []).map((t) =>
-    Number(t.replace(/,/g, "")),
-  );
-}
-/** Which typed details the invoice text doesn't contain. Kept in sync with
- *  invoice_missing in backend/mirrors/serializers.py. */
-export function invoiceMissing(
-  text: string,
-  imei: string,
-  invoice: string,
-  bill: string,
-) {
-  const all = compact(text);
-  const missing = [];
-  if (!all.includes(compact(imei))) missing.push("IMEI");
-  if (!all.includes(compact(invoice))) missing.push("invoice number");
-  if (!amounts(text).includes(Number(bill))) missing.push("bill value");
-  return missing;
+/** Which typed details the invoice text doesn't contain: only the invoice
+ *  number is compared. Kept in sync with invoice_missing in
+ *  backend/mirrors/serializers.py. */
+export function invoiceMissing(text: string, invoice: string) {
+  return compact(text).includes(compact(invoice)) ? [] : ["invoice number"];
 }
 /** Variance of the Laplacian: edges vanish in a blurry photo, so it drops. */
 export function sharpness(gray: Float32Array, w: number, h: number) {
