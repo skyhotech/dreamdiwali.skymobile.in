@@ -3568,3 +3568,6 @@ html.no-pull-refresh body {
   margin-top: 0 !important;
   cursor: pointer;
 }
+.manager-card .phone-logo {
+  margin-inline: auto;
+}
