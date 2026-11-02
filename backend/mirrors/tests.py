@@ -71,11 +71,16 @@ class BranchFlowTests(TestCase):
         self.assertEqual(CustomerEvent.objects.get().kind, "check_failed")
 
     def test_labelled_invoice_number_must_match_exactly(self):
-        text = "Invoice No : SI2627VLR31054 Invoice Date : 31/10/2026"
+        text = f"Invoice No : SI2627VLR31054 Invoice Date : 31/10/2026 IMEI NO: {IMEI}"
         ok = self.check(invoice_number="SI2627VLR31054", ocr_text=text)
         self.assertEqual(ok.status_code, 200)
         bad = self.check("9845022222", OTHER_IMEI, invoice_number="SI2627VLR31055", ocr_text=text)
         self.assertEqual(bad.status_code, 400)
+
+    def test_tv_serial_is_read_from_the_imei_label(self):
+        text = "Invoice No : SI2627VLR31054\nIMEI NO: P-12568801-D\n"
+        res = self.check(imei="P-12568801-D", invoice_number="SI2627VLR31054", ocr_text=text)
+        self.assertEqual(res.status_code, 200)
 
     def test_scanner_letter_mixups_still_match(self):
         res = self.check(ocr_text=f"lNV-{IMEI.replace('0', 'O')}")

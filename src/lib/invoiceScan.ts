@@ -13,15 +13,26 @@ const compact = (text: string) =>
     .replace(/[OILSB]/g, (c) => ALIKE[c]);
 // The value printed after the label, e.g. "Invoice No : SI2627VLR31054".
 const INVOICE_LABEL = /invoice\s*(?:no|number|num)\b\s*[.:;\-]*\s*([A-Z0-9][A-Z0-9/\-]{3,})/i;
-/** Which typed details don't match the invoice: only the invoice number is
- *  compared, against the labelled value when the scanner found the label.
- *  Kept in sync with invoice_missing in backend/mirrors/serializers.py. */
-export function invoiceMissing(text: string, invoice: string) {
-  const labelled = text.match(INVOICE_LABEL)?.[1];
-  const ok = labelled
-    ? compact(labelled) === compact(invoice)
-    : compact(invoice).length >= 4 && compact(text).includes(compact(invoice));
-  return ok ? [] : ["invoice number"];
+// Same idea for "IMEI NO: P-12568801-D"; a bill can list several.
+const IMEI_LABEL = /(?:imei|serial)\s*(?:no|number|num)?\b\s*[.:;\-]*\s*([A-Z0-9][A-Z0-9\-]{3,})/gi;
+/** True when the value printed at a label, or failing that anywhere, matches. */
+function printed(text: string, labelled: string[], typed: string) {
+  const want = compact(typed);
+  return labelled.length
+    ? labelled.some((v) => compact(v) === want)
+    : want.length >= 4 && compact(text).includes(want);
+}
+/** Which typed details don't match the invoice. Values are read by their
+ *  location after the label, so any number or format works. Kept in sync with
+ *  invoice_missing in backend/mirrors/serializers.py. */
+export function invoiceMissing(text: string, imei: string, invoice: string) {
+  const missing = [];
+  const number = text.match(INVOICE_LABEL)?.[1];
+  if (!printed(text, number ? [number] : [], invoice))
+    missing.push("invoice number");
+  const imeis = [...text.matchAll(IMEI_LABEL)].map((m) => m[1]);
+  if (!printed(text, imeis, imei)) missing.push("IMEI");
+  return missing;
 }
 /** Variance of the Laplacian: edges vanish in a blurry photo, so it drops. */
 export function sharpness(gray: Float32Array, w: number, h: number) {

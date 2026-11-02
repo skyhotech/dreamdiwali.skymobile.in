@@ -155,7 +155,8 @@ class Customer(models.Model):
     # Purchase details entered by the store manager.
     email = models.EmailField(blank=True)
     product_details = models.CharField(max_length=160, blank=True)
-    imei = models.CharField(max_length=15, blank=True)
+    # 15-digit IMEI for phones, the serial number for other products.
+    imei = models.CharField(max_length=30, blank=True)
     invoice_number = models.CharField(max_length=40, blank=True)
     bill_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     invoice_image = models.ImageField(upload_to=customer_path, blank=True)

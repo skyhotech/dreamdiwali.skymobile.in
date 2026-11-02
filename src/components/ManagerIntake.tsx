@@ -8,7 +8,7 @@ import {
   PHONE_PATTERN,
   checkPurchase,
   fetchManagerBranches,
-  imeiValid,
+  imeiOrSerialValid,
   trackSent,
   type BranchOption,
 } from "../lib/backend";
@@ -94,7 +94,7 @@ export function ManagerIntake() {
     if (!PHONE_PATTERN.test(form.phone))
       return "Enter a valid 10-digit mobile number.";
     if (!form.product.trim()) return "Enter the product details.";
-    if (!imeiValid(form.imei)) return "This IMEI number is not valid.";
+    if (!imeiOrSerialValid(form.imei)) return "This IMEI number is not valid.";
     if (!form.invoice.trim()) return "Enter the invoice number.";
     if (!(Number(form.bill) >= 1)) return "Enter the bill value.";
     if (!branch) return "Select a branch.";
@@ -114,7 +114,7 @@ export function ManagerIntake() {
       // The full-size photo is read, since compressing would cost accuracy.
       setStage("Scanning invoice…");
       const { text, sharpness } = await readInvoice(image!);
-      const missing = invoiceMissing(text, form.invoice);
+      const missing = invoiceMissing(text, form.imei, form.invoice);
       if (missing.length) {
         fail(`${MISMATCH}: Invoice does not show this ${missing.join(" or ")}.`);
         return;
@@ -215,17 +215,17 @@ export function ManagerIntake() {
             autoComplete: "off",
           })}
           {field("product", "Product details", { maxLength: 160 })}
-          <label htmlFor="m-imei">IMEI number</label>
+          <label htmlFor="m-imei">IMEI / serial number</label>
           <div className="manager-row">
             <input
               id="m-imei"
               className="manager-input"
-              inputMode="numeric"
-              maxLength={15}
+              maxLength={30}
+              autoCapitalize="characters"
               placeholder="Type or scan"
               value={form.imei}
               onChange={(e) =>
-                change("imei", e.target.value.replace(/\D/g, ""))
+                change("imei", e.target.value.replace(/[^a-zA-Z0-9-]/g, "").toUpperCase())
               }
             />
             <button

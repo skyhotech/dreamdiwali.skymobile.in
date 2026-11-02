@@ -200,17 +200,30 @@ _INVOICE_LABEL = re.compile(
 )
 
 
-def invoice_missing(text, invoice_number):
-    """Which typed details don't match the invoice: only the invoice number is
-    compared, against the labelled value when the scanner found the label.
-    Kept in sync with invoiceMissing in src/lib/invoiceScan.ts."""
-    typed = _compact(invoice_number)
-    labelled = _INVOICE_LABEL.search(text)
+# Same idea for "IMEI NO: P-12568801-D"; a bill can list several.
+_IMEI_LABEL = re.compile(
+    r"(?:imei|serial)\s*(?:no|number|num)?\b\s*[.:;\-]*\s*([A-Z0-9][A-Z0-9\-]{3,})", re.I
+)
+
+
+def _printed(text, labelled, typed):
+    """True when the value at a label, or failing that anywhere, matches."""
+    want = _compact(typed)
     if labelled:
-        ok = _compact(labelled[1]) == typed
-    else:
-        ok = len(typed) >= 4 and typed in _compact(text)
-    return [] if ok else ["invoice number"]
+        return any(_compact(value) == want for value in labelled)
+    return len(want) >= 4 and want in _compact(text)
+
+
+def invoice_missing(text, imei, invoice_number):
+    """Which typed details don't match the invoice. Values are read by their
+    location after the label, so any number or format works. Kept in sync with
+    invoiceMissing in src/lib/invoiceScan.ts."""
+    missing = []
+    if not _printed(text, _INVOICE_LABEL.findall(text)[:1], invoice_number):
+        missing.append("invoice number")
+    if not _printed(text, _IMEI_LABEL.findall(text), imei):
+        missing.append("IMEI")
+    return missing
 
 
 class CustomerIntakeSerializer(serializers.Serializer):
@@ -222,7 +235,7 @@ class CustomerIntakeSerializer(serializers.Serializer):
     )
     email = serializers.EmailField(required=False, allow_blank=True)
     product_details = serializers.CharField(max_length=160)
-    imei = serializers.CharField(max_length=15)
+    imei = serializers.CharField(max_length=30)
     invoice_number = serializers.CharField(max_length=40)
     bill_value = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=1)
     branch = serializers.CharField(max_length=60)
@@ -232,7 +245,7 @@ class CustomerIntakeSerializer(serializers.Serializer):
     blur_score = serializers.FloatField(min_value=0)
 
     def validate(self, data):
-        missing = invoice_missing(data["ocr_text"], data["invoice_number"])
+        missing = invoice_missing(data["ocr_text"], data["imei"], data["invoice_number"])
         if missing:
             raise serializers.ValidationError(
                 {"invoice_image": [f"Invoice does not show this {' or '.join(missing)}."]}
@@ -240,7 +253,9 @@ class CustomerIntakeSerializer(serializers.Serializer):
         return data
 
     def validate_imei(self, value):
-        if not imei_valid(value):
+        value = value.upper()
+        ok = imei_valid(value) if value.isdigit() else re.fullmatch(r"[A-Z0-9][A-Z0-9-]{3,29}", value)
+        if not ok:
             raise serializers.ValidationError("This IMEI number is not valid.")
         return value
 
