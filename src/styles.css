@@ -3413,3 +3413,14 @@ html.no-pull-refresh body {
   width: max-content;
   max-width: 100%;
 }
+/* Phones: the prize wheel still scrolls on short screens, but without a
+   visible scrollbar, and confetti can't push it sideways. */
+@media (max-width: 760px) {
+  .spin-overlay {
+    overflow-x: hidden;
+    scrollbar-width: none;
+  }
+  .spin-overlay::-webkit-scrollbar {
+    display: none;
+  }
+}
