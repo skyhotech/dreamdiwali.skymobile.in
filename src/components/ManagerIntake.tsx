@@ -176,14 +176,7 @@ export function ManagerIntake() {
         scan.current = null;
         throw e;
       });
-      const missing = invoiceMissing(text, {
-        name: form.name,
-        phone: form.phone,
-        product: form.product,
-        imei: form.imei,
-        invoice: form.invoice,
-        bill: form.bill,
-      });
+      const missing = invoiceMissing(text, form);
       if (missing.length) {
         fail(`${MISMATCH}: Invoice does not show this ${missing.join(" or ")}.`);
         return;

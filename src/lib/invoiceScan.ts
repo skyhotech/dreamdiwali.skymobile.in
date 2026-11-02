@@ -40,26 +40,19 @@ export type InvoiceFields = {
   invoice: string;
   bill: string;
 };
-/** Which typed details don't match the invoice. Each is read from its place
- *  on the bill, so any value or format works. Kept in sync with
+/** Whether the typed IMEI and invoice number match the bill; other fields are
+ *  not compared. Each is read from its place, so any value or format works. Kept in sync with
  *  invoice_missing in backend/mirrors/serializers.py. */
-export function invoiceMissing(text: string, f: InvoiceFields) {
+export function invoiceMissing(
+  text: string,
+  f: Pick<InvoiceFields, "imei" | "invoice">,
+) {
   const missing = [];
-  const billedAt = text.search(/billed\s*to/i);
-  const billed = billedAt < 0 ? text : text.slice(billedAt);
-  const nameLine = billed.split("\n").slice(1).find((l) => l.trim());
-  if (!compact(nameLine ?? text).includes(compact(f.name)))
-    missing.push("customer name");
-  const phone = billed.match(/ph\w*\s*[.:;\-]*\s*((?:\+?91)?\d{10})/i)?.[1];
-  if (phone ? !phone.endsWith(f.phone) : !text.includes(f.phone))
-    missing.push("contact number");
-  if (!compact(text).includes(compact(f.product))) missing.push("product details");
   const imeis = [...text.matchAll(IMEI_LABEL)].map((m) => m[1]);
   if (!printed(text, imeis, f.imei)) missing.push("IMEI");
   const number = text.match(INVOICE_LABEL)?.[1];
   if (!printed(text, number ? [number] : [], f.invoice))
     missing.push("invoice number");
-  if (billAmount(text) !== Number(f.bill)) missing.push("bill value");
   return missing;
 }
 /** The customer details printed on an invoice, for filling in the form. */

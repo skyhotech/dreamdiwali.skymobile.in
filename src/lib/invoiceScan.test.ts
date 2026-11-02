@@ -20,16 +20,13 @@ const OK = {
   invoice: "SI2627VLR31054",
   bill: "64000",
 };
-test("every field is read from its place on the bill", () => {
+test("only the IMEI and invoice number are compared", () => {
   expect(invoiceMissing(BILL, OK)).toEqual([]);
+  expect(invoiceMissing(BILL, { ...OK, name: "Ravi", bill: "1" } as typeof OK)).toEqual([]);
 });
 test.each([
-  ["name", "Ravi", "customer name"],
-  ["phone", "8754740002", "contact number"],
-  ["product", "iPhone 15", "product details"],
   ["imei", "P-12568802-D", "IMEI"],
   ["invoice", "SI2627VLR31055", "invoice number"],
-  ["bill", "9762.71", "bill value"],
 ])("a wrong %s is named", (field, value, label) => {
   expect(invoiceMissing(BILL, { ...OK, [field]: value })).toEqual([label]);
 });
