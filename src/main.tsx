@@ -35,7 +35,6 @@ addEventListener("vite:preloadError", (e) => {
   e.preventDefault();
   location.reload();
 });
-startMirrorSync();
 startUploadSync();
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
