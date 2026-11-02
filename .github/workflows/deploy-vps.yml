@@ -79,7 +79,8 @@ jobs:
             --exclude 'media/' --exclude 'backups/' --exclude 'staticfiles/' --exclude '__pycache__/' \
             backend/ "$R:/opt/skymirror/backend/"
           rsync -az --delete public/frames/ "$R:/opt/skymirror/public/frames/"
-          rsync -az --delete dist/ "$R:/opt/skymirror/web/"
+          # Old code files stay, so pages open during a deploy keep working.
+          rsync -az dist/ "$R:/opt/skymirror/web/"
           rsync -az --delete wheels/ "$R:/opt/skymirror/wheels/"
           rsync -az deploy/vps/remote-deploy.sh "$R:/opt/skymirror/remote-deploy.sh"
       - name: Install and restart

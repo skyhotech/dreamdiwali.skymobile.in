@@ -19,6 +19,18 @@ subscribeTemplates(() => {
 setTimeout(() => {
   if (!fromBackend) warmFrames();
 }, 2500);
+// A page left open across a deploy asks for code that has since been replaced:
+// reload onto the new version, once, so a real outage can't loop.
+addEventListener("vite:preloadError", (e) => {
+  try {
+    if (sessionStorage.getItem("sky-reloaded")) return;
+    sessionStorage.setItem("sky-reloaded", "1");
+  } catch {
+    return;
+  }
+  e.preventDefault();
+  location.reload();
+});
 startMirrorSync();
 startUploadSync();
 ReactDOM.createRoot(document.getElementById("root")!).render(

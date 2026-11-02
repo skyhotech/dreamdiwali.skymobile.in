@@ -65,6 +65,9 @@
 	}
 	handle {
 		root * /opt/skymirror/web
+		# Pages always ask for the newest build; hashed code files never change.
+		@page not path /assets/*
+		header @page Cache-Control "no-cache"
 		try_files {path} /index.html
 		file_server
 	}
