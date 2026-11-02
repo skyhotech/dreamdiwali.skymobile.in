@@ -115,7 +115,8 @@ export async function pdfToImage(file: Blob) {
   const pdfjs = await import("pdfjs-dist");
   const worker = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
   pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-  const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+  const task = pdfjs.getDocument({ data: await file.arrayBuffer() });
+  const doc = await task.promise;
   try {
     const page = await doc.getPage(1);
     const viewport = page.getViewport({ scale: 2.5 });
@@ -130,6 +131,6 @@ export async function pdfToImage(file: Blob) {
       ),
     );
   } finally {
-    void doc.destroy();
+    void task.destroy();
   }
 }
