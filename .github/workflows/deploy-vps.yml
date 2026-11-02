@@ -40,7 +40,25 @@ jobs:
           cache: npm
       - name: Build the studio
         if: steps.cfg.outputs.skip != 'true'
+        env:
+          VITE_API_URL: https://87.232.72.141
         run: npm ci && npm run build
+      - uses: actions/setup-python@v5
+        if: steps.cfg.outputs.skip != 'true'
+        with:
+          python-version: "3.12"
+      # The VPS cannot reach PyPI, so packages are downloaded here and sent along.
+      - name: Download Python packages for the VPS
+        if: steps.cfg.outputs.skip != 'true'
+        run: |
+          grep -v mysqlclient backend/requirements.txt | sed 's/;.*//' > /tmp/req.txt
+          echo setuptools >> /tmp/req.txt
+          echo wheel >> /tmp/req.txt
+          pip download -q -d wheels --only-binary=:all: --python-version 3.12 \
+            --platform manylinux_2_28_x86_64 --platform manylinux2014_x86_64 -r /tmp/req.txt
+          v=$(grep -o 'mysqlclient==[0-9.]*' backend/requirements.txt | cut -d= -f3)
+          curl -fsSL -o "wheels/mysqlclient-$v.tar.gz" \
+            "$(curl -fsS "https://pypi.org/pypi/mysqlclient/$v/json" | python -c "import json,sys;print([u['url'] for u in json.load(sys.stdin)['urls'] if u['packagetype']=='sdist'][0])")"
       - name: SSH key
         if: steps.cfg.outputs.skip != 'true'
         env:
@@ -62,6 +80,7 @@ jobs:
             backend/ "$R:/opt/skymirror/backend/"
           rsync -az --delete public/frames/ "$R:/opt/skymirror/public/frames/"
           rsync -az --delete dist/ "$R:/opt/skymirror/web/"
+          rsync -az --delete wheels/ "$R:/opt/skymirror/wheels/"
           rsync -az deploy/vps/remote-deploy.sh "$R:/opt/skymirror/remote-deploy.sh"
       - name: Install and restart
         if: steps.cfg.outputs.skip != 'true'
@@ -70,7 +89,7 @@ jobs:
         if: steps.cfg.outputs.skip != 'true'
         run: |
           for i in $(seq 1 10); do
-            curl -fsS -o /dev/null "https://dreamdiwali.skymobile.in/api/mirrors/version/" && { echo "Live"; exit 0; }
+            curl -fsS -o /dev/null "https://87.232.72.141/api/mirrors/version/" && { echo "Live"; exit 0; }
             sleep 3
           done
           echo "::error::the live site is not responding after deploy"; exit 1

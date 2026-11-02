@@ -23,14 +23,14 @@ if [ ! -f /etc/skymirror/.env ]; then
   cat > /etc/skymirror/.env <<ENV
 DJANGO_SECRET_KEY=$(openssl rand -base64 48 | tr -d '\n/+=')
 DJANGO_DEBUG=0
-DJANGO_ALLOWED_HOSTS=dreamdiwali.skymobile.in
-CORS_ALLOWED_ORIGINS=https://dreamdiwali.skymobile.in
-CSRF_TRUSTED_ORIGINS=https://dreamdiwali.skymobile.in
+DJANGO_ALLOWED_HOSTS=87.232.72.141,dreamdiwali.skymobile.in
+CORS_ALLOWED_ORIGINS=https://87.232.72.141,https://dreamdiwali.skymobile.in
+CSRF_TRUSTED_ORIGINS=https://87.232.72.141,https://dreamdiwali.skymobile.in
 DJANGO_SSL_REDIRECT=0
 TRUSTED_PROXIES=1
 REDIS_URL=redis://127.0.0.1:6379/0
 MEDIA_ROOT=/var/lib/skymirror/media
-STUDIO_URL=https://dreamdiwali.skymobile.in
+STUDIO_URL=https://87.232.72.141
 MYSQL_DATABASE=skymirror
 MYSQL_USER=skymirror
 MYSQL_PASSWORD=$DB
