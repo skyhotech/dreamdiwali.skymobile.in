@@ -37,8 +37,6 @@ export function SpinWheel({
    *  onQueue(true) while the customer waits in line because SKY is busy. */
   getPrize: (progress: {
     onQueue: (waiting: boolean) => void;
-    /** The face is read; the request is going to SKY now. */
-    onSending: () => void;
   }) => Promise<string>;
 }) {
   const [rotation, setRotation] = useState(0);
@@ -48,8 +46,6 @@ export function SpinWheel({
   const [won, setWon] = useState<Reward | null>(null);
   const [error, setError] = useState("");
   const [queued, setQueued] = useState(false);
-  // The two turns are done but the prize is still on its way.
-  const [slow, setSlow] = useState(false);
   const queuedRef = useRef(false);
   const onQueue = (waiting: boolean) => {
     queuedRef.current = waiting;
@@ -127,28 +123,17 @@ export function SpinWheel({
     setSpinMs(ms);
     setEase(LANDING_EASE);
     setRotation(base + SPIN_TURNS * 360);
-    setSlow(false);
-    const slowTimer = window.setTimeout(() => setSlow(true), ms);
     let index: number;
     try {
       // Never spin for ever: give up after a while and offer Try again.
       let watchdog = 0;
-      // The clock starts once the request goes to SKY: reading the face on
-      // a slow phone has its own limit and isn't counted here.
-      let since = 0;
+      const since = performance.now();
       const prize = await Promise.race([
-        getPrize({
-          onQueue,
-          onSending: () => (since = performance.now()),
-        }).finally(() => window.clearInterval(watchdog)),
+        getPrize({ onQueue }).finally(() => window.clearInterval(watchdog)),
         new Promise<never>((_, reject) => {
           // Waiting in the queue is fine; silence for too long is not.
           watchdog = window.setInterval(() => {
-            if (
-              since &&
-              !queuedRef.current &&
-              performance.now() - since > MAX_WAIT_MS
-            ) {
+            if (!queuedRef.current && performance.now() - since > MAX_WAIT_MS) {
               window.clearInterval(watchdog);
               reject(new Error("SKY is taking too long. Tap Try again."));
             }
@@ -158,16 +143,12 @@ export function SpinWheel({
       index = REWARDS.findIndex((r) => r.id === prize);
       if (index < 0) throw new Error("Unknown prize. Try again.");
     } catch (e) {
-      window.clearTimeout(slowTimer);
-      setSlow(false);
       audio?.pause();
       setError((e as Error).message);
       setPhase("ready");
       spinLock.current = false;
       return;
     }
-    window.clearTimeout(slowTimer);
-    setSlow(false);
     // Same two turns, ending with the middle of the prize slice under the
     // pointer. If the prize came late, this is one short final move.
     const landing = 360 - (index * SLICE + SLICE / 2);
@@ -238,9 +219,7 @@ export function SpinWheel({
             : phase === "spinning"
               ? queued
                 ? "You're in the queue — SKY is busy, your spin is next…"
-                : slow
-                  ? "Almost there — checking your photo…"
-                  : "Good luck…"
+                : "Good luck…"
               : "Thanks for your purchase. Spin for a free gift!"}
         </p>
         <div className="spin-wheel-wrap">

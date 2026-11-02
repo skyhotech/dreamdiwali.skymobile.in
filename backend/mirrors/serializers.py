@@ -190,9 +190,9 @@ class FaceField(serializers.Field):
 
 
 class SpinSerializer(PhoneSerializer):
-    # Every spin is face-checked (one gift per person, whatever the number)
-    # and carries the selfie: no photo, no spin.
-    face = FaceField()
+    # Every spin carries the selfie (no photo, no spin); the server reads the
+    # face from it. A fingerprint sent by older studio versions is ignored.
+    face = FaceField(required=False)
     selfie = serializers.ImageField(
         validators=[lambda image: _limit_size(image)],
         error_messages={"required": NO_PHOTO_MESSAGE, "invalid": NO_PHOTO_MESSAGE,

@@ -1,9 +1,9 @@
-import neckband from "../assets/rewards/neckband.jpg";
-import miniSpeaker from "../assets/rewards/mini-speaker.jpg";
-import smartWatch from "../assets/rewards/smart-watch.jpg";
-import wiredHeadphone from "../assets/rewards/wired-headphone.jpg";
-import mobileStand from "../assets/rewards/mobile-stand.jpg";
-import powerBank from "../assets/rewards/power-bank.jpg";
+import neckband from "../assets/rewards/neckband.webp";
+import miniSpeaker from "../assets/rewards/mini-speaker.webp";
+import smartWatch from "../assets/rewards/smart-watch.webp";
+import wiredHeadphone from "../assets/rewards/wired-headphone.webp";
+import mobileStand from "../assets/rewards/mobile-stand.webp";
+import powerBank from "../assets/rewards/power-bank.webp";
 import spinSound from "../assets/rewards/spin.mp3";
 import winSound from "../assets/rewards/win.mp3";
 export type Reward = { id: string; label: string; image: string };
@@ -30,6 +30,11 @@ export function rewardImage(reward: Reward) {
   }
   return image.complete && image.naturalWidth ? image : null;
 }
+let soundsLoaded = false;
 export function preloadRewards() {
   REWARDS.forEach(rewardImage);
+  if (!soundsLoaded) {
+    soundsLoaded = true;
+    for (const url of [spinSound, winSound]) void fetch(url).catch(() => {});
+  }
 }

@@ -4,6 +4,7 @@ import threading
 import time
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.views import LoginView
 from django.db import close_old_connections, transaction
@@ -23,8 +24,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .images import POSTER_SIZE, SELFIE_SIZE, THUMB_SIZE, compressed_photo, optimized
+from .faces import FaceCheckUnavailable, fingerprint, same_person
 from .models import REWARD_IDS, Branch, Customer, Mirror
 from .serializers import (
+    NO_FACE_MESSAGE,
     BranchSerializer,
     PublicBranchSerializer,
     branch_link,
@@ -262,17 +265,8 @@ class CustomerRegister(APIView):
         )
 
 
-# Euclidean distance between face-api fingerprints; under 0.5 is the same
-# person in face-api's own guidance. Slightly stricter to avoid false matches.
-FACE_MATCH_DISTANCE = 0.45
-
-
-def _face_distance(a, b):
-    return sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5
-
-
 def _find_same_face(face, exclude_id):
-    best, best_distance = None, FACE_MATCH_DISTANCE
+    """An earlier prize winner with the same face, if any."""
     rows = (
         Customer.objects.exclude(pk=exclude_id)
         .exclude(reward="")
@@ -280,11 +274,9 @@ def _find_same_face(face, exclude_id):
         .values_list("id", "face")
     )
     for pk, other in rows.iterator():
-        if isinstance(other, list) and len(other) == len(face):
-            d = _face_distance(face, other)
-            if d < best_distance:
-                best, best_distance = pk, d
-    return best
+        if same_person(face, other):
+            return pk
+    return None
 
 
 class CustomerSpin(APIView):
@@ -298,7 +290,6 @@ class CustomerSpin(APIView):
     def post(self, request):
         ser = SpinSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
-        face = ser.validated_data["face"]
         branch = _branch(ser.validated_data.get("branch"))
         # No photo, no spin: the selfie is stored before the prize is drawn.
         if not _IMAGE_WORK.acquire(timeout=IMAGE_WAIT_SECONDS):
@@ -309,6 +300,16 @@ class CustomerSpin(APIView):
             )
         try:
             raw = ser.validated_data["selfie"]
+            # The face is read here on the server: one gift per person.
+            try:
+                face = fingerprint(raw)
+            except FaceCheckUnavailable:
+                if not settings.DEBUG:
+                    raise
+                face = None  # local development without OpenCV
+            else:
+                if face is None:
+                    return Response({"face": [NO_FACE_MESSAGE]}, status=400)
             selfie = compressed_photo(raw, SELFIE_SIZE) or raw
             selfie_thumb = optimized(selfie, THUMB_SIZE, 78) or ""
         finally:
@@ -330,8 +331,8 @@ class CustomerSpin(APIView):
             if customer.reward:
                 customer.save(update_fields=[*photo_fields, "updated_at"])
                 return Response({"reward": customer.reward, "repeat": bool(customer.repeat_of_id)})
-            customer.face = [round(x, 5) for x in face]
-            match = _find_same_face(customer.face, customer.pk)
+            customer.face = face
+            match = face and _find_same_face(face, customer.pk)
             if match:
                 # Same person, new number: no second gift. Staff see the link
                 # on the dashboard.

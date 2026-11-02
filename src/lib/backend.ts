@@ -202,15 +202,14 @@ const QUEUE_LIMIT_MS = 60_000;
  *  customer waits in line (onQueue reports it) and the request is retried. */
 export async function spinPrize(
   phone: string,
-  face: number[] | null,
   selfie: Blob | null | undefined,
   onQueue?: (waiting: boolean) => void,
 ) {
   if (!selfie) throw new ApiError(NO_PHOTO, 400);
   const form = new FormData();
   form.append("phone", phone);
-  if (face) form.append("face", JSON.stringify(face));
-  form.append("selfie", await asJpeg(selfie), "selfie.jpg");
+  // The server reads the face from it; 1280 px is plenty and uploads fast.
+  form.append("selfie", await asJpeg(selfie, 1280), "selfie.jpg");
   if (BRANCH) form.append("branch", BRANCH);
   const started = Date.now();
   for (;;) {
@@ -361,14 +360,18 @@ export function startUploadSync() {
 }
 // The server stores ≤200 KB photos anyway, so a PNG (3–5 MB) is re-encoded as
 // JPEG on the phone first: uploads get ~10× smaller and finish sooner.
-async function asJpeg(blob: Blob): Promise<Blob> {
-  if (blob.type === "image/jpeg") return blob;
+async function asJpeg(blob: Blob, maxSide = Infinity): Promise<Blob> {
   try {
     const bitmap = await createImageBitmap(blob);
+    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+    if (blob.type === "image/jpeg" && scale === 1) {
+      bitmap.close();
+      return blob;
+    }
     const canvas = document.createElement("canvas");
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
-    canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close();
     const jpeg = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, "image/jpeg", 0.9),

@@ -66,22 +66,4 @@ try {
     );
   }
 }
-// Face-match models (repeat-customer check), served from public/ai/face.
-const faceSource = join(root, "node_modules/@vladmandic/face-api/model");
-const faceTarget = join(target, "face");
-await mkdir(faceTarget, { recursive: true });
-for (const name of [
-  "tiny_face_detector_model-weights_manifest.json",
-  "tiny_face_detector_model.bin",
-  "face_landmark_68_tiny_model-weights_manifest.json",
-  "face_landmark_68_tiny_model.bin",
-  "face_recognition_model-weights_manifest.json",
-  "face_recognition_model.bin",
-]) {
-  try {
-    await copyFile(join(faceSource, name), join(faceTarget, name));
-  } catch {
-    console.warn(`Face-match model missing: ${name}. Run npm install again.`);
-  }
-}
 console.log("SKY setup complete. No API keys needed. Start with npm run dev.");

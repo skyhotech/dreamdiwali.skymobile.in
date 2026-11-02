@@ -27,7 +27,6 @@ import { Poster } from "./Poster";
 import { SpinWheel } from "./SpinWheel";
 import { UploadStatus } from "./StatusNotices";
 import { spinPrize } from "../lib/backend";
-import { faceFingerprint } from "../lib/faceMatch";
 import { Templates } from "./Templates";
 import { frameAsset, subscribeFrames } from "../lib/frameAssets";
 import { instagramCaption, copyCaption } from "../lib/sharing";
@@ -268,11 +267,9 @@ export default function Editor() {
     <div className="workspace editor-workspace">
       {wheelOpen && (
         <SpinWheel
-          getPrize={async ({ onQueue, onSending }) => {
-            const face = await faceFingerprint(s.selfie?.image);
-            onSending();
-            return spinPrize(s.phone ?? "", face, s.selfie?.blob, onQueue);
-          }}
+          getPrize={({ onQueue }) =>
+            spinPrize(s.phone ?? "", s.selfie?.blob, onQueue)
+          }
           onClaim={(r) => {
             s.setReward(r.id);
             setWheelOpen(false);

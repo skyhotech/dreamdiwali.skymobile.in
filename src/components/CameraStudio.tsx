@@ -37,7 +37,6 @@ import { SpinWheel } from "./SpinWheel";
 import { UploadStatus } from "./StatusNotices";
 import type { Reward } from "../lib/rewards";
 import { spinPrize } from "../lib/backend";
-import { faceFingerprint } from "../lib/faceMatch";
 // Hands-free capture: how strong a smile counts, and how long a cue is held.
 const SMILE_THRESHOLD = 0.6;
 const HOLD_MS = 500;
@@ -498,11 +497,9 @@ export default function CameraStudio() {
       </aside>
       {spinOpen && (
         <SpinWheel
-          getPrize={async ({ onQueue, onSending }) => {
-            const face = await faceFingerprint(s.selfie?.image);
-            onSending();
-            return spinPrize(s.phone ?? "", face, s.selfie?.blob, onQueue);
-          }}
+          getPrize={({ onQueue }) =>
+            spinPrize(s.phone ?? "", s.selfie?.blob, onQueue)
+          }
           onClaim={(r) => void claim(r)}
         />
       )}
