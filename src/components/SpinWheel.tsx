@@ -23,6 +23,8 @@ function slicePath(i: number) {
 }
 // Time to enjoy the win (sound, confetti) before the prize is added automatically.
 const AUTO_CLAIM_MS = 2200;
+// Starts at roughly the waiting speed, then a long smooth slow-down.
+const LANDING_EASE = "cubic-bezier(0.33, 0.6, 0.3, 1)";
 export function SpinWheel({
   onClaim,
   getPrize,
@@ -33,6 +35,7 @@ export function SpinWheel({
 }) {
   const [rotation, setRotation] = useState(0);
   const [spinMs, setSpinMs] = useState(FALLBACK_SPIN_MS);
+  const [ease, setEase] = useState(LANDING_EASE);
   const [phase, setPhase] = useState<"ready" | "spinning" | "won">("ready");
   const [won, setWon] = useState<Reward | null>(null);
   const [error, setError] = useState("");
@@ -71,34 +74,57 @@ export function SpinWheel({
       }),
     [],
   );
+  // While the server decides the prize, the wheel already turns at a steady
+  // speed (a CSS transition, so it stays smooth even when the phone is busy).
+  const WAIT_DEG_PER_MS = 0.72;
+  const WAIT_MS = 60_000;
   async function spin() {
     if (phase !== "ready") return;
     setError("");
     setPhase("spinning");
     const audio = spinAudio.current;
-    // The wheel stops exactly when the spin sound ends.
-    const ms =
-      audio && Number.isFinite(audio.duration) && audio.duration > 0
-        ? Math.round(audio.duration * 1000)
-        : FALLBACK_SPIN_MS;
     // Start the sound inside the tap; phones block audio started later.
-    const started = performance.now();
+    // It loops until the prize is known, then plays out as the wheel lands.
     if (audio) {
       audio.currentTime = 0;
+      audio.loop = true;
       void audio.play().catch(() => {});
     }
+    const from = rotation;
+    const started = performance.now();
+    setSpinMs(WAIT_MS);
+    setEase("linear");
+    setRotation(from + WAIT_DEG_PER_MS * WAIT_MS);
     let index: number;
     try {
       const prize = await getPrize();
       index = REWARDS.findIndex((r) => r.id === prize);
       if (index < 0) throw new Error("Unknown prize. Try again.");
     } catch (e) {
-      audio?.pause();
+      if (audio) {
+        audio.loop = false;
+        audio.pause();
+      }
+      const at = from + WAIT_DEG_PER_MS * (performance.now() - started);
+      setSpinMs(600);
+      setEase("ease-out");
+      setRotation(at + 60);
       setError((e as Error).message);
       setPhase("ready");
       return;
     }
-    const remaining = Math.max(1200, ms - (performance.now() - started));
+    // Land when the current play-through of the spin sound ends.
+    let remaining = FALLBACK_SPIN_MS;
+    if (audio && Number.isFinite(audio.duration) && audio.duration > 0) {
+      audio.loop = false;
+      remaining = Math.round((audio.duration - audio.currentTime) * 1000);
+    }
+    remaining = Math.max(1800, remaining);
+    const at = from + WAIT_DEG_PER_MS * (performance.now() - started);
+    // At least two more turns, then the middle of the prize slice under the pointer.
+    const landing = 360 - (index * SLICE + SLICE / 2);
+    let target = Math.ceil((at + 720) / 360) * 360 + landing;
+    if (target - at < 720) target += 360;
     let done = false;
     const finish = () => {
       if (done) return;
@@ -109,7 +135,8 @@ export function SpinWheel({
         winAudio.current.currentTime = 0;
         void winAudio.current.play().catch(() => {});
       }
-      navigator.vibrate?.([60, 40, 120]);
+      // A long celebratory buzz (Android; iPhones don't allow vibration).
+      navigator.vibrate?.([220, 90, 220, 90, 900]);
       const reward = REWARDS[index];
       setWon(reward);
       setPhase("won");
@@ -118,12 +145,12 @@ export function SpinWheel({
         AUTO_CLAIM_MS,
       );
     };
+    // The transition restarts from the wheel's current angle, so it eases
+    // from full speed into the prize with no jump.
     setSpinMs(remaining);
-    // Land the middle of the chosen slice under the top pointer.
-    setRotation(360 * TURNS + (360 - (index * SLICE + SLICE / 2)));
-    if (audio) audio.onended = finish;
-    // Backup for muted/blocked audio so the wheel never gets stuck.
-    timer.current = window.setTimeout(finish, remaining + 250);
+    setEase(LANDING_EASE);
+    setRotation(target);
+    timer.current = window.setTimeout(finish, remaining + 100);
   }
   return (
     <div
@@ -141,8 +168,21 @@ export function SpinWheel({
         <motion.h2
           key={phase === "won" ? "won" : "title"}
           initial={{ scale: 0.7, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 400, damping: 14 }}
+          animate={
+            phase === "won"
+              ? {
+                  scale: [0.5, 1.3, 0.92, 1.1, 1],
+                  rotate: [0, -5, 4, -2, 0],
+                  opacity: 1,
+                }
+              : { scale: 1, opacity: 1 }
+          }
+          transition={
+            phase === "won"
+              ? { duration: 0.9, ease: "easeOut" }
+              : { type: "spring", stiffness: 400, damping: 14 }
+          }
+          className={phase === "won" ? "spin-title-won" : undefined}
         >
           {phase === "won" ? "Congratulations!" : "Spin & Win"}
         </motion.h2>
@@ -165,6 +205,7 @@ export function SpinWheel({
               style={{
                 transform: `rotate(${rotation}deg)`,
                 transitionDuration: `${spinMs}ms`,
+                transitionTimingFunction: ease,
               }}
               aria-hidden="true"
             >
@@ -254,33 +295,48 @@ export function SpinWheel({
             {phase === "won" && won && (
               <>
                 <motion.div
+                  className="spin-rays"
+                  aria-hidden="true"
+                  initial={{ scale: 0.3, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: 0.6, ease: "easeOut" }}
+                />
+                <motion.div
                   className="spin-burst"
                   aria-hidden="true"
                   initial={{ scale: 0.2, opacity: 0.9 }}
                   animate={{ scale: 2.4, opacity: 0 }}
                   transition={{ duration: 0.9, ease: "easeOut" }}
                 />
-                {confetti.map((c, i) => (
-                  <motion.span
-                    key={i}
-                    className={`spin-confetti ${c.round ? "round" : ""}`}
-                    style={{ background: c.color }}
-                    aria-hidden="true"
-                    initial={{ x: 0, y: 0, rotate: 0, opacity: 1, scale: 0.6 }}
-                    animate={{
-                      x: c.x,
-                      y: [0, c.y, c.y + 160],
-                      rotate: c.rotate,
-                      opacity: [1, 1, 0],
-                      scale: 1,
-                    }}
-                    transition={{
-                      duration: 1.6,
-                      delay: c.delay,
-                      ease: "easeOut",
-                    }}
-                  />
-                ))}
+                {[0, 0.7].flatMap((wave) =>
+                  confetti.map((c, i) => (
+                    <motion.span
+                      key={`${wave}-${i}`}
+                      className={`spin-confetti ${c.round ? "round" : ""}`}
+                      style={{ background: c.color }}
+                      aria-hidden="true"
+                      initial={{
+                        x: 0,
+                        y: 0,
+                        rotate: 0,
+                        opacity: 1,
+                        scale: 0.6,
+                      }}
+                      animate={{
+                        x: c.x,
+                        y: [0, c.y, c.y + 160],
+                        rotate: c.rotate,
+                        opacity: [1, 1, 0],
+                        scale: 1,
+                      }}
+                      transition={{
+                        duration: 1.6,
+                        delay: c.delay + wave,
+                        ease: "easeOut",
+                      }}
+                    />
+                  )),
+                )}
                 <motion.img
                   className="spin-prize"
                   src={won.image}

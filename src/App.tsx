@@ -3,7 +3,7 @@ import { MotionConfig } from "motion/react";
 import { PhoneGate } from "./components/PhoneGate";
 import { OfflineBanner } from "./components/StatusNotices";
 import { registerPhone } from "./lib/backend";
-import { loadFaceModels } from "./lib/faceMatch";
+import { faceFingerprint } from "./lib/faceMatch";
 import { useStudio } from "./lib/store";
 import { initializePhotoStorage } from "./lib/persistence";
 const CameraStudio = lazy(() => import("./components/CameraStudio"));
@@ -25,12 +25,13 @@ export default function App() {
       })
       .catch(() => {});
   }, []);
-  // Warm up the face-check models (≈8 MB, needed only at the spin) once the
-  // selfie is taken, so they never compete with the first screen's frame.
-  const hasSelfie = useStudio((s) => Boolean(s.selfie));
+  // Read the face (≈8 MB of models, needed at the spin) as soon as the selfie
+  // is taken, so it never competes with the first screen and is usually
+  // ready before the customer taps Spin.
+  const selfieImage = useStudio((s) => s.selfie?.image);
   useEffect(() => {
-    if (phone && hasSelfie) void loadFaceModels().catch(() => {});
-  }, [phone, hasSelfie]);
+    if (phone && selfieImage) void faceFingerprint(selfieImage);
+  }, [phone, selfieImage]);
   useEffect(() => {
     let active = true;
     void initializePhotoStorage().then(() => {

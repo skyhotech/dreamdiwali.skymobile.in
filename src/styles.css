@@ -2525,6 +2525,39 @@ body {
 .spin-spinning .spin-pointer {
   animation: spin-tick 0.09s ease-in-out infinite alternate;
 }
+/* Golden light rays turning behind the prize. */
+.spin-rays {
+  position: absolute;
+  inset: -18%;
+  z-index: 2;
+  border-radius: 50%;
+  pointer-events: none;
+  background: repeating-conic-gradient(
+    rgba(243, 207, 122, 0.55) 0deg 10deg,
+    rgba(243, 207, 122, 0) 10deg 24deg
+  );
+  -webkit-mask-image: radial-gradient(circle, #000 30%, transparent 70%);
+  mask-image: radial-gradient(circle, #000 30%, transparent 70%);
+  animation: spin-rays 6s linear infinite;
+}
+.spin-title-won {
+  background: linear-gradient(90deg, #d22856, #d6a447, #f3cf7a, #d6a447, #d22856);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: spin-shimmer 1.6s linear infinite;
+}
+/* Pulsing halo while the wheel turns. */
+.spin-spinning .spin-wheel-wrap::after {
+  content: "";
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  border: 3px solid rgba(243, 207, 122, 0.8);
+  pointer-events: none;
+  animation: spin-halo 0.7s ease-out infinite;
+}
 .spin-burst {
   position: absolute;
   inset: 25%;
@@ -2623,6 +2656,26 @@ body {
   color: #b51d47;
   font-size: 14px;
   font-weight: 600;
+}
+@keyframes spin-rays {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes spin-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+@keyframes spin-halo {
+  from {
+    transform: scale(0.96);
+    opacity: 0.9;
+  }
+  to {
+    transform: scale(1.12);
+    opacity: 0;
+  }
 }
 @keyframes spin-idle {
   0%,
@@ -2725,7 +2778,10 @@ body {
   .spin-pointer,
   .spin-ready .spin-sway,
   .spin-ready .spin-button,
-  .spin-ready .spin-button::after {
+  .spin-ready .spin-button::after,
+  .spin-rays,
+  .spin-title-won,
+  .spin-spinning .spin-wheel-wrap::after {
     animation: none !important;
   }
 }

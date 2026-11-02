@@ -26,10 +26,25 @@ export function loadFaceModels() {
 // Generous: the first customer on a phone also downloads the 6 MB model.
 const TIMEOUT_MS = 20000;
 /** Returns the fingerprint, or null if no face is found or models are missing. */
-export async function faceFingerprint(
+// One computation per selfie: the studio starts it right after the photo is
+// taken, so it is usually ready before the customer taps Spin.
+const fingerprints = new WeakMap<HTMLImageElement, Promise<number[] | null>>();
+export function faceFingerprint(
   image: HTMLImageElement | null | undefined,
 ): Promise<number[] | null> {
-  if (!image) return null;
+  if (!image) return Promise.resolve(null);
+  let pending = fingerprints.get(image);
+  if (!pending) {
+    pending = computeFingerprint(image);
+    fingerprints.set(image, pending);
+    // A failed or timed-out read is retried on the next request.
+    void pending.then((f) => f || fingerprints.delete(image));
+  }
+  return pending;
+}
+async function computeFingerprint(
+  image: HTMLImageElement,
+): Promise<number[] | null> {
   const work = (async () => {
     const faceapi = await loadFaceModels();
     const result = await faceapi

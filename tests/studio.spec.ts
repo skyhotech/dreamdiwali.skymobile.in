@@ -565,6 +565,71 @@ test("prize wheel spins after the product photo and puts the reward on the poste
   ).toBeVisible();
 });
 
+test("the wheel turns right away even when the prize is slow to arrive", async ({
+  page,
+}) => {
+  // Slow phone or network: the face check and server take a few seconds.
+  await page.route("**/api/customers/spin/", async (route) => {
+    await new Promise((r) => setTimeout(r, 3000));
+    await route.fulfill({ json: { reward: "smart-watch" } });
+  });
+  await mockCamera(page);
+  await takeSelfie(page);
+  await page
+    .getByRole("button", {
+      name: "Capture product and post on Instagram",
+      exact: true,
+    })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Spin the wheel" });
+  await dialog.getByRole("button", { name: "Tap to spin" }).click();
+  const angle = () =>
+    page
+      .locator(".spin-wheel")
+      .evaluate((el) => getComputedStyle(el).transform);
+  // Before the prize is known the wheel must already be moving. (Samples
+  // avoid 500 ms steps: one full turn takes 500 ms at waiting speed.)
+  await page.waitForTimeout(300);
+  const a = await angle();
+  await page.waitForTimeout(130);
+  const b = await angle();
+  await page.waitForTimeout(170);
+  expect(new Set([a, b, await angle()]).size).toBe(3);
+  await expect(dialog.getByRole("status")).toHaveText(
+    "You won a Smart Watch!",
+    {
+      timeout: 12_000,
+    },
+  );
+});
+test("a face that already claimed a gift sees a clear message", async ({
+  page,
+}) => {
+  await page.route("**/api/customers/spin/", (route) =>
+    route.fulfill({
+      status: 409,
+      json: {
+        detail:
+          "You have already claimed your Diwali gift. Each guest is eligible for one gift only. Thank you for celebrating with SKY!",
+        code: "face_registered",
+      },
+    }),
+  );
+  await mockCamera(page);
+  await takeSelfie(page);
+  await page
+    .getByRole("button", {
+      name: "Capture product and post on Instagram",
+      exact: true,
+    })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Spin the wheel" });
+  await dialog.getByRole("button", { name: "Tap to spin" }).click();
+  await expect(dialog.getByRole("alert")).toHaveText(
+    /already claimed your Diwali gift/,
+  );
+  await expect(dialog.getByRole("status")).not.toHaveText(/You won/);
+});
 test("reloading during the prize wheel cannot re-roll the prize", async ({
   page,
 }) => {
