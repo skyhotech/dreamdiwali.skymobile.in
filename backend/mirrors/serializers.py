@@ -186,7 +186,6 @@ class EventSerializer(SpinSerializer):
     kind = serializers.ChoiceField(choices=CustomerEvent.SHARE_KINDS)
 
 
-MAX_INVOICE_BYTES = 250 * 1024
 # Letters a scanner confuses with digits count as the same character.
 _OCR_ALIKE = str.maketrans("OILSB", "01158")
 
@@ -261,7 +260,6 @@ class CustomerIntakeSerializer(serializers.Serializer):
     invoice_number = serializers.CharField(max_length=40)
     bill_value = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=1)
     branch = serializers.CharField(max_length=60)
-    invoice_image = serializers.ImageField()
     # What the document scanner read; the server repeats the comparison.
     ocr_text = serializers.CharField(max_length=20000, trim_whitespace=False)
     blur_score = serializers.FloatField(min_value=0)
@@ -281,11 +279,6 @@ class CustomerIntakeSerializer(serializers.Serializer):
             raise serializers.ValidationError("This IMEI number is not valid.")
         return value
 
-    def validate_invoice_image(self, image):
-        if image.size > MAX_INVOICE_BYTES:
-            raise serializers.ValidationError("Invoice image must be under 250 KB.")
-        return _limit_size(image)
-
 
 def _limit_size(image):
     if image.size > MAX_UPLOAD_BYTES:
@@ -302,5 +295,4 @@ class CustomerUploadSerializer(serializers.Serializer):
     phone = serializers.RegexField(PHONE_REGEX, required=False)
     reward = serializers.CharField(max_length=40, required=False, allow_blank=True)
     poster = serializers.ImageField(validators=[_limit_size])
-    selfie = serializers.ImageField(required=False, validators=[_limit_size])
     branch = serializers.CharField(max_length=60, required=False, allow_blank=True)

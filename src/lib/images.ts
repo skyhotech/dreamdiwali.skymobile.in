@@ -125,33 +125,3 @@ export function download(blob: Blob, name: string) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 15000);
 }
-
-// Sizes tried from sharpest down; text on an invoice stays readable longest
-// at a larger size with moderate quality.
-const COMPRESS_SIDES = [1600, 1280, 1024, 800, 640];
-const COMPRESS_QUALITIES = [0.8, 0.65, 0.5];
-/** JPEG under maxBytes, at the largest size that fits. */
-export async function compressImage(file: Blob, maxBytes: number) {
-  const bitmap = await createImageBitmap(file).catch(() => {
-    throw new Error("That file isn't a readable image.");
-  });
-  try {
-    for (const side of COMPRESS_SIDES) {
-      const scale = Math.min(1, side / Math.max(bitmap.width, bitmap.height));
-      const c = document.createElement("canvas");
-      c.width = Math.round(bitmap.width * scale);
-      c.height = Math.round(bitmap.height * scale);
-      const ctx = c.getContext("2d")!;
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, c.width, c.height);
-      ctx.drawImage(bitmap, 0, 0, c.width, c.height);
-      for (const quality of COMPRESS_QUALITIES) {
-        const blob = await canvasBlob(c, "image/jpeg", quality);
-        if (blob.size < maxBytes) return blob;
-      }
-    }
-  } finally {
-    bitmap.close();
-  }
-  throw new Error("Could not compress this image under 250 KB.");
-}

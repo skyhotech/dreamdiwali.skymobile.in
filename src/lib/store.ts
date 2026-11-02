@@ -118,7 +118,6 @@ export const useStudio = create<State>((set, get) => ({
         mirror: template,
         reward,
         poster: savedPoster,
-        selfie: selfie.blob,
       });
   },
   setStep: (step) => set({ step }),

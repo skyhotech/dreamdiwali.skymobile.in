@@ -402,7 +402,7 @@
       ? s.top_branches.map((b) => `<a href="#branches/${b.id}" class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);color:inherit;text-decoration:none"><span>📍 ${esc(b.name)}</span><b>${b.n}</b></a>`).join("")
       : `<p class="hint">No branches yet. <a href="#branches">Add your first branch</a>.</p>`;
     $("#s-recent").innerHTML = recent.results.length
-      ? recent.results.filter((c) => c.poster).map((c) => `<img src="${esc(c.poster_thumb || c.poster)}" data-full="${esc(c.poster)}" alt="${esc(c.name || "Customer")}" loading="lazy" decoding="async">`).join("")
+      ? recent.results.filter((c) => c.poster).map((c) => `<img src="${esc(c.poster_thumb || c.poster)}" data-full="${esc(c.poster)}" alt="${esc(c.name || "Customer")}" loading="eager" decoding="sync">`).join("")
       : `<p class="hint">No selfies yet.</p>`;
   }
 
@@ -600,8 +600,8 @@
     const el = document.createElement("div");
     el.className = "cust";
     el.innerHTML = `<div class="imgs">
-        ${c.selfie ? `<img src="${esc(c.selfie_thumb || c.selfie)}" data-full="${esc(c.selfie)}" alt="Selfie" loading="lazy" decoding="async">` : `<div></div>`}
-        ${c.poster ? `<img src="${esc(c.poster_thumb || c.poster)}" data-full="${esc(c.poster)}" alt="Poster" loading="lazy" decoding="async">` : `<div></div>`}
+        ${c.selfie ? `<img src="${esc(c.selfie_thumb || c.selfie)}" data-full="${esc(c.selfie)}" alt="Selfie" loading="eager" decoding="sync">` : `<div></div>`}
+        ${c.poster ? `<img src="${esc(c.poster_thumb || c.poster)}" data-full="${esc(c.poster)}" alt="Poster" loading="eager" decoding="sync">` : `<div></div>`}
       </div>
       <div class="info"><b>${esc(c.name || "Guest #" + c.id)}</b>
         ${c.reward ? `<span class="pill">🎁 ${esc(rewardLabel(c.reward))}</span>` : ""}

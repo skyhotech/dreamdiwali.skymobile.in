@@ -12,11 +12,9 @@ import {
   trackSent,
   type BranchOption,
 } from "../lib/backend";
-import { compressImage } from "../lib/images";
 import { invoiceMissing, pdfToImage, readInvoice } from "../lib/invoiceScan";
 import { Festive } from "./Festive";
 const ImeiScanner = lazy(() => import("./ImeiScanner"));
-const MAX_INVOICE_BYTES = 250 * 1024;
 const MISMATCH = "Data mismatch";
 const EMPTY = {
   name: "",
@@ -111,7 +109,7 @@ export function ManagerIntake() {
     setBusy(true);
     setError("");
     try {
-      // The full-size photo is read, since compressing would cost accuracy.
+      // Read here and dropped: only the text is sent to the server.
       setStage("Scanning invoice…");
       const page =
         image!.type === "application/pdf" ? await pdfToImage(image!) : image!;
@@ -129,8 +127,6 @@ export function ManagerIntake() {
         return;
       }
       setStage("Checking…");
-      // Compressed only once everything above has passed.
-      const small = await compressImage(page, MAX_INVOICE_BYTES);
       const body = new FormData();
       body.append("name", form.name.trim());
       body.append("phone", form.phone);
@@ -140,7 +136,6 @@ export function ManagerIntake() {
       body.append("invoice_number", form.invoice.trim());
       body.append("bill_value", form.bill);
       body.append("branch", branch!.slug);
-      body.append("invoice_image", small, "invoice.jpg");
       body.append("ocr_text", text);
       body.append("blur_score", String(Math.round(sharpness)));
       const res = await checkPurchase(body);

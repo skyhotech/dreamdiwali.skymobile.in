@@ -342,7 +342,6 @@ class ManagerCheck(APIView):
                 customer = customer or Customer(
                     phone=data["phone"], session=f"phone-{data['phone']}"
                 )
-                old = customer.invoice_image.name
                 new = customer.pk is None
                 # Changed details get a fresh link; the old one stops working.
                 changed = not new and (
@@ -358,7 +357,6 @@ class ManagerCheck(APIView):
                 customer.imei = data["imei"]
                 customer.invoice_number = data["invoice_number"]
                 customer.bill_value = data["bill_value"]
-                customer.invoice_image = data["invoice_image"]
                 customer.branch, customer.branch_name = branch, branch.name
                 customer.consent_at = customer.consent_at or timezone.now()
                 customer.ocr_text = data["ocr_text"]
@@ -368,9 +366,6 @@ class ManagerCheck(APIView):
                     customer.link_version += 1
                 customer.save()
                 _log(customer, "checked", version=customer.link_version, link_changed=changed)
-                if old:
-                    storage = Customer.invoice_image.field.storage
-                    transaction.on_commit(lambda: storage.delete(old))
         except IntegrityError:
             # Two counters submitted the same purchase at the same moment.
             raise ValidationError({"imei": ["This purchase is already registered."]})

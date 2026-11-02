@@ -44,7 +44,7 @@ class BranchFlowTests(TestCase):
         body = {
             "name": "Asha", "phone": phone, "product_details": "Phone 15", "imei": imei,
             "invoice_number": f"INV-{imei}", "bill_value": "24999.00",
-            "branch": "anna-nagar", "invoice_image": jpeg("invoice.jpg"), "blur_score": 200,
+            "branch": "anna-nagar", "blur_score": 200,
             "ocr_text": bill_text(phone, imei), **extra,
         }
         return self.client.post("/api/manager/check/", body)
@@ -69,7 +69,7 @@ class BranchFlowTests(TestCase):
         self.assertTrue(res.json()["link"].startswith("https://studio.example/?spin="))
         c = Customer.objects.get(phone="9845011111")
         self.assertEqual((c.branch, c.branch_name, c.imei), (self.branch, "Anna Nagar", IMEI))
-        self.assertTrue(c.invoice_image)
+        self.assertFalse(c.invoice_image or c.selfie)
 
     def test_invoice_text_must_match_and_failures_are_tracked(self):
         res = self.check(ocr_text="Invoice No : X123\nBilled To,\nAsha\nNet Total 100.00")
@@ -133,10 +133,6 @@ class BranchFlowTests(TestCase):
             ocr_text=bill_text("9845022222", OTHER_IMEI, f"INV-{IMEI}"),
         )
         self.assertIn("invoice", res.json()["invoice_number"][0])
-
-    def test_large_invoice_image_is_refused(self):
-        big = SimpleUploadedFile("i.jpg", jpeg().read() + b"0" * 260_000, "image/jpeg")
-        self.assertEqual(self.check(invoice_image=big).status_code, 400)
 
     def test_correction_before_spin_updates_the_same_customer(self):
         self.check()
