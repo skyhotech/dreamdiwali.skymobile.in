@@ -20,12 +20,11 @@ const OK = {
   invoice: "SI2627VLR31054",
   bill: "64000",
 };
-test("only the IMEI and invoice number are compared", () => {
+test("only the invoice number is compared", () => {
   expect(invoiceMissing(BILL, OK)).toEqual([]);
-  expect(invoiceMissing(BILL, { ...OK, name: "Ravi", bill: "1" } as typeof OK)).toEqual([]);
+  expect(invoiceMissing(BILL, { ...OK, name: "Ravi", bill: "1", imei: "X" } as typeof OK)).toEqual([]);
 });
 test.each([
-  ["imei", "P-12568802-D", "IMEI"],
   ["invoice", "SI2627VLR31055", "invoice number"],
 ])("a wrong %s is named", (field, value, label) => {
   expect(invoiceMissing(BILL, { ...OK, [field]: value })).toEqual([label]);
@@ -45,9 +44,6 @@ test("an invoice fills in the form, and the result passes its own check", () => 
     bill: "64000",
   });
   expect(invoiceMissing(text, f as typeof OK)).toEqual([]);
-});
-test.each(["P-12568801-D", "P_12568801_D", "12568801"])("serial %s matches", (imei) => {
-  expect(invoiceMissing(BILL, { ...OK, imei })).toEqual([]);
 });
 test("a flat image has no sharpness and hard edges have plenty", () => {
   const flat = new Float32Array(100).fill(128);

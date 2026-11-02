@@ -138,10 +138,8 @@ class BranchFlowTests(TestCase):
         funnel = self.client.get("/api/admin/stats/").json()["funnel"]
         self.assertEqual((funnel["spun"], funnel["shared"]), (1, 1))
 
-    def test_invalid_imei_is_refused(self):
-        res = self.check(imei="490154203237519")
-        self.assertEqual(res.status_code, 400)
-        self.assertIn("not valid", res.json()["imei"][0])
+    def test_imei_is_not_validated(self):
+        self.assertEqual(self.check(imei="anything").status_code, 200)
 
     def test_used_imei_or_invoice_is_refused(self):
         self.check()

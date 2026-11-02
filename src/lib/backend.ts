@@ -216,12 +216,6 @@ export async function fetchManagerBranches() {
 /** Validates and saves the purchase; returns the customer's spin link. */
 export const checkPurchase = (form: FormData) =>
   postJson<{ phone: string; link: string }>("/manager/check/", form);
-/** Phones have a 15-digit IMEI; other products print any mix of serial. */
-export function imeiOrSerialValid(value: string) {
-  return /^\d{15}$/.test(value)
-    ? imeiValid(value)
-    : /^[A-Z0-9][A-Z0-9_-]{3,29}$/i.test(value);
-}
 /** Timeline entries; a lost one must never interrupt the customer. */
 export function trackSent(phone: string) {
   void fetch(`${API}/manager/sent/`, {

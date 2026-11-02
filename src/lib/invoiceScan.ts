@@ -40,20 +40,14 @@ export type InvoiceFields = {
   invoice: string;
   bill: string;
 };
-/** Whether the typed IMEI and invoice number match the bill; other fields are
- *  not compared. Each is read from its place, so any value or format works. Kept in sync with
+/** Whether the typed invoice number matches the bill; other fields are not
+ *  compared. It is read from its place, so any value or format works. Kept in sync with
  *  invoice_missing in backend/mirrors/serializers.py. */
 export function invoiceMissing(
   text: string,
-  f: Pick<InvoiceFields, "imei" | "invoice">,
+  f: Pick<InvoiceFields, "invoice">,
 ) {
   const missing = [];
-  const imeis = [...text.matchAll(IMEI_LABEL)].map((m) => m[1]);
-  // P-12568801-D, P_12568801_D and 12568801 are the same serial.
-  const want = compact(f.imei);
-  const same = (v: string) => compact(v).includes(want) || want.includes(compact(v));
-  if (imeis.length ? !imeis.some(same) : !printed(text, [], f.imei))
-    missing.push("IMEI");
   const number = text.match(INVOICE_LABEL)?.[1];
   if (!printed(text, number ? [number] : [], f.invoice))
     missing.push("invoice number");

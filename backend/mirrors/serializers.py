@@ -215,16 +215,10 @@ def _printed(text, labelled, typed):
 
 
 def invoice_missing(text, data):
-    """Whether the typed IMEI and invoice number match the bill; other fields
-    are not compared. Kept in sync with invoiceMissing in src/lib/invoiceScan.ts."""
-    missing = []
-    # P-12568801-D, P_12568801_D and 12568801 are the same serial.
-    want, imeis = _compact(data["imei"]), [_compact(v) for v in _IMEI_LABEL.findall(text)]
-    if not (any(want in v or v in want for v in imeis) if imeis else _printed(text, [], want)):
-        missing.append("IMEI")
-    if not _printed(text, _INVOICE_LABEL.findall(text)[:1], data["invoice_number"]):
-        missing.append("invoice number")
-    return missing
+    """Whether the typed invoice number matches the bill; other fields are not
+    compared. Kept in sync with invoiceMissing in src/lib/invoiceScan.ts."""
+    number = _INVOICE_LABEL.findall(text)[:1]
+    return [] if _printed(text, number, data["invoice_number"]) else ["invoice number"]
 
 
 class CustomerIntakeSerializer(serializers.Serializer):
@@ -251,14 +245,6 @@ class CustomerIntakeSerializer(serializers.Serializer):
                 {"invoice_image": [f"Invoice does not show this {' or '.join(missing)}."]}
             )
         return data
-
-    def validate_imei(self, value):
-        value = value.upper()
-        is_imei = len(value) == 15 and value.isdigit()
-        ok = imei_valid(value) if is_imei else re.fullmatch(r"[A-Z0-9][A-Z0-9_-]{3,29}", value)
-        if not ok:
-            raise serializers.ValidationError("This IMEI number is not valid.")
-        return value
 
 
 def _limit_size(image):
