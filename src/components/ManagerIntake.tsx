@@ -13,7 +13,7 @@ import {
   type BranchOption,
 } from "../lib/backend";
 import { compressImage } from "../lib/images";
-import { invoiceMissing, readInvoice } from "../lib/invoiceScan";
+import { invoiceMissing, pdfToImage, readInvoice } from "../lib/invoiceScan";
 import { Festive } from "./Festive";
 const ImeiScanner = lazy(() => import("./ImeiScanner"));
 const MAX_INVOICE_BYTES = 250 * 1024;
@@ -99,8 +99,8 @@ export function ManagerIntake() {
     if (!(Number(form.bill) >= 1)) return "Enter the bill value.";
     if (!branch) return "Select a branch.";
     if (!image) return "Upload the invoice image.";
-    if (!image.type.startsWith("image/"))
-      return "The invoice must be an image.";
+    if (!image.type.startsWith("image/") && image.type !== "application/pdf")
+      return "The invoice must be an image or PDF.";
     return "";
   }
   async function check(e: React.FormEvent) {
@@ -113,7 +113,9 @@ export function ManagerIntake() {
     try {
       // The full-size photo is read, since compressing would cost accuracy.
       setStage("Scanning invoice…");
-      const { text, sharpness } = await readInvoice(image!);
+      const page =
+        image!.type === "application/pdf" ? await pdfToImage(image!) : image!;
+      const { text, sharpness } = await readInvoice(page);
       const missing = invoiceMissing(text, {
         name: form.name,
         phone: form.phone,
@@ -128,7 +130,7 @@ export function ManagerIntake() {
       }
       setStage("Checking…");
       // Compressed only once everything above has passed.
-      const small = await compressImage(image!, MAX_INVOICE_BYTES);
+      const small = await compressImage(page, MAX_INVOICE_BYTES);
       const body = new FormData();
       body.append("name", form.name.trim());
       body.append("phone", form.phone);
@@ -307,7 +309,7 @@ export function ManagerIntake() {
           <div className="manager-row">
             {[
               { label: "Use camera", capture: "environment" as const, Icon: Camera },
-              { label: "Upload image", capture: undefined, Icon: Upload },
+              { label: "Upload image / PDF", capture: undefined, Icon: Upload },
             ].map(({ label, capture, Icon }) => (
               <label key={label} className="manager-scan manager-pick">
                 <Icon size={18} aria-hidden="true" />
@@ -315,7 +317,7 @@ export function ManagerIntake() {
                 <input
                   id={capture ? "m-camera" : "m-image"}
                   type="file"
-                  accept="image/*"
+                  accept={capture ? "image/*" : "image/*,application/pdf"}
                   capture={capture}
                   hidden
                   onChange={(e) => {

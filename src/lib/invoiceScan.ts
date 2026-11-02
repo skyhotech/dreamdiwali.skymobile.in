@@ -109,3 +109,27 @@ export async function readInvoice(file: Blob) {
     void worker.terminate();
   }
 }
+/** First page of a PDF as a sharp image. Runs on this device only: the PDF
+ *  is held in memory for the check and never uploaded. */
+export async function pdfToImage(file: Blob) {
+  const pdfjs = await import("pdfjs-dist");
+  const worker = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
+  pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+  const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+  try {
+    const page = await doc.getPage(1);
+    const viewport = page.getViewport({ scale: 2.5 });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvas, viewport }).promise;
+    return await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error("Could not read this PDF."))),
+        "image/png",
+      ),
+    );
+  } finally {
+    void doc.destroy();
+  }
+}
