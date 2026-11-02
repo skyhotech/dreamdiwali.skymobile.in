@@ -6,11 +6,19 @@ import { startMirrorSync, startUploadSync } from "./lib/backend";
 import { preloadFrames } from "./lib/frameAssets";
 import { useStudio } from "./lib/store";
 import { subscribeTemplates, templates } from "./templates";
-// Warm the other frames in the background, after the one on screen.
+// Warm the frames in the background, after the one on screen. Themes come
+// from the backend, so wait briefly for its list instead of also downloading
+// the built-in frames; they load only if the backend doesn't answer.
 const warmFrames = () =>
   void preloadFrames([...templates], useStudio.getState().template);
-warmFrames();
-subscribeTemplates(warmFrames);
+let fromBackend = false;
+subscribeTemplates(() => {
+  fromBackend = true;
+  warmFrames();
+});
+setTimeout(() => {
+  if (!fromBackend) warmFrames();
+}, 2500);
 startMirrorSync();
 startUploadSync();
 ReactDOM.createRoot(document.getElementById("root")!).render(

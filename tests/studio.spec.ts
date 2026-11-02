@@ -88,6 +88,16 @@ async function takeSelfie(page: Page) {
     }),
   ).toBeEnabled();
 }
+// The prize wheel opens after the first product photo, spins by itself and
+// the prize is added to the poster automatically.
+async function spinAndClaim(page: import("@playwright/test").Page) {
+  const dialog = page.getByRole("dialog", { name: "Spin the wheel" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("status")).toHaveText(/You won a/, {
+    timeout: 10_000,
+  });
+  await expect(dialog).toBeHidden({ timeout: 10_000 });
+}
 test("rear camera appears in the small product box, then captures and shares", async ({
   page,
 }) => {
@@ -227,57 +237,6 @@ test("permission denial offers retry without upload or flip suggestions", async 
   ).toBeDisabled();
   await expect(page.getByText(/upload a photo|Flip camera/i)).toHaveCount(0);
 });
-test("canvas expression effects change the mouth pixels and preserve natural output", async ({
-  page,
-}) => {
-  await page.goto("/");
-  const result = await page.evaluate(async () => {
-    const modulePath = "/src/lib/expression.ts";
-    const { applyExpression } = await import(modulePath);
-    const source = document.createElement("canvas");
-    source.width = 180;
-    source.height = 240;
-    const ctx = source.getContext("2d")!;
-    for (let y = 0; y < 240; y++) {
-      ctx.fillStyle = `rgb(${y % 255},${(y * 3) % 255},${(y * 7) % 255})`;
-      ctx.fillRect(0, y, 180, 1);
-    }
-    const out = document.createElement("canvas");
-    out.width = 180;
-    out.height = 240;
-    const output = out.getContext("2d")!;
-    const points = Array.from({ length: 292 }, () => ({ x: 0.5, y: 0.5 }));
-    points[61] = { x: 0.35, y: 0.6 };
-    points[291] = { x: 0.65, y: 0.6 };
-    points[13] = { x: 0.5, y: 0.58 };
-    points[14] = { x: 0.5, y: 0.62 };
-    const baseline = ctx.getImageData(0, 0, 180, 240).data;
-    applyExpression(output, source, points, "natural", 1);
-    const natural = output.getImageData(0, 0, 180, 240).data;
-    const unchanged = baseline.every((v, i) => v === natural[i]);
-    applyExpression(output, source, points, "smile", 1);
-    const effect = output.getImageData(0, 0, 180, 240).data;
-    let changed = 0;
-    for (let i = 0; i < baseline.length; i++)
-      if (baseline[i] !== effect[i]) changed++;
-    const outsideUnchanged = baseline
-      .slice(0, 180 * 40 * 4)
-      .every((v, i) => v === effect[i]);
-    return { unchanged, changed, outsideUnchanged };
-  });
-  expect(result.unchanged).toBe(true);
-  expect(result.changed).toBeGreaterThan(100);
-  expect(result.outsideUnchanged).toBe(true);
-});
-
-// The prize wheel opens after the first product photo; spin it and claim.
-async function spinAndClaim(page: import("@playwright/test").Page) {
-  const dialog = page.getByRole("dialog", { name: "Spin the wheel" });
-  await dialog.getByRole("button", { name: "Tap to spin" }).click();
-  // The prize is added to the poster automatically after the win.
-  await expect(dialog).toBeHidden({ timeout: 10_000 });
-}
-
 test("both bundled original frames load without any upload prompt", async ({
   page,
 }) => {
@@ -304,64 +263,6 @@ test("both bundled original frames load without any upload prompt", async ({
       page.getByRole("button", { name: "Add frame image" }),
     ).toHaveCount(0);
   }
-});
-
-test("portrait blurs and warms background while preserving a sharp person", async ({
-  page,
-}) => {
-  await page.goto("/");
-  const result = await page.evaluate(async () => {
-    const path = "/src/lib/portrait.ts";
-    const { createPortraitRenderer } = await import(path);
-    const render = createPortraitRenderer();
-    const source = document.createElement("canvas");
-    source.width = 240;
-    source.height = 320;
-    const sx = source.getContext("2d")!;
-    for (let x = 0; x < 240; x++) {
-      sx.fillStyle = x % 2 ? "#f0f0f0" : "#202020";
-      sx.fillRect(x, 0, 1, 320);
-    }
-    const mask = document.createElement("canvas");
-    mask.width = 240;
-    mask.height = 320;
-    const mx = mask.getContext("2d")!;
-    mx.fillStyle = "#fff";
-    mx.fillRect(80, 0, 80, 320);
-    const out = document.createElement("canvas");
-    out.width = 240;
-    out.height = 320;
-    const ctx = out.getContext("2d")!;
-    render(ctx, source, mask);
-    const baseline = sx.getImageData(0, 0, 240, 320).data,
-      effect = ctx.getImageData(0, 0, 240, 320).data;
-    let personUnchanged = true,
-      backgroundDifference = 0;
-    for (let y = 50; y < 270; y++)
-      for (let x = 0; x < 240; x++) {
-        const i = (y * 240 + x) * 4;
-        if (x > 95 && x < 145)
-          for (let c = 0; c < 3; c++)
-            if (effect[i + c] !== baseline[i + c]) personUnchanged = false;
-        if (x > 20 && x < 60)
-          backgroundDifference += Math.abs(effect[i] - baseline[i]);
-      }
-    const pixel = (x: number, y: number) =>
-      Array.from(ctx.getImageData(x, y, 1, 1).data).slice(0, 3);
-    const warm = pixel(21, 40);
-    render(ctx, source, null);
-    const unmasked = ctx.getImageData(0, 0, 240, 320).data;
-    return {
-      personUnchanged,
-      backgroundDifference,
-      warm,
-      withoutMaskUnchanged: baseline.every((v, i) => v === unmasked[i]),
-    };
-  });
-  expect(result.personUnchanged).toBe(true);
-  expect(result.backgroundDifference).toBeGreaterThan(10000);
-  expect(result.warm[0]).toBeGreaterThan(result.warm[2]);
-  expect(result.withoutMaskUnchanged).toBe(true);
 });
 
 test("Post on Instagram shares the completed poster with generated SKY caption", async ({
@@ -529,6 +430,11 @@ test("selfie, product photos and generated poster persist locally and can be cle
 test("prize wheel spins after the product photo and puts the reward on the poster", async ({
   page,
 }) => {
+  let spins = 0;
+  await page.route("**/api/customers/spin/", (route) => {
+    spins++;
+    return route.fulfill({ json: { reward: "smart-watch" } });
+  });
   await mockCamera(page);
   await takeSelfie(page);
   await page
@@ -539,10 +445,9 @@ test("prize wheel spins after the product photo and puts the reward on the poste
     .click();
   const dialog = page.getByRole("dialog", { name: "Spin the wheel" });
   await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "Tap to spin" }).click();
-  await expect(
-    dialog.getByRole("button", { name: "Spinning…" }),
-  ).toBeDisabled();
+  // The wheel starts by itself; there is no spin button.
+  await expect(dialog.getByRole("status")).toHaveText("Good luck…");
+  await expect(dialog.getByRole("button")).toHaveCount(0);
   // The wheel must visibly turn, not jump straight to the result.
   const angle = () =>
     page
@@ -563,6 +468,8 @@ test("prize wheel spins after the product photo and puts the reward on the poste
   await expect(
     page.getByRole("textbox", { name: "Your SKY Instagram caption" }),
   ).toBeVisible();
+  // One spin, one prize: never a second request.
+  expect(spins).toBe(1);
 });
 
 test("a smile or hand gesture takes the selfie by itself after 3-2-1", async ({
@@ -621,7 +528,7 @@ test("the wheel turns right away even when the prize is slow to arrive", async (
     })
     .click();
   const dialog = page.getByRole("dialog", { name: "Spin the wheel" });
-  await dialog.getByRole("button", { name: "Tap to spin" }).click();
+  // The wheel starts by itself; there is no spin button.
   const angle = () =>
     page
       .locator(".spin-wheel")
@@ -663,7 +570,7 @@ test("a face that already claimed a gift sees a clear message", async ({
     })
     .click();
   const dialog = page.getByRole("dialog", { name: "Spin the wheel" });
-  await dialog.getByRole("button", { name: "Tap to spin" }).click();
+  // The wheel starts by itself; there is no spin button.
   await expect(dialog.getByRole("alert")).toHaveText(
     /already claimed your Diwali gift/,
   );
@@ -681,7 +588,7 @@ test("reloading during the prize wheel cannot re-roll the prize", async ({
     })
     .click();
   const dialog = page.getByRole("dialog", { name: "Spin the wheel" });
-  await dialog.getByRole("button", { name: "Tap to spin" }).click();
+  // The wheel starts by itself; there is no spin button.
   await expect(dialog.getByRole("status")).toHaveText(/You won a (.+)!/, {
     timeout: 10_000,
   });
@@ -690,7 +597,6 @@ test("reloading during the prize wheel cannot re-roll the prize", async ({
   await page.reload();
   const again = page.getByRole("dialog", { name: "Spin the wheel" });
   await expect(again).toBeVisible();
-  await again.getByRole("button", { name: "Tap to spin" }).click();
   await expect(again.getByRole("status")).toHaveText(first!, {
     timeout: 10_000,
   });

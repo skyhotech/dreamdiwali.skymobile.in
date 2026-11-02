@@ -65,9 +65,25 @@ export function canvasBlob(
     }
   });
 }
+/** Selfie brightening: lifts the picture 10% toward white ("screen" blend,
+ *  which works in every browser, unlike canvas filters on iPhone). */
+export const BRIGHTEN = 0.1;
+export function brighten(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+) {
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = "screen";
+  ctx.fillStyle = `rgba(255,255,255,${BRIGHTEN})`;
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+}
 export async function capture(
   video: HTMLVideoElement,
   mirror: boolean,
+  bright = false,
 ): Promise<Photo> {
   if (video.readyState < 2 || !video.videoWidth)
     throw new Error("Camera is still starting. Please try again.");
@@ -81,6 +97,7 @@ export async function capture(
     ctx.scale(-1, 1);
   }
   ctx.drawImage(video, 0, 0, c.width, c.height);
+  if (bright) brighten(ctx, c.width, c.height);
   return fromBlob(await canvasBlob(c, "image/jpeg"));
 }
 export function download(blob: Blob, name: string) {

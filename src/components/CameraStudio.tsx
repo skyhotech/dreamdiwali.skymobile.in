@@ -58,8 +58,6 @@ export default function CameraStudio() {
   const effect = useExpression(
     camera.videoRef,
     camera.ready && !product && !closed,
-    "smile",
-    1,
   );
   // Hands-free selfie: a smile or ✌️ / 👍 / ✋ held briefly starts a 3-2-1.
   const [autoCapture, setAutoCapture] = useState(true),
@@ -186,6 +184,7 @@ export default function CameraStudio() {
         photo = await capture(
           camera.videoRef.current!,
           !product && camera.facingMode === "user",
+          !product,
         );
       setFlash(true);
       setTimeout(() => setFlash(false), 180);

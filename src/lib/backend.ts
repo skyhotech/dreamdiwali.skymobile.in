@@ -52,7 +52,9 @@ async function pollMirrors() {
 export function startMirrorSync() {
   // The server pushes the theme list the instant an admin saves.
   let stream: EventSource | null = null;
-  if (typeof EventSource !== "undefined") {
+  // Only same-origin (local) backends stream; the VPS turns streaming off to
+  // save threads, so the studio just checks the version every second there.
+  if (typeof EventSource !== "undefined" && !API_ORIGIN) {
     stream = new EventSource(`${API}/mirrors/stream/`);
     stream.addEventListener("mirrors", (e) => {
       try {

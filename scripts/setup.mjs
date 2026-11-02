@@ -41,30 +41,6 @@ try {
     );
   }
 }
-const portraitModel = join(target, "selfie_segmenter.tflite");
-try {
-  await access(portraitModel);
-} catch {
-  console.log("Preparing local portrait background model…");
-  try {
-    const response = await fetch(
-      "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite",
-      { signal: AbortSignal.timeout(60000) },
-    );
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    await import("node:fs/promises").then((fs) =>
-      fs.writeFile(portraitModel + ".tmp", bytes),
-    );
-    await rename(portraitModel + ".tmp", portraitModel);
-  } catch (error) {
-    await rm(portraitModel + ".tmp", { force: true });
-    console.warn(
-      "Portrait model unavailable. Manual camera remains functional. Retry npm run setup. " +
-        error.message,
-    );
-  }
-}
 // Hand-gesture model for hands-free selfies (✌️ 👍 ✋), about 8 MB.
 const gestureModel = join(target, "gesture_recognizer.task");
 try {

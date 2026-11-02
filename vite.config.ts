@@ -1,8 +1,11 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   base: "./",
+  // Unit tests only; tests/ holds the Playwright browser tests.
+  test: { exclude: ["**/node_modules/**", "**/dist/**", "tests/**"] },
   plugins: [react(), tailwindcss()],
   server: {
     // The Django backend (database, uploaded photos) and build/test output

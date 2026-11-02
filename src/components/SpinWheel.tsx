@@ -43,6 +43,8 @@ export function SpinWheel({
   const winAudio = useRef<HTMLAudioElement | null>(null);
   const timer = useRef(0);
   const claimTimer = useRef(0);
+  // Set synchronously, so a second tap or effect can never start another spin.
+  const spinLock = useRef(false);
   useEffect(() => {
     preloadRewards();
     const spin = new Audio(sounds.spin);
@@ -51,10 +53,25 @@ export function SpinWheel({
     const win = new Audio(sounds.win);
     win.preload = "auto";
     winAudio.current = win;
+    // The wheel spins by itself. Two frames first, so the browser paints the
+    // starting angle; otherwise it skips the transition and nothing turns.
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => void spinRef.current());
+    });
+    // No refresh or leaving mid-spin (the server never re-rolls anyway).
+    const block = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    addEventListener("beforeunload", block);
+    document.documentElement.classList.add("no-pull-refresh");
     return () => {
+      cancelAnimationFrame(frame);
       spin.pause();
       window.clearTimeout(timer.current);
       window.clearTimeout(claimTimer.current);
+      removeEventListener("beforeunload", block);
+      document.documentElement.classList.remove("no-pull-refresh");
     };
   }, []);
   // Random confetti paths, fixed per mount so re-renders don't reshuffle them.
@@ -74,12 +91,15 @@ export function SpinWheel({
       }),
     [],
   );
+  const spinRef = useRef(spin);
+  spinRef.current = spin;
   // While the server decides the prize, the wheel already turns at a steady
   // speed (a CSS transition, so it stays smooth even when the phone is busy).
   const WAIT_DEG_PER_MS = 0.72;
   const WAIT_MS = 60_000;
   async function spin() {
-    if (phase !== "ready") return;
+    if (spinLock.current) return;
+    spinLock.current = true;
     setError("");
     setPhase("spinning");
     const audio = spinAudio.current;
@@ -111,6 +131,7 @@ export function SpinWheel({
       setRotation(at + 60);
       setError((e as Error).message);
       setPhase("ready");
+      spinLock.current = false;
       return;
     }
     // Land when the current play-through of the spin sound ends.
@@ -199,97 +220,103 @@ export function SpinWheel({
           {/* Idle sway lives on this wrapper: animating transform on the wheel
               itself makes the browser skip the spin transition entirely. */}
           <div className="spin-sway">
-            <svg
-              viewBox={`0 0 ${SIZE} ${SIZE}`}
+            {/* The turn is on a plain div: phones animate it on the GPU,
+                so it keeps spinning even while the face check is busy. */}
+            <div
               className="spin-wheel"
               style={{
                 transform: `rotate(${rotation}deg)`,
                 transitionDuration: `${spinMs}ms`,
                 transitionTimingFunction: ease,
               }}
-              aria-hidden="true"
             >
-              <defs>
+              <svg
+                viewBox={`0 0 ${SIZE} ${SIZE}`}
+                className="spin-wheel-art"
+                aria-hidden="true"
+              >
+                <defs>
+                  {REWARDS.map((r, i) => {
+                    const [cx, cy] = point(i * SLICE + SLICE / 2, R * 0.58);
+                    return (
+                      <clipPath key={r.id} id={`spin-clip-${r.id}`}>
+                        <circle cx={cx} cy={cy} r={28} />
+                      </clipPath>
+                    );
+                  })}
+                  <radialGradient id="spin-hub" cx="40%" cy="35%">
+                    <stop offset="0%" stopColor="#fff9f0" />
+                    <stop offset="100%" stopColor="#d6a447" />
+                  </radialGradient>
+                </defs>
+                <circle cx={R} cy={R} r={R - 1} fill="#5a1426" />
                 {REWARDS.map((r, i) => {
-                  const [cx, cy] = point(i * SLICE + SLICE / 2, R * 0.58);
+                  const mid = i * SLICE + SLICE / 2;
+                  const [cx, cy] = point(mid, R * 0.58);
+                  const [tx, ty] = point(mid, R * 0.83);
+                  const light = i % 2 === 1;
                   return (
-                    <clipPath key={r.id} id={`spin-clip-${r.id}`}>
-                      <circle cx={cx} cy={cy} r={28} />
-                    </clipPath>
+                    <g
+                      key={r.id}
+                      className={
+                        phase === "won" && won?.id === r.id
+                          ? "spin-slice-won"
+                          : ""
+                      }
+                    >
+                      <path
+                        d={slicePath(i)}
+                        fill={COLORS[i % COLORS.length]}
+                        stroke="#fff4dc"
+                        strokeWidth={2}
+                      />
+                      <circle cx={cx} cy={cy} r={30} fill="#fff4dc" />
+                      <image
+                        href={r.image}
+                        x={cx - 28}
+                        y={cy - 28}
+                        width={56}
+                        height={56}
+                        clipPath={`url(#spin-clip-${r.id})`}
+                        preserveAspectRatio="xMidYMid slice"
+                      />
+                      <text
+                        x={tx}
+                        y={ty}
+                        transform={`rotate(${mid} ${tx} ${ty})`}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fill={light ? "#3c2418" : "#fff4dc"}
+                        fontSize={12}
+                        fontWeight={700}
+                      >
+                        {r.label}
+                      </text>
+                    </g>
                   );
                 })}
-                <radialGradient id="spin-hub" cx="40%" cy="35%">
-                  <stop offset="0%" stopColor="#fff9f0" />
-                  <stop offset="100%" stopColor="#d6a447" />
-                </radialGradient>
-              </defs>
-              <circle cx={R} cy={R} r={R - 1} fill="#5a1426" />
-              {REWARDS.map((r, i) => {
-                const mid = i * SLICE + SLICE / 2;
-                const [cx, cy] = point(mid, R * 0.58);
-                const [tx, ty] = point(mid, R * 0.83);
-                const light = i % 2 === 1;
-                return (
-                  <g
-                    key={r.id}
-                    className={
-                      phase === "won" && won?.id === r.id
-                        ? "spin-slice-won"
-                        : ""
-                    }
-                  >
-                    <path
-                      d={slicePath(i)}
-                      fill={COLORS[i % COLORS.length]}
-                      stroke="#fff4dc"
-                      strokeWidth={2}
+                {Array.from({ length: BULBS }, (_, i) => {
+                  const [bx, by] = point((i * 360) / BULBS, R - 7);
+                  return (
+                    <circle
+                      key={i}
+                      cx={bx}
+                      cy={by}
+                      r={4}
+                      className={`spin-bulb ${i % 2 ? "odd" : "even"}`}
                     />
-                    <circle cx={cx} cy={cy} r={30} fill="#fff4dc" />
-                    <image
-                      href={r.image}
-                      x={cx - 28}
-                      y={cy - 28}
-                      width={56}
-                      height={56}
-                      clipPath={`url(#spin-clip-${r.id})`}
-                      preserveAspectRatio="xMidYMid slice"
-                    />
-                    <text
-                      x={tx}
-                      y={ty}
-                      transform={`rotate(${mid} ${tx} ${ty})`}
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      fill={light ? "#3c2418" : "#fff4dc"}
-                      fontSize={12}
-                      fontWeight={700}
-                    >
-                      {r.label}
-                    </text>
-                  </g>
-                );
-              })}
-              {Array.from({ length: BULBS }, (_, i) => {
-                const [bx, by] = point((i * 360) / BULBS, R - 7);
-                return (
-                  <circle
-                    key={i}
-                    cx={bx}
-                    cy={by}
-                    r={4}
-                    className={`spin-bulb ${i % 2 ? "odd" : "even"}`}
-                  />
-                );
-              })}
-              <circle
-                cx={R}
-                cy={R}
-                r={24}
-                fill="url(#spin-hub)"
-                stroke="#fff4dc"
-                strokeWidth={4}
-              />
-            </svg>
+                  );
+                })}
+                <circle
+                  cx={R}
+                  cy={R}
+                  r={24}
+                  fill="url(#spin-hub)"
+                  stroke="#fff4dc"
+                  strokeWidth={4}
+                />
+              </svg>
+            </div>
           </div>
           <AnimatePresence>
             {phase === "won" && won && (
@@ -359,14 +386,13 @@ export function SpinWheel({
             <Gift size={18} /> Adding your gift to the poster…
           </motion.p>
         ) : (
-          <button
-            className="spin-button"
-            onClick={() => void spin()}
-            disabled={phase === "spinning"}
-          >
-            <Sparkles size={20} />
-            {phase === "spinning" ? "Spinning…" : "Tap to spin"}
-          </button>
+          error &&
+          phase === "ready" && (
+            <button className="spin-button" onClick={() => void spin()}>
+              <Sparkles size={20} />
+              Try again
+            </button>
+          )
         )}
         {error && (
           <p className="spin-error" role="alert">
