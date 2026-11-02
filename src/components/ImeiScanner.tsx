@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { DecodeHintType as HintType } from "@zxing/library";
 import { imeiValid } from "../lib/backend";
 /** The IMEI inside a barcode's text, which may hold a label or two IMEIs. */
 export function findImei(text: string) {
@@ -27,7 +28,7 @@ export default function ImeiScanner({
         const { BarcodeFormat, DecodeHintType } = await import("@zxing/library");
         if (stopped || !video.current) return;
         // IMEI labels are thin barcodes: they need a sharp feed and hard looking.
-        const hints = new Map<DecodeHintType, unknown>([
+        const hints = new Map<HintType, unknown>([
           [DecodeHintType.TRY_HARDER, true],
           [
             DecodeHintType.POSSIBLE_FORMATS,
