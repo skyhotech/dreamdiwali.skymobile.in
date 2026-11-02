@@ -2,7 +2,10 @@ import { replaceTemplates, type Template } from "../templates";
 
 // Same-origin by default (Vite proxies /api in dev); set VITE_API_URL otherwise.
 /** Backend origin; empty when the studio and API share one site. */
-export const API_ORIGIN = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
+export const API_ORIGIN = (
+  import.meta.env.VITE_API_URL ??
+  (import.meta.env.PROD ? "https://87.232.72.141" : "")
+).replace(/\/$/, "");
 const API = API_ORIGIN + "/api";
 /** Where /media files load from. */
 export const MEDIA_ORIGIN = API_ORIGIN;
