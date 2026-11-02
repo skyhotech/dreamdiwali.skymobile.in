@@ -31,7 +31,6 @@ TRUSTED_PROXIES=1
 REDIS_URL=redis://127.0.0.1:6379/0
 MEDIA_ROOT=/var/lib/skymirror/media
 STUDIO_URL=https://dreamdiwali.skymobile.in
-MANAGER_KEY=$(openssl rand -hex 8)
 MYSQL_DATABASE=skymirror
 MYSQL_USER=skymirror
 MYSQL_PASSWORD=$DB
@@ -47,7 +46,7 @@ install -m 644 "$HERE/skymirror.service" /etc/systemd/system/skymirror.service
 install -m 644 "$HERE/Caddyfile" /etc/caddy/Caddyfile
 echo '30 2 * * * root /usr/local/sbin/skymirror-backup' > /etc/cron.d/skymirror-backup
 cat > /etc/sudoers.d/skymirror-deployer <<'SUDO'
-deployer ALL=(skymirror) NOPASSWD: ALL
+deployer ALL=(skymirror) NOPASSWD:SETENV: ALL
 deployer ALL=(root) NOPASSWD: /usr/bin/systemctl restart skymirror, /usr/bin/journalctl -u skymirror *, /usr/local/sbin/skymirror-backup
 SUDO
 chmod 440 /etc/sudoers.d/skymirror-deployer

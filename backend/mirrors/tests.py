@@ -21,7 +21,7 @@ def jpeg(name="selfie.jpg"):
     return SimpleUploadedFile(name, out.getvalue(), content_type="image/jpeg")
 
 
-@override_settings(MEDIA_ROOT=MEDIA, STUDIO_URL="https://studio.example", MANAGER_KEY="test-key")
+@override_settings(MEDIA_ROOT=MEDIA, STUDIO_URL="https://studio.example")
 class BranchFlowTests(TestCase):
     @classmethod
     def tearDownClass(cls):
@@ -33,14 +33,14 @@ class BranchFlowTests(TestCase):
         self.branch = Branch.objects.create(name="Anna Nagar")
         self.staff = User.objects.create_user("staff@sky.in", password="x", is_staff=True)
 
-    def check(self, phone="9845011111", imei=IMEI, key="test-key", **extra):
+    def check(self, phone="9845011111", imei=IMEI, **extra):
         body = {
             "name": "Asha", "phone": phone, "product_details": "Phone 15", "imei": imei,
             "invoice_number": f"INV-{imei}", "bill_value": "24999.00",
             "branch": "anna-nagar", "invoice_image": jpeg("invoice.jpg"), "blur_score": 200,
             "ocr_text": f"Invoice INV-{imei} IMEI {imei} Total 24,999.00", **extra,
         }
-        return self.client.post("/api/manager/check/", body, headers={"X-Manager-Key": key})
+        return self.client.post("/api/manager/check/", body)
 
     def token(self, res):
         return res.json()["link"].split("spin=")[1]
@@ -84,8 +84,7 @@ class BranchFlowTests(TestCase):
 
     def test_journey_is_tracked_for_the_admin(self):
         token = self.token(self.check())
-        self.client.post("/api/manager/sent/", {"phone": "9845011111"},
-                         headers={"X-Manager-Key": "test-key"})
+        self.client.post("/api/manager/sent/", {"phone": "9845011111"})
         self.client.get(f"/api/customers/link/{token}/")
         self.spin(token)
         self.client.post("/api/customers/event/", {"token": token, "kind": "shared_whatsapp"},
@@ -100,11 +99,6 @@ class BranchFlowTests(TestCase):
         self.assertIn("IMEI", data["ocr_text"])
         funnel = self.client.get("/api/admin/stats/").json()["funnel"]
         self.assertEqual((funnel["spun"], funnel["shared"]), (1, 1))
-
-    def test_manager_passcode_is_required(self):
-        self.assertEqual(self.check(key="wrong").status_code, 403)
-        self.assertEqual(self.client.get("/api/manager/branches/").status_code, 403)
-        self.assertFalse(Customer.objects.exists())
 
     def test_invalid_imei_is_refused(self):
         res = self.check(imei="490154203237519")

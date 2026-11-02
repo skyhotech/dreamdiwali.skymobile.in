@@ -18,6 +18,7 @@
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.32",
     "@tailwindcss/vite": "^4.1.0",
+    "@vercel/speed-insights": "^2.0.0",
     "@zxing/browser": "^0.2.1",
     "@zxing/library": "^0.23.0",
     "lucide-react": "^0.468.0",

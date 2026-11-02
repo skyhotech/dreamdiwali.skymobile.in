@@ -3,8 +3,6 @@
 import os
 from pathlib import Path
 
-from corsheaders.defaults import default_headers
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
@@ -108,8 +106,6 @@ if os.environ.get("MYSQL_DATABASE"):
     }
 
 # Public address of the selfie studio; branch links and QR codes point here.
-# Passcode for the manager page; empty keeps the manager API locked.
-MANAGER_KEY = os.environ.get("MANAGER_KEY", "")
 STUDIO_URL = (os.environ.get("STUDIO_URL") or "http://localhost:5173").rstrip("/")
 
 # Where `manage.py backup` writes snapshots, and how many to keep.
@@ -149,7 +145,6 @@ CORS_ALLOWED_ORIGIN_REGEXES = env_list("CORS_ALLOWED_ORIGIN_REGEXES", "")
 CORS_URLS_REGEX =r"^/(api|media)/.*$"
 # The studio reads Retry-After to tell customers how long to wait.
 CORS_EXPOSE_HEADERS = ["Retry-After"]
-CORS_ALLOW_HEADERS = (*default_headers, "x-manager-key")
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS", "")
 if DEBUG:
     # `npm run dev` serves the dashboard through Vite's proxy on :5173.

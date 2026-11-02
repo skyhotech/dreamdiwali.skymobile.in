@@ -18,7 +18,7 @@ from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import AllowAny, BasePermission, IsAdminUser
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -286,21 +286,12 @@ class CustomerSpin(APIView):
         return Response({"reward": customer.reward})
 
 
-# --- Store manager API, unlocked by MANAGER_KEY ------------------------------
-
-
-class HasManagerKey(BasePermission):
-    message = "Wrong manager passcode."
-
-    def has_permission(self, request, view):
-        key = settings.MANAGER_KEY
-        sent = request.headers.get("X-Manager-Key", "")
-        return bool(key) and secrets.compare_digest(sent.encode(), key.encode())
+# --- Store manager API ------------------------------
 
 
 class ManagerBranches(APIView):
     authentication_classes = []
-    permission_classes = [HasManagerKey]
+    permission_classes = [AllowAny]
     throttle_classes = [ManagerThrottle]
 
     def get(self, request):
@@ -314,7 +305,7 @@ class ManagerCheck(APIView):
     until they have spun."""
 
     authentication_classes = []
-    permission_classes = [HasManagerKey]
+    permission_classes = [AllowAny]
     throttle_classes = [ManagerThrottle]
     parser_classes = [MultiPartParser, FormParser]
 
@@ -390,7 +381,7 @@ class ManagerSent(APIView):
     """The manager opened WhatsApp with this customer's link."""
 
     authentication_classes = []
-    permission_classes = [HasManagerKey]
+    permission_classes = [AllowAny]
     throttle_classes = [ManagerThrottle]
 
     def post(self, request):

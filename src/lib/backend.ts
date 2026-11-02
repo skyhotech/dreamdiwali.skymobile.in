@@ -192,35 +192,28 @@ export async function fetchLink(token: string) {
     throw new ApiError(data.detail ?? ERRORS.server, res.status);
   return { phone: data.phone, reward: data.reward ?? null };
 }
-const managerHeaders = (key: string) => ({ "X-Manager-Key": key });
 export type BranchOption = { slug: string; name: string };
-/** Active stores for the manager page; also proves the passcode is right. */
-export async function fetchManagerBranches(key: string) {
+/** Active stores for the manager page. */
+export async function fetchManagerBranches() {
   let res: Response;
   try {
     res = await fetch(`${API}/manager/branches/`, {
-      headers: managerHeaders(key),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch {
     throw new ApiError(ERRORS.unreachable);
   }
-  if (res.status === 403) throw new ApiError("Wrong manager passcode.", 403);
   if (!res.ok) throw new ApiError(ERRORS.server, res.status);
   return (await res.json()) as BranchOption[];
 }
 /** Validates and saves the purchase; returns the customer's spin link. */
-export const checkPurchase = (key: string, form: FormData) =>
-  postJson<{ phone: string; link: string }>(
-    "/manager/check/",
-    form,
-    managerHeaders(key),
-  );
+export const checkPurchase = (form: FormData) =>
+  postJson<{ phone: string; link: string }>("/manager/check/", form);
 /** Timeline entries; a lost one must never interrupt the customer. */
-export function trackSent(key: string, phone: string) {
+export function trackSent(phone: string) {
   void fetch(`${API}/manager/sent/`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...managerHeaders(key) },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ phone }),
     keepalive: true,
   }).catch(() => {});

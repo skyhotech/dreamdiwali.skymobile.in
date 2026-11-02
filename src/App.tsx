@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { MotionConfig } from "motion/react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Festive } from "./components/Festive";
 import { ManagerIntake } from "./components/ManagerIntake";
 import { SpinWheel } from "./components/SpinWheel";
@@ -11,6 +12,14 @@ import { initializePhotoStorage } from "./lib/persistence";
 const CameraStudio = lazy(() => import("./components/CameraStudio"));
 const Editor = lazy(() => import("./components/Editor"));
 export default function App() {
+  return (
+    <>
+      <Studio />
+      <SpeedInsights />
+    </>
+  );
+}
+function Studio() {
   const step = useStudio((s) => s.step);
   const phone = useStudio((s) => s.phone);
   const token = useStudio((s) => s.token);

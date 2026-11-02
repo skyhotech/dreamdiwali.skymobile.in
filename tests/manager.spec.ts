@@ -24,8 +24,6 @@ test("manager checks a purchase, then gets the WhatsApp button", async ({ page }
         }),
   );
   await page.goto("/");
-  await page.getByLabel("Passcode").fill("key");
-  await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Customer name").fill("Asha");
   await page.locator("#m-phone").fill("9845012345");
   await page.getByLabel("Product details").fill("Phone 15");

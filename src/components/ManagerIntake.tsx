@@ -16,7 +16,6 @@ import { compressImage } from "../lib/images";
 import { invoiceMissing, readInvoice } from "../lib/invoiceScan";
 import { Festive } from "./Festive";
 const ImeiScanner = lazy(() => import("./ImeiScanner"));
-const KEY = "sky-manager-key";
 const MAX_INVOICE_BYTES = 250 * 1024;
 const MISMATCH = "Data mismatch";
 const EMPTY = {
@@ -28,18 +27,9 @@ const EMPTY = {
   invoice: "",
   bill: "",
 };
-function storedKey() {
-  try {
-    return sessionStorage.getItem(KEY) ?? "";
-  } catch {
-    return "";
-  }
-}
 // First screen in the store: the manager records a purchase, and once it
 // checks out sends the customer their spin link on WhatsApp.
 export function ManagerIntake() {
-  const [key, setKey] = useState(storedKey);
-  const [passcode, setPasscode] = useState("");
   const [branches, setBranches] = useState<BranchOption[] | null>(null);
   const [error, setError] = useState("");
   const [form, setForm] = useState(EMPTY);
@@ -64,29 +54,23 @@ export function ManagerIntake() {
     [shake],
   );
   useEffect(() => {
-    if (!key) return;
     let live = true;
-    fetchManagerBranches(key)
+    fetchManagerBranches()
       .then((list) => {
         if (!live) return;
         setBranches(list);
         // A branch QR code opens the page with its store selected.
         setBranch((b) => b ?? list.find((x) => x.slug === BRANCH) ?? null);
-        try {
-          sessionStorage.setItem(KEY, key);
-        } catch {
-          // Storage blocked: the passcode lasts until this page reloads.
-        }
       })
       .catch((e: ApiError) => {
         if (!live) return;
-        if (e.status === 403) setKey("");
+        setBranches([]);
         fail(e.message);
       });
     return () => {
       live = false;
     };
-  }, [key, fail]);
+  }, [fail]);
   const matches = useMemo(() => {
     const q = search.trim().toLowerCase();
     return (branches ?? []).filter((b) => b.name.toLowerCase().includes(q));
@@ -150,11 +134,10 @@ export function ManagerIntake() {
       body.append("invoice_image", small, "invoice.jpg");
       body.append("ocr_text", text);
       body.append("blur_score", String(Math.round(sharpness)));
-      const res = await checkPurchase(key, body);
+      const res = await checkPurchase(body);
       setLink(res.link);
     } catch (err) {
       const e = err as ApiError;
-      if (e.status === 403) setKey("");
       fail(
         e.status === 400
           ? `${MISMATCH}: ${e.message}`
@@ -172,7 +155,7 @@ export function ManagerIntake() {
       "_blank",
       "noopener,noreferrer",
     );
-    trackSent(key, form.phone);
+    trackSent(form.phone);
     setSent(true);
   }
   function next() {
@@ -181,45 +164,6 @@ export function ManagerIntake() {
     setLink("");
     setSent(false);
   }
-  if (!branches)
-    return (
-      <Festive>
-        <motion.div animate={shake} className="phone-shake">
-          <form
-            className="phone-card"
-            onSubmit={(e) => {
-              e.preventDefault();
-              setError("");
-              setKey(passcode);
-            }}
-          >
-            <div className="phone-logo">
-              <img src={skyLogo} alt="SKY Mobile & Electronics" />
-            </div>
-            <h1 className="phone-title">Manager sign-in</h1>
-            <label htmlFor="manager-passcode">Passcode</label>
-            <input
-              id="manager-passcode"
-              className="manager-input"
-              type="password"
-              autoComplete="current-password"
-              value={passcode}
-              onChange={(e) => setPasscode(e.target.value)}
-              autoFocus
-            />
-            <p className="phone-help phone-help-error" role="alert">
-              {error}
-            </p>
-            <button
-              className="spin-button phone-continue"
-              disabled={!passcode || Boolean(key)}
-            >
-              {key ? "Checking…" : "Continue"}
-            </button>
-          </form>
-        </motion.div>
-      </Festive>
-    );
   const field = (
     id: keyof typeof EMPTY,
     label: string,
