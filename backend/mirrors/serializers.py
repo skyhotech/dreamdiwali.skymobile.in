@@ -252,7 +252,8 @@ class CustomerIntakeSerializer(serializers.Serializer):
 
     def validate_imei(self, value):
         value = value.upper()
-        ok = imei_valid(value) if value.isdigit() else re.fullmatch(r"[A-Z0-9][A-Z0-9-]{3,29}", value)
+        is_imei = len(value) == 15 and value.isdigit()
+        ok = imei_valid(value) if is_imei else re.fullmatch(r"[A-Z0-9][A-Z0-9-]{3,29}", value)
         if not ok:
             raise serializers.ValidationError("This IMEI number is not valid.")
         return value

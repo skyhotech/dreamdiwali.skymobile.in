@@ -72,6 +72,11 @@ class BranchFlowTests(TestCase):
         self.assertEqual([(c["phone"], c["stage"]) for c in rows], [("9845011111", "spun")])
         self.assertEqual(self.client.get("/api/admin/stats/").json()["abandoned"], 1)
 
+    def test_serial_may_be_all_digits(self):
+        res = self.check(imei="12568801", ocr_text=bill_text("9845011111", "12568801"),
+                         invoice_number="INV-12568801")
+        self.assertEqual(res.status_code, 200)
+
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)
         self.assertTrue(Branch.objects.filter(slug="thiruvannamalai-1").exists())
