@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 // Diwali crackers on one canvas: rockets that burst (peony, ring, willow,
-// crackling glitter), anar fountains, chakri ground spinners and sparklers.
+// crackling glitter), a saravedi string popping across the top, anar
+// fountains, spinning chakras and sparklers.
 // One animation loop with a particle cap keeps it smooth on phones; it pauses
 // when the tab is hidden and is skipped for reduced-motion users.
 const COLORS = [
@@ -25,7 +26,7 @@ type Particle = {
   size: number;
   gravity: number;
   drag: number;
-  kind: "spark" | "trail" | "glitter" | "rocket";
+  kind: "spark" | "trail" | "glitter" | "rocket" | "smoke";
   burst?: Burst;
   /** Rockets burst on reaching this height. */
   top?: number;
@@ -55,6 +56,49 @@ export function Fireworks() {
       nextGround = 0,
       spin = 0;
     const particles: Particle[] = [];
+    // Saravedi: a string of crackers hung across the top; the fuse pops them
+    // one after another, then the string is restocked.
+    const STRING = lowEnd ? 14 : 22;
+    let popped = 0,
+      nextPop = 0;
+    const cracker = (i: number) => {
+      const t = i / (STRING - 1);
+      return {
+        x: w * (0.06 + t * 0.88),
+        // Sags in the middle like a real garland.
+        y: h * 0.03 + (1 - (2 * t - 1) ** 2) * h * 0.028,
+      };
+    };
+    const pop = (i: number) => {
+      const { x, y } = cracker(i);
+      add({ x, y, max: 7, size: 13, gravity: 0, color: "#fff9f0" });
+      for (let k = 0; k < (lowEnd ? 5 : 9); k++)
+        add({
+          x,
+          y,
+          vx: (Math.random() - 0.5) * 4,
+          vy: -Math.random() * 2.5,
+          max: 40 + Math.random() * 25,
+          color: pick(["#d22856", "#ff3b3b", "#d6a447", "#7a1631"]),
+          size: 1.8,
+          gravity: 0.08,
+          drag: 0.96,
+          kind: "glitter",
+        });
+      add({
+        x,
+        y,
+        vy: -0.25,
+        max: 55,
+        size: 5,
+        gravity: 0,
+        drag: 1,
+        color: "#8a7a6a",
+        kind: "smoke",
+      });
+    };
+    // Chakra: spinning ground wheels.
+    const wheels = () => (lowEnd ? [w * 0.5] : [w * 0.34, w * 0.66]);
     const resize = () => {
       const dpr = Math.min(devicePixelRatio || 1, lowEnd ? 1.5 : 2);
       w = canvas.clientWidth;
@@ -152,23 +196,24 @@ export function Fireworks() {
             gravity: 0.09,
             kind: "glitter",
           });
-      // Chakri: a spinning ground wheel throwing sparks around.
+      // Chakras throw sparks off the rim, tangent to the spin.
       spin += 0.45;
-      const cx = w * 0.5,
-        cy = h - 18;
-      for (let i = 0; i < (lowEnd ? 2 : 3); i++) {
-        const a = spin + (i * Math.PI * 2) / 3;
-        add({
-          x: cx + Math.cos(a) * 8,
-          y: cy + Math.sin(a) * 8,
-          vx: Math.cos(a + Math.PI / 2) * 3.2,
-          vy: Math.sin(a + Math.PI / 2) * 3.2 - 0.4,
-          max: 24,
-          color: pick(["#f3cf7a", "#2b9f6b", "#ff3b3b", "#fff4dc"]),
-          size: 1.6,
-          gravity: 0.05,
-          drag: 0.94,
-        });
+      for (const cx of wheels()) {
+        const cy = h - 22;
+        for (let i = 0; i < (lowEnd ? 2 : 3); i++) {
+          const a = spin + (i * Math.PI * 2) / 3;
+          add({
+            x: cx + Math.cos(a) * 12,
+            y: cy + Math.sin(a) * 12,
+            vx: Math.cos(a + Math.PI / 2) * 3.6,
+            vy: Math.sin(a + Math.PI / 2) * 3.6 - 0.4,
+            max: 26,
+            color: pick(["#f3cf7a", "#2b9f6b", "#ff3b3b", "#fff4dc"]),
+            size: 1.7,
+            gravity: 0.05,
+            drag: 0.94,
+          });
+        }
       }
       // Sparkler sparks fizzing at the top corners.
       add({
@@ -195,6 +240,16 @@ export function Fireworks() {
         ground();
         nextGround = now + (lowEnd ? 70 : 45);
       }
+      if (now > nextPop) {
+        if (popped < STRING) {
+          pop(popped++);
+          // Uneven rhythm, like a real string going off.
+          nextPop = now + 60 + Math.random() * 90;
+        } else {
+          popped = 0;
+          nextPop = now + 2600;
+        }
+      }
       // Fade the previous frame instead of clearing it: every spark gets a tail.
       ctx.globalCompositeOperation = "destination-out";
       ctx.fillStyle = "rgba(0,0,0,0.22)";
@@ -219,6 +274,15 @@ export function Fireworks() {
         // Glitter twinkles; willow trails linger.
         if (p.kind === "glitter" && Math.random() < 0.35) continue;
         const fade = 1 - p.life / p.max;
+        if (p.kind === "smoke") {
+          // Soft grey puff that grows as it fades.
+          ctx.globalAlpha = 0.28 * fade;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size + p.life * 0.35, 0, Math.PI * 2);
+          ctx.fill();
+          continue;
+        }
         // Bold on the light background: stay nearly opaque until the end.
         ctx.globalAlpha = Math.min(1, fade * 1.6);
         ctx.fillStyle = p.color;
@@ -227,6 +291,52 @@ export function Fireworks() {
         ctx.fill();
       }
       ctx.globalAlpha = 1;
+      // The saravedi string and its unpopped crackers.
+      ctx.strokeStyle = "#7a5a3a";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let i = 0; i < STRING; i++) {
+        const { x, y } = cracker(i);
+        if (i) ctx.lineTo(x, y);
+        else ctx.moveTo(x, y);
+      }
+      ctx.stroke();
+      for (let i = popped; i < STRING; i++) {
+        const { x, y } = cracker(i);
+        ctx.fillStyle = "#c81e3a";
+        ctx.fillRect(x - 2.5, y, 5, 11);
+        ctx.fillStyle = "#f3cf7a";
+        ctx.fillRect(x - 2.5, y + 4, 5, 2);
+      }
+      // Glowing fuse spark at the next cracker.
+      if (popped < STRING) {
+        const { x, y } = cracker(popped);
+        ctx.fillStyle = Math.random() < 0.5 ? "#fff4dc" : "#ff7a1a";
+        ctx.beginPath();
+        ctx.arc(x, y - 1, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Chakra wheels: a coloured spinning disc with a bright centre.
+      for (const cx of wheels()) {
+        const cy = h - 22;
+        for (let k = 0; k < 6; k++) {
+          ctx.fillStyle = ["#d22856", "#f3cf7a", "#2b9f6b"][k % 3];
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.arc(
+            cx,
+            cy,
+            11,
+            spin + (k * Math.PI) / 3,
+            spin + ((k + 1) * Math.PI) / 3,
+          );
+          ctx.fill();
+        }
+        ctx.fillStyle = "#fff9f0";
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
     };
     raf = requestAnimationFrame(frame);
     return () => {
