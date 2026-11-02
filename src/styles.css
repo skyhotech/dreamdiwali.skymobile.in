@@ -3562,3 +3562,9 @@ html.no-pull-refresh body {
   font: inherit;
   font-size: 12px;
 }
+.manager-pick {
+  flex: 1;
+  justify-content: center;
+  margin-top: 0 !important;
+  cursor: pointer;
+}

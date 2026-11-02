@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { Check, MessageCircle, ScanLine, X } from "lucide-react";
+import { Camera, Check, MessageCircle, ScanLine, Upload, X } from "lucide-react";
 import skyLogo from "../assets/brand/sky.webp";
 import { motion, useAnimationControls } from "motion/react";
 import {
@@ -290,18 +290,32 @@ export function ManagerIntake() {
               </ul>
             )}
           </div>
-          <label htmlFor="m-image">Upload invoice image</label>
-          <input
-            id="m-image"
-            className="manager-input"
-            type="file"
-            accept="image/*"
-            onChange={(e) => {
-              setImage(e.target.files?.[0] ?? null);
-              setLink("");
-              setError("");
-            }}
-          />
+          <label>Invoice image</label>
+          <div className="manager-row">
+            {[
+              { label: "Use camera", capture: "environment" as const, Icon: Camera },
+              { label: "Upload image", capture: undefined, Icon: Upload },
+            ].map(({ label, capture, Icon }) => (
+              <label key={label} className="manager-scan manager-pick">
+                <Icon size={18} aria-hidden="true" />
+                {label}
+                <input
+                  id={capture ? "m-camera" : "m-image"}
+                  type="file"
+                  accept="image/*"
+                  capture={capture}
+                  hidden
+                  onChange={(e) => {
+                    setImage(e.target.files?.[0] ?? null);
+                    e.target.value = "";
+                    setLink("");
+                    setError("");
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+          {image && <p className="phone-help">Selected: {image.name}</p>}
           <p className="phone-help phone-help-error" role="alert">
             {error}
           </p>
