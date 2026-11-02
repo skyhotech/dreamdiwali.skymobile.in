@@ -38,7 +38,7 @@ class BranchFlowTests(TestCase):
             "name": "Asha", "phone": phone, "product_details": "Phone 15", "imei": imei,
             "invoice_number": f"INV-{imei}", "bill_value": "24999.00",
             "branch": "anna-nagar", "invoice_image": jpeg("invoice.jpg"), "blur_score": 200,
-            "ocr_text": f"Invoice INV-{imei} IMEI {imei} Total 24,999.00", **extra,
+            "ocr_text": f"Bill INV-{imei} IMEI {imei} Total 24,999.00", **extra,
         }
         return self.client.post("/api/manager/check/", body)
 
@@ -69,6 +69,13 @@ class BranchFlowTests(TestCase):
         self.assertEqual(res.status_code, 400)
         self.assertIn("invoice number", res.json()["invoice_image"][0])
         self.assertEqual(CustomerEvent.objects.get().kind, "check_failed")
+
+    def test_labelled_invoice_number_must_match_exactly(self):
+        text = "Invoice No : SI2627VLR31054 Invoice Date : 31/10/2026"
+        ok = self.check(invoice_number="SI2627VLR31054", ocr_text=text)
+        self.assertEqual(ok.status_code, 200)
+        bad = self.check("9845022222", OTHER_IMEI, invoice_number="SI2627VLR31055", ocr_text=text)
+        self.assertEqual(bad.status_code, 400)
 
     def test_scanner_letter_mixups_still_match(self):
         res = self.check(ocr_text=f"lNV-{IMEI.replace('0', 'O')}")

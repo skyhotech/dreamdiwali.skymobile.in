@@ -1,9 +1,17 @@
 import { expect, test } from "vitest";
 import { invoiceMissing, sharpness } from "./invoiceScan";
-test("the invoice number matches despite scanner mix-ups", () => {
-  expect(invoiceMissing("Tax lNV-2041\nTotal", "INV-2041")).toEqual([]);
+const BILL = "TAX INVOICE\nInvoice No : SI2627VLR31054 Invoice Date : 31/10/2026\nTotal 64,000.00";
+test("the labelled invoice number matches, despite scanner mix-ups", () => {
+  expect(invoiceMissing(BILL, "SI2627VLR31054")).toEqual([]);
+  expect(invoiceMissing(BILL, "si2627vlr31054")).toEqual([]);
+  expect(invoiceMissing(BILL.replace("SI26", "S126"), "SI2627VLR31054")).toEqual([]);
 });
-test("a wrong invoice number is named", () => {
+test("anything but the labelled number is refused", () => {
+  expect(invoiceMissing(BILL, "SI2627VLR31055")).toEqual(["invoice number"]);
+  expect(invoiceMissing(BILL, "64000")).toEqual(["invoice number"]);
+});
+test("without a label the number must appear somewhere", () => {
+  expect(invoiceMissing("Bill SI2627VLR31054", "SI2627VLR31054")).toEqual([]);
   expect(invoiceMissing("Total 100", "Q7")).toEqual(["invoice number"]);
 });
 test("a flat image has no sharpness and hard edges have plenty", () => {

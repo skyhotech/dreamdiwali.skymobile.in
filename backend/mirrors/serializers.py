@@ -194,11 +194,23 @@ def _compact(text):
     return re.sub(r"[^A-Z0-9]", "", text.upper()).translate(_OCR_ALIKE)
 
 
-def invoice_missing(text, invoice_number):
-    """Which typed details the invoice text doesn't contain: only the invoice
-    number is compared. Kept in sync with invoiceMissing in src/lib/invoiceScan.ts."""
-    return [] if _compact(invoice_number) in _compact(text) else ["invoice number"]
+# The value printed after the label, e.g. "Invoice No : SI2627VLR31054".
+_INVOICE_LABEL = re.compile(
+    r"invoice\s*(?:no|number|num)\b\s*[.:;\-]*\s*([A-Z0-9][A-Z0-9/\-]{3,})", re.I
+)
 
+
+def invoice_missing(text, invoice_number):
+    """Which typed details don't match the invoice: only the invoice number is
+    compared, against the labelled value when the scanner found the label.
+    Kept in sync with invoiceMissing in src/lib/invoiceScan.ts."""
+    typed = _compact(invoice_number)
+    labelled = _INVOICE_LABEL.search(text)
+    if labelled:
+        ok = _compact(labelled[1]) == typed
+    else:
+        ok = len(typed) >= 4 and typed in _compact(text)
+    return [] if ok else ["invoice number"]
 
 
 class CustomerIntakeSerializer(serializers.Serializer):

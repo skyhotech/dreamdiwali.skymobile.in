@@ -11,11 +11,17 @@ const compact = (text: string) =>
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "")
     .replace(/[OILSB]/g, (c) => ALIKE[c]);
-/** Which typed details the invoice text doesn't contain: only the invoice
- *  number is compared. Kept in sync with invoice_missing in
- *  backend/mirrors/serializers.py. */
+// The value printed after the label, e.g. "Invoice No : SI2627VLR31054".
+const INVOICE_LABEL = /invoice\s*(?:no|number|num)\b\s*[.:;\-]*\s*([A-Z0-9][A-Z0-9/\-]{3,})/i;
+/** Which typed details don't match the invoice: only the invoice number is
+ *  compared, against the labelled value when the scanner found the label.
+ *  Kept in sync with invoice_missing in backend/mirrors/serializers.py. */
 export function invoiceMissing(text: string, invoice: string) {
-  return compact(text).includes(compact(invoice)) ? [] : ["invoice number"];
+  const labelled = text.match(INVOICE_LABEL)?.[1];
+  const ok = labelled
+    ? compact(labelled) === compact(invoice)
+    : compact(invoice).length >= 4 && compact(text).includes(compact(invoice));
+  return ok ? [] : ["invoice number"];
 }
 /** Variance of the Laplacian: edges vanish in a blurry photo, so it drops. */
 export function sharpness(gray: Float32Array, w: number, h: number) {
