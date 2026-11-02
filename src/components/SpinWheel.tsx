@@ -30,8 +30,9 @@ export function SpinWheel({
   getPrize,
 }: {
   onClaim: (reward: Reward) => void;
-  /** Resolves the prize id; the server decides it, once per customer. */
-  getPrize: () => Promise<string>;
+  /** Resolves the prize id; the server decides it, once per customer.
+   *  onQueue(true) while the customer waits in line because SKY is busy. */
+  getPrize: (onQueue: (waiting: boolean) => void) => Promise<string>;
 }) {
   const [rotation, setRotation] = useState(0);
   const [spinMs, setSpinMs] = useState(FALLBACK_SPIN_MS);
@@ -39,6 +40,7 @@ export function SpinWheel({
   const [phase, setPhase] = useState<"ready" | "spinning" | "won">("ready");
   const [won, setWon] = useState<Reward | null>(null);
   const [error, setError] = useState("");
+  const [queued, setQueued] = useState(false);
   const spinAudio = useRef<HTMLAudioElement | null>(null);
   const winAudio = useRef<HTMLAudioElement | null>(null);
   const timer = useRef(0);
@@ -117,7 +119,7 @@ export function SpinWheel({
     setRotation(from + WAIT_DEG_PER_MS * WAIT_MS);
     let index: number;
     try {
-      const prize = await getPrize();
+      const prize = await getPrize(setQueued);
       index = REWARDS.findIndex((r) => r.id === prize);
       if (index < 0) throw new Error("Unknown prize. Try again.");
     } catch (e) {
@@ -211,7 +213,9 @@ export function SpinWheel({
           {phase === "won" && won
             ? `You won a ${won.label}!`
             : phase === "spinning"
-              ? "Good luck…"
+              ? queued
+                ? "You're in the queue — SKY is busy, your spin is next…"
+                : "Good luck…"
               : "Thanks for your purchase. Spin for a free gift!"}
         </p>
         <div className="spin-wheel-wrap">

@@ -6,6 +6,8 @@ const messages: Record<string, string> = {
   NotReadableError: "The camera is busy. Close other camera apps and retry.",
   SecurityError: "Camera access requires HTTPS or localhost.",
 };
+// How often to ask again for a refused camera.
+const ASK_AGAIN_MS = 4000;
 export function useCamera(facing: "user" | "environment", active: boolean) {
   const videoRef = useRef<HTMLVideoElement>(null),
     streamRef = useRef<MediaStream | null>(null);
@@ -15,6 +17,7 @@ export function useCamera(facing: "user" | "environment", active: boolean) {
     [facingMode, setFacingMode] = useState<"user" | "environment">(facing),
     [fallbackNotice, setFallbackNotice] = useState(""),
     [retry, setRetry] = useState(0),
+    [denied, setDenied] = useState(false),
     [torch, setTorch] = useState(false),
     [torchSupported, setTorchSupported] = useState(false);
   const stop = useCallback(() => {
@@ -107,6 +110,7 @@ export function useCamera(facing: "user" | "environment", active: boolean) {
         );
         setReadyFacing(facing);
         setReady(true);
+        setDenied(false);
         setFallbackNotice(
           usedFallback
             ? "Rear camera unavailable. Using the front camera for your product."
@@ -118,6 +122,7 @@ export function useCamera(facing: "user" | "environment", active: boolean) {
       } catch (e) {
         if (!cancelled) {
           stop();
+          setDenied((e as DOMException).name === "NotAllowedError");
           setError(
             messages[(e as DOMException).name] ??
               "Could not start a camera. Check permissions and retry.",
@@ -137,6 +142,29 @@ export function useCamera(facing: "user" | "environment", active: boolean) {
       stop();
     };
   }, [active, facing, retry, stop]);
+  // Camera refused: keep asking. Browsers re-show the prompt unless it was
+  // blocked for good; then we start the moment it's allowed in settings.
+  useEffect(() => {
+    if (!active || !denied) return;
+    const again = () => {
+      if (!document.hidden) setRetry((v) => v + 1);
+    };
+    const timer = window.setInterval(again, ASK_AGAIN_MS);
+    let status: PermissionStatus | null = null;
+    navigator.permissions
+      ?.query({ name: "camera" as PermissionName })
+      .then((p) => {
+        status = p;
+        p.onchange = () => {
+          if (p.state !== "denied") again();
+        };
+      })
+      .catch(() => {});
+    return () => {
+      window.clearInterval(timer);
+      if (status) status.onchange = null;
+    };
+  }, [active, denied]);
   async function toggleTorch() {
     try {
       await streamRef.current
@@ -157,6 +185,8 @@ export function useCamera(facing: "user" | "environment", active: boolean) {
     fallbackNotice,
     stop,
     retry: () => setRetry((v) => v + 1),
+    /** The customer refused the camera; the studio keeps asking. */
+    denied,
     torch,
     torchSupported,
     toggleTorch,

@@ -16,7 +16,12 @@ test.beforeEach(async ({ page }) => {
     localStorage.setItem("sky-customer-phone", "9845012345"),
   );
 });
-async function mockCamera(page: Page, rearUnavailable = false, withAi = false) {
+async function mockCamera(
+  page: Page,
+  rearUnavailable = false,
+  withAi = false,
+  blank = false,
+) {
   if (!withAi) await page.route("**/ai/**", (r) => r.abort());
   await page.addInitScript(
     ({ rearUnavailable }) => {
@@ -56,6 +61,11 @@ async function mockCamera(page: Page, rearUnavailable = false, withAi = false) {
           const ctx = c.getContext("2d")!;
           ctx.fillStyle = facing === "user" ? "#788e85" : "#9d6354";
           ctx.fillRect(0, 0, 640, 480);
+          // Some detail in a corner, so it isn't one flat colour (= blank).
+          for (let k = 0; k < 4; k++) {
+            ctx.fillStyle = k % 2 ? "#ffffff" : "#111111";
+            ctx.fillRect(k * 40, 0, 40, 120);
+          }
           const stream = c.captureStream(10),
             track = stream.getVideoTracks()[0],
             stop = track.stop.bind(track);
@@ -70,6 +80,19 @@ async function mockCamera(page: Page, rearUnavailable = false, withAi = false) {
     },
     { rearUnavailable },
   );
+  if (blank)
+    await page.addInitScript(() => {
+      // A covered lens: every frame black.
+      const real = CanvasRenderingContext2D.prototype.fillRect;
+      CanvasRenderingContext2D.prototype.fillRect = function (x, y, w, h) {
+        if (this.canvas.width === 640) {
+          this.fillStyle = "#000";
+          return real.call(this, 0, 0, 640, 480);
+        }
+        return real.call(this, x, y, w, h);
+      };
+      CanvasRenderingContext2D.prototype.arc = function () {};
+    });
 }
 async function takeSelfie(page: Page) {
   await page.goto("/");
@@ -214,18 +237,48 @@ test("filter controls, uploads and flip controls are absent", async ({
     page.getByRole("slider", { name: "Expression intensity" }),
   ).toHaveCount(0);
 });
+test("a blank or covered-camera selfie is refused", async ({ page }) => {
+  await mockCamera(page, false, false, true);
+  await page.goto("/");
+  const shutter = page
+    .locator(".camera-stage")
+    .getByRole("button", { name: "Post on Instagram", exact: true });
+  await expect(shutter).toBeEnabled();
+  await shutter.click();
+  await expect(
+    page.getByRole("status").filter({ hasText: /looks blank/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: "Capture product and post on Instagram",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+});
 test("permission denial offers retry without upload or flip suggestions", async ({
   page,
 }) => {
-  await page.addInitScript(() =>
+  await page.addInitScript(() => {
+    Object.assign(window, { cameraAsks: 0 });
     Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
       value: async () => {
+        (window as unknown as { cameraAsks: number }).cameraAsks++;
         throw new DOMException("Denied", "NotAllowedError");
       },
-    }),
-  );
+    });
+  });
   await page.goto("/");
   await expect(page.getByText(/Camera permission was denied/)).toBeVisible();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "SKY needs your camera" }),
+  ).toBeVisible();
+  // The studio keeps asking for the camera by itself.
+  const asks = () =>
+    page.evaluate(
+      () => (window as unknown as { cameraAsks: number }).cameraAsks,
+    );
+  const first = await asks();
+  await expect.poll(asks, { timeout: 12_000 }).toBeGreaterThan(first + 1);
   await expect(
     page.getByRole("button", { name: "Retry camera" }),
   ).toBeVisible();

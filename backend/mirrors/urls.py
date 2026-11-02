@@ -7,6 +7,7 @@ from . import views
 router = DefaultRouter()
 router.register("mirrors", views.MirrorViewSet, basename="admin-mirror")
 router.register("customers", views.CustomerViewSet, basename="admin-customer")
+router.register("branches", views.BranchViewSet, basename="admin-branch")
 
 api_urlpatterns = [
     path("mirrors/", views.PublicMirrorList.as_view(), name="public-mirrors"),
@@ -15,6 +16,7 @@ api_urlpatterns = [
     path("customers/", views.CustomerUpload.as_view(), name="customer-upload"),
     path("customers/register/", views.CustomerRegister.as_view(), name="customer-register"),
     path("customers/spin/", views.CustomerSpin.as_view(), name="customer-spin"),
+    path("branches/<slug:slug>/", views.PublicBranch.as_view(), name="public-branch"),
     path("admin/stats/", views.stats, name="admin-stats"),
     path("admin/", include(router.urls)),
 ]

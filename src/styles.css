@@ -3367,3 +3367,49 @@ html.no-pull-refresh,
 html.no-pull-refresh body {
   overscroll-behavior-y: none;
 }
+/* Camera refused: explain, keep asking, one big button. */
+.camera-denied {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  background: rgba(23, 18, 13, 0.88);
+  color: #fff4dc;
+}
+.camera-denied b {
+  font: 700 20px/1.2 Georgia, serif;
+  color: #f3cf7a;
+}
+.camera-denied p {
+  margin: 0;
+  max-width: 30ch;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.camera-denied .camera-denied-help {
+  font-size: 12px;
+  opacity: 0.8;
+}
+.camera-denied svg {
+  color: #f3cf7a;
+  animation: auto-hint 1.6s ease-in-out infinite;
+}
+/* Which SKY store this link belongs to. */
+.phone-branch {
+  justify-self: center;
+  margin: -4px auto 4px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #fff4dc, #f3e2bd);
+  border: 1px solid #e3c88f;
+  color: #7a1631;
+  font-weight: 700;
+  font-size: 14px;
+  width: max-content;
+  max-width: 100%;
+}

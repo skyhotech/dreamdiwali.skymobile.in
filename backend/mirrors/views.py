@@ -18,12 +18,16 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .images import POSTER_SIZE, SELFIE_SIZE, THUMB_SIZE, compressed_photo, optimized
-from .models import REWARD_IDS, Customer, Mirror
+from .models import REWARD_IDS, Branch, Customer, Mirror
 from .serializers import (
+    BranchSerializer,
+    PublicBranchSerializer,
+    branch_link,
     CustomerSerializer,
     CustomerUploadSerializer,
     RegisterSerializer,
@@ -44,6 +48,35 @@ from .throttles import (
 # Photo compression is CPU-bound; one at a time per server process.
 _IMAGE_WORK = threading.BoundedSemaphore(1)
 IMAGE_WAIT_SECONDS = 25
+
+INACTIVE_BRANCH = (
+    "This store link is no longer active. Please ask the SKY team for the current QR code."
+)
+
+
+def _branch(slug, strict=True):
+    """The branch a studio link points at; None without one. A link to an
+    unknown or switched-off branch is refused rather than filed nowhere,
+    except for uploads already queued on a phone (strict=False), which must
+    never be lost because a branch was switched off meanwhile."""
+    if not slug:
+        return None
+    if not strict:
+        return Branch.objects.filter(slug=slug).first()
+    branch = Branch.objects.filter(slug=slug, is_active=True).first()
+    if branch is None:
+        raise ValidationError({"branch": [INACTIVE_BRANCH]})
+    return branch
+
+
+def _file_under(customer, branch):
+    """Files a customer under the branch whose link they used, once: the store
+    where they first came in keeps them. Returns the fields that changed."""
+    if branch is None or customer.branch_id:
+        return []
+    customer.branch, customer.branch_name = branch, branch.name
+    return ["branch", "branch_name"]
+
 
 
 # --- Public API used by the selfie studio ---------------------------------
@@ -141,6 +174,7 @@ class CustomerUpload(APIView):
         upload.is_valid(raise_exception=True)
         data = upload.validated_data
         mirror = Mirror.objects.filter(slug=data.get("mirror") or "").first()
+        branch = _branch(data.get("branch"), strict=False)
         # One vCPU: compress one upload at a time per process so a rush of
         # uploads queues briefly instead of slowing every request down.
         if not _IMAGE_WORK.acquire(timeout=IMAGE_WAIT_SECONDS):
@@ -185,6 +219,7 @@ class CustomerUpload(APIView):
                 customer.selfie_thumb = thumbs["selfie_thumb"]
             customer.mirror = mirror
             customer.mirror_name = mirror.name if mirror else data.get("mirror", "")
+            _file_under(customer, branch)
             if data.get("name"):
                 customer.name = data["name"]
             # The first prize is final; later uploads can't change it.
@@ -211,12 +246,16 @@ class CustomerRegister(APIView):
         ser = RegisterSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         phone = ser.validated_data["phone"]
+        branch = _branch(ser.validated_data.get("branch"))
         customer, created = Customer.objects.get_or_create(
             phone=phone, defaults={"session": f"phone-{phone}"}
         )
+        changed = _file_under(customer, branch)
         if not customer.consent_at:
             customer.consent_at = timezone.now()
-            customer.save(update_fields=["consent_at", "updated_at"])
+            changed.append("consent_at")
+        if changed:
+            customer.save(update_fields=[*changed, "updated_at"])
         return Response(
             {"phone": phone, "reward": customer.reward or None, "returning": not created},
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
@@ -254,11 +293,26 @@ class CustomerSpin(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
     throttle_classes = [CustomerSpinThrottle, PhoneThrottle]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request):
         ser = SpinSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
-        face = ser.validated_data.get("face")
+        face = ser.validated_data["face"]
+        branch = _branch(ser.validated_data.get("branch"))
+        # No photo, no spin: the selfie is stored before the prize is drawn.
+        if not _IMAGE_WORK.acquire(timeout=IMAGE_WAIT_SECONDS):
+            return Response(
+                {"detail": "SKY is busy. Please try again in a moment."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "10"},
+            )
+        try:
+            raw = ser.validated_data["selfie"]
+            selfie = compressed_photo(raw, SELFIE_SIZE) or raw
+            selfie_thumb = optimized(selfie, THUMB_SIZE, 78) or ""
+        finally:
+            _IMAGE_WORK.release()
         with transaction.atomic():
             customer = (
                 Customer.objects.select_for_update()
@@ -267,7 +321,14 @@ class CustomerSpin(APIView):
             )
             if customer is None:
                 return Response({"phone": "Register this number first."}, status=400)
+            old = [f.name for f in (customer.selfie, customer.selfie_thumb) if f]
+            customer.selfie, customer.selfie_thumb = selfie, selfie_thumb
+            # Old photos are deleted only if the new ones are really saved.
+            storage = Customer.selfie.field.storage
+            transaction.on_commit(lambda: [storage.delete(name) for name in old])
+            photo_fields = ["selfie", "selfie_thumb", *_file_under(customer, branch)]
             if customer.reward:
+                customer.save(update_fields=[*photo_fields, "updated_at"])
                 return Response({"reward": customer.reward, "repeat": bool(customer.repeat_of_id)})
             customer.face = [round(x, 5) for x in face]
             match = _find_same_face(customer.face, customer.pk)
@@ -276,7 +337,7 @@ class CustomerSpin(APIView):
                 # on the dashboard.
                 earlier = Customer.objects.get(pk=match)
                 customer.repeat_of = earlier
-                customer.save(update_fields=["face", "repeat_of", "updated_at"])
+                customer.save(update_fields=["face", "repeat_of", *photo_fields, "updated_at"])
                 return Response(
                     {
                         "detail": (
@@ -288,7 +349,9 @@ class CustomerSpin(APIView):
                     status=status.HTTP_409_CONFLICT,
                 )
             customer.reward = secrets.choice(REWARD_IDS)
-            customer.save(update_fields=["reward", "face", "repeat_of", "updated_at"])
+            customer.save(
+                update_fields=["reward", "face", "repeat_of", *photo_fields, "updated_at"]
+            )
         return Response({"reward": customer.reward, "repeat": False})
 
 
@@ -349,6 +412,11 @@ class CustomerViewSet(
         mirror = self.request.query_params.get("mirror")
         if mirror:
             qs = qs.filter(mirror_id=mirror)
+        branch = self.request.query_params.get("branch")
+        if branch == "none":
+            qs = qs.filter(branch__isnull=True)
+        elif branch:
+            qs = qs.filter(branch_id=branch)
         search = self.request.query_params.get("q")
         if search:
             qs = qs.filter(name__icontains=search) | qs.filter(phone__icontains=search)
@@ -372,11 +440,14 @@ class CustomerViewSet(
             f'attachment; filename="sky-customers-{timezone.localdate():%Y%m%d}.csv"'
         )
         writer = csv.writer(response)
-        writer.writerow(["id", "phone", "name", "mirror", "reward", "same_face_as",
+        writer.writerow(["id", "phone", "name", "branch", "mirror", "reward", "same_face_as",
                          "consent_at", "created_at", "poster_url", "selfie_url"])
-        for c in Customer.objects.select_related("repeat_of").order_by("created_at"):
+        rows = Customer.objects.select_related("repeat_of").order_by("created_at")
+        if request.query_params.get("branch"):
+            rows = rows.filter(branch_id=request.query_params["branch"])
+        for c in rows:
             writer.writerow([
-                c.pk, c.phone, c.name, c.mirror_name, c.reward,
+                c.pk, c.phone, c.name, c.branch_name, c.mirror_name, c.reward,
                 c.repeat_of.phone if c.repeat_of else "",
                 c.consent_at.isoformat() if c.consent_at else "",
                 c.created_at.isoformat(),
@@ -386,32 +457,99 @@ class CustomerViewSet(
         return response
 
 
-@api_view(["GET"])
-@permission_classes([IsAdminUser])
-def stats(request):
+def _customer_stats(customers):
+    """Counts the dashboard shows, for all customers or one branch."""
     today = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
     per_day = []
     for offset in range(6, -1, -1):
         start = today - timedelta(days=offset)
         per_day.append({
             "date": start.date().isoformat(),
-            "count": Customer.objects.filter(
+            "count": customers.filter(
                 created_at__gte=start, created_at__lt=start + timedelta(days=1)
             ).count(),
         })
-    top = (
-        Mirror.objects.annotate(n=Count("customers"))
-        .order_by("-n")
-        .values("id", "name", "n")[:5]
+    rewards = (
+        customers.exclude(reward="").values("reward").annotate(n=Count("id")).order_by("-n")
     )
-    return Response({
-        "mirrors": Mirror.objects.count(),
-        "active_mirrors": Mirror.objects.filter(is_active=True).count(),
-        "customers": Customer.objects.count(),
-        "customers_today": Customer.objects.filter(created_at__gte=today).count(),
+    top = (
+        customers.exclude(mirror_name="").values("mirror_name")
+        .annotate(n=Count("id")).order_by("-n")[:5]
+    )
+    return {
+        "customers": customers.count(),
+        "customers_today": customers.filter(created_at__gte=today).count(),
+        "gifts": customers.exclude(reward="").count(),
+        "repeat_faces": customers.filter(repeat_of__isnull=False).count(),
         "per_day": per_day,
-        "top_mirrors": list(top),
-    })
+        "rewards": [{"id": r["reward"], "n": r["n"]} for r in rewards],
+        "top_mirrors": [{"name": m["mirror_name"], "n": m["n"]} for m in top],
+    }
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def stats(request):
+    data = _customer_stats(Customer.objects.all())
+    data.update(
+        mirrors=Mirror.objects.count(),
+        active_mirrors=Mirror.objects.filter(is_active=True).count(),
+        branches=Branch.objects.count(),
+        top_branches=list(
+            Branch.objects.annotate(n=Count("customers")).order_by("-n").values("id", "name", "n")[:5]
+        ),
+    )
+    return Response(data)
+
+
+class BranchViewSet(viewsets.ModelViewSet):
+    """Stores: add, edit, delete; each has a studio link and a QR code.
+    Deleting a branch keeps its customers (their records keep the name)."""
+
+    serializer_class = BranchSerializer
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        return Branch.objects.annotate(customer_count=Count("customers"))
+
+    @action(detail=True, methods=["get"])
+    def stats(self, request, pk=None):
+        branch = self.get_object()
+        return Response(_customer_stats(Customer.objects.filter(branch=branch)))
+
+    @action(detail=True, methods=["get"])
+    def qr(self, request, pk=None):
+        """PNG QR code of the branch link; ?download=1 saves it as a file."""
+        from io import BytesIO
+
+        import qrcode
+        from django.http import HttpResponse
+
+        branch = self.get_object()
+        code = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=12, border=3)
+        code.add_data(branch_link(branch))
+        code.make(fit=True)
+        out = BytesIO()
+        code.make_image(fill_color="#17120d", back_color="white").save(out, format="PNG")
+        response = HttpResponse(out.getvalue(), content_type="image/png")
+        response["Cache-Control"] = "private, no-store"
+        if request.query_params.get("download"):
+            response["Content-Disposition"] = f'attachment; filename="SKY-{branch.slug}-QR.png"'
+        return response
+
+
+class PublicBranch(APIView):
+    """Branch name for the studio, from its link (?branch=<slug>)."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [MirrorPollThrottle]
+
+    def get(self, request, slug):
+        branch = Branch.objects.filter(slug=slug, is_active=True).first()
+        if branch is None:
+            return Response({"detail": INACTIVE_BRANCH}, status=status.HTTP_404_NOT_FOUND)
+        return Response(PublicBranchSerializer(branch).data)
 
 
 @staff_member_required(login_url="mirror-login")

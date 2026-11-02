@@ -90,8 +90,28 @@
   .toast.show { opacity: 1; }
   .toast.err { background: var(--accent); }
   .empty-note { color: var(--muted); padding: 30px; text-align: center; }
+  /* Branches */
+  .branches { display: grid; grid-template-columns: 320px 1fr; gap: 18px; align-items: start; }
+  .blist { display: flex; flex-direction: column; gap: 10px; }
+  .bitem { padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: #fff; cursor: pointer; display: grid; gap: 8px; transition: border-color .15s, box-shadow .15s; }
+  .bitem:hover { border-color: #e3c88f; }
+  .bitem.sel { border-color: var(--gold); box-shadow: 0 0 0 3px #f0d9a8; }
+  .bitem .top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  .bitem b { font-size: 15px; }
+  .bitem small { color: var(--muted); }
+  .bitem .gen { justify-self: start; font-size: 12.5px; padding: 6px 12px; background: linear-gradient(135deg, #d22856, #7a1631); color: #fff; border: 0; }
+  .bdetail { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .share { display: grid; grid-template-columns: 180px 1fr; gap: 18px; align-items: center; background: linear-gradient(135deg, #fffaf0, #fff); border-color: #ecd9b0; }
+  .share .qr { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 8px; }
+  .share .qr img { width: 100%; display: block; image-rendering: pixelated; }
+  .share input { flex: 1; min-width: 0; font-family: ui-monospace, monospace; font-size: 13px; }
+  .share .row { margin-top: 8px; }
+  .bhead { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .bhead h3 { margin: 0; font-size: 20px; }
+  .tag { font-size: 11px; padding: 1px 8px; border-radius: 99px; background: #f6ecd9; color: #7a5a1f; align-self: flex-start; }
   [hidden] { display: none !important; }
-  @media (max-width: 1100px) { .mirrors, .editor { grid-template-columns: 1fr; } .stage { max-width: 380px; } }
+  @media (max-width: 1100px) { .mirrors, .editor, .branches { grid-template-columns: 1fr; } .stage { max-width: 380px; } }
+  @media (max-width: 600px) { .share { grid-template-columns: 1fr; } .share .qr { max-width: 220px; margin: 0 auto; } }
   @media (max-width: 760px) {
     .app { grid-template-columns: 1fr; }
     /* Sidebar becomes a sticky top bar that scrolls sideways if needed. */
@@ -140,6 +160,7 @@
     <h1>✦ SKY Mirror</h1>
     <a href="#dashboard" data-view="dashboard">Dashboard</a>
     <a href="#mirrors" data-view="mirrors">Mirrors <span class="badge" id="nav-mirrors">–</span></a>
+    <a href="#branches" data-view="branches">Branches <span class="badge" id="nav-branches">–</span></a>
     <a href="#customers" data-view="customers">Customers <span class="badge" id="nav-customers">–</span></a>
     <div class="spacer"></div>
     <div class="user">Signed in as {{ request.user.get_username }}</div>
@@ -154,12 +175,14 @@
         <div class="card stat"><span>Customers today</span><b id="s-today">–</b></div>
         <div class="card stat"><span>Total customers</span><b id="s-customers">–</b></div>
         <div class="card stat"><span>Active mirrors</span><b id="s-active">–</b></div>
-        <div class="card stat"><span>Total mirrors</span><b id="s-mirrors">–</b></div>
+        <div class="card stat"><span>Gifts given</span><b id="s-gifts">–</b></div>
+        <div class="card stat"><span>Branches</span><b id="s-branches">–</b></div>
       </div>
       <div class="grid2">
         <div class="card"><b>Selfies, last 7 days</b><div class="bars" id="s-bars"></div></div>
         <div class="card"><b>Most used mirrors</b><div id="s-top" style="margin-top:10px"></div></div>
       </div>
+      <div class="card" style="margin-top:14px"><b>Top branches</b><div id="s-branch-top" style="margin-top:10px"></div></div>
       <div class="card" style="margin-top:14px">
         <div class="toolbar" style="margin-bottom:10px"><b>Latest selfies</b><a class="btn" href="#customers">View all</a></div>
         <div class="recent" id="s-recent"></div>
@@ -227,6 +250,67 @@
       </div>
     </section>
 
+    <!-- Branches -->
+    <section id="view-branches" hidden>
+      <div class="toolbar">
+        <h2>Branches</h2>
+        <button class="primary" id="b-new">+ New branch</button>
+      </div>
+      <div class="branches">
+        <div>
+          <p class="hint" style="margin-bottom:8px">Each branch gets its own studio link and QR code. Everyone who comes in through it — selfie, poster and gift — is saved under that branch.</p>
+          <div class="blist" id="b-list"></div>
+        </div>
+        <div class="bdetail" id="b-detail" hidden>
+          <div class="card">
+            <form class="fields" id="b-form">
+              <div class="bhead"><h3 id="b-title">New branch</h3><span class="pill" id="b-state"></span></div>
+              <div class="two">
+                <label class="f">Branch name<input name="name" required maxlength="80" placeholder="e.g. Anna Nagar"></label>
+                <label class="f">Link id<input name="slug" maxlength="60" pattern="[-a-z0-9_]*" placeholder="auto from name"></label>
+              </div>
+              <div class="two">
+                <label class="f">Address<input name="address" maxlength="200"></label>
+                <label class="f">Phone<input name="phone" maxlength="20" inputmode="tel"></label>
+              </div>
+              <label class="row"><input type="checkbox" name="is_active"> Link active (switch off to stop this QR code working)</label>
+              <div class="row">
+                <button class="primary" type="submit" id="b-save">Save</button>
+                <button type="button" class="danger" id="b-delete">Delete</button>
+                <span class="hint" id="b-status"></span>
+              </div>
+            </form>
+          </div>
+          <div class="card share" id="b-share" hidden>
+            <div class="qr"><img id="b-qr" alt="QR code for this branch"></div>
+            <div>
+              <b>Studio link for this branch</b>
+              <div class="row"><input id="b-link" readonly><button type="button" id="b-copy">Copy</button><a class="btn" id="b-open" target="_blank" rel="noopener">Open</a></div>
+              <div class="row"><a class="btn primary" id="b-qr-dl">⬇ Download QR</a><button type="button" id="b-print">🖨 Print QR poster</button></div>
+              <p class="hint" style="margin-top:8px">Scanning opens the selfie studio: mobile number → selfie → spin wheel, all saved to this branch.</p>
+            </div>
+          </div>
+          <div id="b-data" hidden>
+            <div class="stats">
+              <div class="card stat"><span>Customers</span><b id="b-s-customers">–</b></div>
+              <div class="card stat"><span>Today</span><b id="b-s-today">–</b></div>
+              <div class="card stat"><span>Gifts given</span><b id="b-s-gifts">–</b></div>
+              <div class="card stat"><span>Repeat faces blocked</span><b id="b-s-repeat">–</b></div>
+            </div>
+            <div class="grid2">
+              <div class="card"><b>Selfies, last 7 days</b><div class="bars" id="b-bars"></div></div>
+              <div class="card"><b>Gifts by type</b><div id="b-rewards" style="margin-top:10px"></div></div>
+            </div>
+            <div class="card" style="margin-top:14px">
+              <div class="toolbar" style="margin-bottom:10px"><b>Customers in this branch</b><a class="btn" id="b-export" download>Export CSV</a></div>
+              <div class="cgrid" id="b-grid"></div>
+              <div style="text-align:center;margin-top:14px"><button id="b-more" hidden>Load more</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Customers -->
     <section id="view-customers" hidden>
       <div class="toolbar">
@@ -234,6 +318,7 @@
         <div class="row">
           <input id="c-q" placeholder="Search name or phone">
           <a class="btn" href="/api/admin/customers/export/" download>Export CSV</a>
+          <select id="c-branch"><option value="">All branches</option></select>
           <select id="c-mirror"><option value="">All mirrors</option></select>
         </div>
       </div>
@@ -281,9 +366,9 @@
   lightbox.addEventListener("click", () => lightbox.classList.remove("open"));
 
   // ---------------- Router ----------------
-  const views = { dashboard: loadDashboard, mirrors: loadMirrors, customers: () => loadCustomers(true) };
+  const views = { dashboard: loadDashboard, mirrors: loadMirrors, branches: loadBranches, customers: () => loadCustomers(true) };
   function route() {
-    const view = (location.hash.slice(1) || "dashboard");
+    const view = (location.hash.slice(1) || "dashboard").split("/")[0];
     const name = views[view] ? view : "dashboard";
     $$("main > section").forEach((s) => (s.hidden = s.id !== "view-" + name));
     $$("aside a[data-view]").forEach((a) => a.classList.toggle("active", a.dataset.view === name));
@@ -291,21 +376,30 @@
   }
   window.addEventListener("hashchange", route);
 
+  const rankRows = (rows, empty) => rows.length
+    ? rows.map((r) => `<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><span>${esc(r.name)}</span><b>${r.n}</b></div>`).join("")
+    : `<p class="hint">${empty}</p>`;
+  const bars = (perDay) => {
+    const max = Math.max(1, ...perDay.map((d) => d.count));
+    return perDay.map((d) => `<div>${d.count}<i style="height:${(d.count / max) * 100}%"></i>${d.date.slice(5)}</div>`).join("");
+  };
+
   // ---------------- Dashboard ----------------
   async function loadDashboard() {
     const [s, recent] = await Promise.all([api("stats/"), api("customers/?page_size=12")]);
     $("#s-today").textContent = s.customers_today;
     $("#s-customers").textContent = s.customers;
     $("#s-active").textContent = s.active_mirrors;
-    $("#s-mirrors").textContent = s.mirrors;
+    $("#s-gifts").textContent = s.gifts;
+    $("#s-branches").textContent = s.branches;
     $("#nav-mirrors").textContent = s.mirrors;
+    $("#nav-branches").textContent = s.branches;
     $("#nav-customers").textContent = s.customers;
-    const max = Math.max(1, ...s.per_day.map((d) => d.count));
-    $("#s-bars").innerHTML = s.per_day.map((d) =>
-      `<div>${d.count}<i style="height:${(d.count / max) * 100}%"></i>${d.date.slice(5)}</div>`).join("");
-    $("#s-top").innerHTML = s.top_mirrors.length
-      ? s.top_mirrors.map((m) => `<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><span>${esc(m.name)}</span><b>${m.n}</b></div>`).join("")
-      : `<p class="hint">No mirrors yet.</p>`;
+    $("#s-bars").innerHTML = bars(s.per_day);
+    $("#s-top").innerHTML = rankRows(s.top_mirrors, "No selfies yet.");
+    $("#s-branch-top").innerHTML = s.top_branches.length
+      ? s.top_branches.map((b) => `<a href="#branches/${b.id}" class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);color:inherit;text-decoration:none"><span>📍 ${esc(b.name)}</span><b>${b.n}</b></a>`).join("")
+      : `<p class="hint">No branches yet. <a href="#branches">Add your first branch</a>.</p>`;
     $("#s-recent").innerHTML = recent.results.length
       ? recent.results.filter((c) => c.poster).map((c) => `<img src="${esc(c.poster_thumb || c.poster)}" data-full="${esc(c.poster)}" alt="${esc(c.name || "Customer")}" loading="lazy" decoding="async">`).join("")
       : `<p class="hint">No selfies yet.</p>`;
@@ -480,49 +574,201 @@
 
   // ---------------- Customers ----------------
   const rewardLabel = (id) => id.split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+  function customerCard(c) {
+    const el = document.createElement("div");
+    el.className = "cust";
+    el.innerHTML = `<div class="imgs">
+        ${c.selfie ? `<img src="${esc(c.selfie_thumb || c.selfie)}" data-full="${esc(c.selfie)}" alt="Selfie" loading="lazy" decoding="async">` : `<div></div>`}
+        ${c.poster ? `<img src="${esc(c.poster_thumb || c.poster)}" data-full="${esc(c.poster)}" alt="Poster" loading="lazy" decoding="async">` : `<div></div>`}
+      </div>
+      <div class="info"><b>${esc(c.name || "Guest #" + c.id)}</b>
+        ${c.reward ? `<span class="pill">🎁 ${esc(rewardLabel(c.reward))}</span>` : ""}
+        ${c.repeat_of_phone ? `<span class="pill warn" title="Same face as an earlier customer; no second gift">⚠ Same face as ${esc(c.repeat_of_phone)}</span>` : ""}
+        ${c.branch_name ? `<span class="tag">📍 ${esc(c.branch_name)}</span>` : ""}
+        <small>${esc(c.mirror_name || "—")}${c.phone ? " · " + esc(c.phone) : ""}</small>
+        <small>${new Date(c.created_at).toLocaleString()}</small></div>
+      <div class="acts">${c.poster ? `<a class="btn" href="${esc(c.poster)}" download>Poster</a>` : ""}
+        ${c.selfie ? `<a class="btn" href="${esc(c.selfie)}" download>Selfie</a>` : ""}
+        <button class="danger">Delete</button></div>`;
+    $("button.danger", el).addEventListener("click", async () => {
+      if (!confirm("Delete this customer and their photos?")) return;
+      try { await api(`customers/${c.id}/`, { method: "DELETE" }); el.remove(); toast("Deleted"); }
+      catch (err) { toast(err.message, true); }
+    });
+    return el;
+  }
   let cPage = 1, cTimer;
   async function loadCustomers(reset) {
     if (reset) {
       cPage = 1; $("#c-grid").innerHTML = "";
-      const ms = await api("mirrors/");
+      const [ms, bs] = await Promise.all([api("mirrors/"), api("branches/")]);
       const sel = $("#c-mirror"), keep = sel.value;
       sel.innerHTML = `<option value="">All mirrors</option>` + ms.map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join("");
       sel.value = keep;
+      const bsel = $("#c-branch"), bkeep = bsel.value;
+      bsel.innerHTML = `<option value="">All branches</option><option value="none">No branch</option>` + bs.map((b) => `<option value="${b.id}">${esc(b.name)}</option>`).join("");
+      bsel.value = bkeep;
     }
     const params = new URLSearchParams({ page: cPage });
     if ($("#c-q").value.trim()) params.set("q", $("#c-q").value.trim());
     if ($("#c-mirror").value) params.set("mirror", $("#c-mirror").value);
+    if ($("#c-branch").value) params.set("branch", $("#c-branch").value);
     const data = await api("customers/?" + params);
     $("#nav-customers").textContent = data.count;
     const grid = $("#c-grid");
     if (reset && !data.results.length) grid.innerHTML = `<div class="empty-note">No customers yet. Selfies appear here when someone exports a poster in the studio.</div>`;
-    for (const c of data.results) {
-      const el = document.createElement("div");
-      el.className = "cust";
-      el.innerHTML = `<div class="imgs">
-          ${c.selfie ? `<img src="${esc(c.selfie_thumb || c.selfie)}" data-full="${esc(c.selfie)}" alt="Selfie" loading="lazy" decoding="async">` : `<div></div>`}
-          ${c.poster ? `<img src="${esc(c.poster_thumb || c.poster)}" data-full="${esc(c.poster)}" alt="Poster" loading="lazy" decoding="async">` : `<div></div>`}
-        </div>
-        <div class="info"><b>${esc(c.name || "Guest #" + c.id)}</b>
-          ${c.reward ? `<span class="pill">🎁 ${esc(rewardLabel(c.reward))}</span>` : ""}
-          ${c.repeat_of_phone ? `<span class="pill warn" title="Same face as an earlier customer; given their prize">⚠ Same face as ${esc(c.repeat_of_phone)}</span>` : ""}
-          <small>${esc(c.mirror_name || "—")}${c.phone ? " · " + esc(c.phone) : ""}</small>
-          <small>${new Date(c.created_at).toLocaleString()}</small></div>
-        <div class="acts"><a class="btn" href="${esc(c.poster)}" download>Poster</a>
-          ${c.selfie ? `<a class="btn" href="${esc(c.selfie)}" download>Selfie</a>` : ""}
-          <button class="danger">Delete</button></div>`;
-      $("button.danger", el).addEventListener("click", async () => {
-        if (!confirm("Delete this customer and their photos?")) return;
-        try { await api(`customers/${c.id}/`, { method: "DELETE" }); el.remove(); toast("Deleted"); }
-        catch (err) { toast(err.message, true); }
-      });
-      grid.appendChild(el);
-    }
+    for (const c of data.results) grid.appendChild(customerCard(c));
     $("#c-more").hidden = !data.next;
   }
   $("#c-more").addEventListener("click", () => { cPage++; loadCustomers(false).catch((e) => toast(e.message, true)); });
   $("#c-mirror").addEventListener("change", () => loadCustomers(true).catch((e) => toast(e.message, true)));
+  $("#c-branch").addEventListener("change", () => loadCustomers(true).catch((e) => toast(e.message, true)));
   $("#c-q").addEventListener("input", () => { clearTimeout(cTimer); cTimer = setTimeout(() => loadCustomers(true).catch((e) => toast(e.message, true)), 300); });
+
+  // ---------------- Branches ----------------
+  let branches = [], branch = null, bPage = 1;
+  const bform = $("#b-form");
+
+  async function loadBranches() {
+    branches = await api("branches/");
+    $("#nav-branches").textContent = branches.length;
+    renderBranches();
+    const wanted = Number(location.hash.split("/")[1]);
+    const pick = branches.find((b) => b.id === (wanted || branch?.id));
+    if (pick) openBranch(pick, false);
+    else if (branch) closeBranch();
+  }
+
+  function renderBranches() {
+    const list = $("#b-list");
+    list.innerHTML = branches.length ? "" : `<div class="empty-note">No branches yet. Click “New branch”.</div>`;
+    for (const b of branches) {
+      const el = document.createElement("div");
+      el.className = "bitem" + (branch && branch.id === b.id ? " sel" : "");
+      el.innerHTML = `<div class="top"><b>📍 ${esc(b.name)}</b><span class="pill ${b.is_active ? "" : "off"}">${b.is_active ? "Live" : "Off"}</span></div>
+        <small>/${esc(b.slug)} · ${b.customer_count} customer${b.customer_count === 1 ? "" : "s"}</small>
+        <button class="gen" type="button">🔗 Generate link & QR</button>`;
+      el.addEventListener("click", () => openBranch(b, false));
+      $(".gen", el).addEventListener("click", (e) => { e.stopPropagation(); openBranch(b, true); });
+      list.appendChild(el);
+    }
+  }
+
+  function openBranch(b, focusShare) {
+    branch = b;
+    history.replaceState(null, "", `#branches/${b.id}`);
+    $("#b-detail").hidden = false;
+    $("#b-title").textContent = b.name;
+    $("#b-state").textContent = b.is_active ? "Link active" : "Link switched off";
+    $("#b-state").className = "pill" + (b.is_active ? "" : " off");
+    bform.name.value = b.name; bform.slug.value = b.slug;
+    bform.address.value = b.address; bform.phone.value = b.phone;
+    bform.is_active.checked = b.is_active;
+    $("#b-delete").hidden = false;
+    $("#b-status").textContent = `Updated ${new Date(b.updated_at).toLocaleString()}`;
+    // Share card: link, QR (fresh each time the link may have changed).
+    $("#b-share").hidden = false;
+    $("#b-link").value = b.link;
+    $("#b-open").href = b.link;
+    $("#b-qr").src = `/api/admin/branches/${b.id}/qr/?v=${encodeURIComponent(b.slug)}`;
+    $("#b-qr-dl").href = `/api/admin/branches/${b.id}/qr/?download=1&v=${encodeURIComponent(b.slug)}`;
+    $("#b-export").href = `/api/admin/customers/export/?branch=${b.id}`;
+    renderBranches();
+    loadBranchData().catch((e) => toast(e.message, true));
+    if (focusShare) $("#b-share").scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function closeBranch() {
+    branch = null;
+    $("#b-detail").hidden = true;
+    history.replaceState(null, "", "#branches");
+    renderBranches();
+  }
+
+  async function loadBranchData() {
+    const b = branch;
+    const st = await api(`branches/${b.id}/stats/`);
+    if (branch !== b) return;
+    $("#b-data").hidden = false;
+    $("#b-s-customers").textContent = st.customers;
+    $("#b-s-today").textContent = st.customers_today;
+    $("#b-s-gifts").textContent = st.gifts;
+    $("#b-s-repeat").textContent = st.repeat_faces;
+    $("#b-bars").innerHTML = bars(st.per_day);
+    $("#b-rewards").innerHTML = rankRows(st.rewards.map((r) => ({ name: "🎁 " + rewardLabel(r.id), n: r.n })), "No gifts yet.");
+    bPage = 1; $("#b-grid").innerHTML = "";
+    await loadBranchCustomers();
+  }
+
+  async function loadBranchCustomers() {
+    const b = branch;
+    const data = await api(`customers/?branch=${b.id}&page=${bPage}`);
+    if (branch !== b) return;
+    const grid = $("#b-grid");
+    if (bPage === 1 && !data.results.length) grid.innerHTML = `<div class="empty-note">No customers yet. Share the link or QR code above.</div>`;
+    for (const c of data.results) grid.appendChild(customerCard(c));
+    $("#b-more").hidden = !data.next;
+  }
+  $("#b-more").addEventListener("click", () => { bPage++; loadBranchCustomers().catch((e) => toast(e.message, true)); });
+
+  $("#b-new").addEventListener("click", () => {
+    branch = null;
+    history.replaceState(null, "", "#branches");
+    $("#b-detail").hidden = false;
+    bform.reset();
+    bform.is_active.checked = true;
+    $("#b-title").textContent = "New branch";
+    $("#b-state").textContent = ""; $("#b-state").className = "";
+    $("#b-delete").hidden = true;
+    $("#b-share").hidden = true;
+    $("#b-data").hidden = true;
+    $("#b-status").textContent = "Save to create its link and QR code";
+    renderBranches(); bform.name.focus();
+  });
+
+  bform.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const body = {
+      name: bform.name.value.trim(), slug: bform.slug.value.trim().toLowerCase(),
+      address: bform.address.value.trim(), phone: bform.phone.value.trim(),
+      is_active: bform.is_active.checked,
+    };
+    $("#b-save").disabled = true;
+    try {
+      const saved = await api(branch ? `branches/${branch.id}/` : "branches/", { method: branch ? "PATCH" : "POST", json: body });
+      toast(branch ? "Branch saved" : "Branch created — link and QR code are ready");
+      branch = saved;
+      await loadBranches();
+      openBranch(branches.find((b) => b.id === saved.id) || saved, true);
+    } catch (err) { toast(err.message, true); }
+    finally { $("#b-save").disabled = false; }
+  });
+
+  $("#b-delete").addEventListener("click", async () => {
+    if (!branch || !confirm(`Delete “${branch.name}”? Its link and QR code stop working. Customers are kept (they still show the branch name).`)) return;
+    try { await api(`branches/${branch.id}/`, { method: "DELETE" }); toast("Branch deleted"); closeBranch(); await loadBranches(); }
+    catch (err) { toast(err.message, true); }
+  });
+
+  $("#b-copy").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText($("#b-link").value); toast("Link copied"); }
+    catch { $("#b-link").select(); toast("Press Ctrl/Cmd+C to copy"); }
+  });
+
+  // A printable A5 sign: branch name, big QR, one line of instructions.
+  $("#b-print").addEventListener("click", () => {
+    if (!branch) return;
+    const w = window.open("", "_blank");
+    if (!w) return toast("Allow pop-ups to print", true);
+    w.document.write(`<!doctype html><title>SKY ${esc(branch.name)} QR</title>
+      <style>@page{size:A5;margin:12mm}body{font-family:Georgia,serif;text-align:center;color:#17120d}
+      h1{color:#d22856;margin:0 0 4px;font-size:30px}h2{margin:0 0 14px;font-size:20px;color:#7a5a1f}
+      img{width:78%;image-rendering:pixelated}p{font:600 17px system-ui,sans-serif}small{font:12px system-ui;color:#7a6a5a}</style>
+      <h1>Celebrate Diwali with SKY</h1><h2>📍 ${esc(branch.name)}</h2>
+      <img src="${location.origin}/api/admin/branches/${branch.id}/qr/" onload="setTimeout(()=>print(),200)">
+      <p>Scan → selfie → spin the wheel for your free gift!</p><small>${esc(branch.link)}</small>`);
+    w.document.close();
+  });
 
   route();
 })();

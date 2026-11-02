@@ -8,14 +8,12 @@ const onVercel =
 /** Backend origin; empty when the studio and API share one site. */
 export const API_ORIGIN = (
   import.meta.env.VITE_API_URL ?? (onVercel ? VPS_API : "")
-).replace(
-  /\/$/,
-  "",
-);
+).replace(/\/$/, "");
 const API = API_ORIGIN + "/api";
 /** Where /media files load from. On Vercel they go through its CDN (see
  *  vercel.json), so each image leaves the VPS once and loads from nearby. */
-export const MEDIA_ORIGIN = onVercel && !import.meta.env.VITE_API_URL ? "" : API_ORIGIN;
+export const MEDIA_ORIGIN =
+  onVercel && !import.meta.env.VITE_API_URL ? "" : API_ORIGIN;
 // Fallback when the event stream is unavailable (e.g. a proxy that buffers it).
 export const POLL_MS = 1000;
 
@@ -115,19 +113,53 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status = 0,
+    /** Seconds the server asked us to wait (busy or rate-limited). */
+    readonly retryAfter = 0,
   ) {
     super(message);
   }
+}
+// The store whose link or QR code opened the studio (?branch=…). Remembered,
+// so a counter tablet stays on its branch across reloads and customers.
+const BRANCH_KEY = "sky-branch";
+export const BRANCH: string = (() => {
+  try {
+    const fromLink = (new URLSearchParams(location.search).get("branch") ?? "")
+      .trim()
+      .toLowerCase();
+    if (fromLink) localStorage.setItem(BRANCH_KEY, fromLink);
+    return fromLink || localStorage.getItem(BRANCH_KEY) || "";
+  } catch {
+    return "";
+  }
+})();
+/** Name of the branch for this link, or an error if the link is switched off. */
+export async function fetchBranch(): Promise<
+  { name: string } | { error: string } | null
+> {
+  if (!BRANCH) return null;
+  try {
+    const res = await fetch(`${API}/branches/${encodeURIComponent(BRANCH)}/`, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    const data = (await res.json()) as { name?: string; detail?: string };
+    if (res.ok && data.name) return { name: data.name };
+    if (res.status === 404) return { error: data.detail ?? ERRORS.unreachable };
+  } catch {
+    // Offline: sign-in reports it; the branch name is only decoration.
+  }
+  return null;
 }
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   if (!navigator.onLine) throw new ApiError(ERRORS.offline);
   let res: Response;
   try {
+    const form = body instanceof FormData;
     res = await fetch(`${API}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      headers: form ? undefined : { "Content-Type": "application/json" },
+      body: form ? body : JSON.stringify(body),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS * (form ? 3 : 1)),
     });
   } catch (e) {
     throw new ApiError(
@@ -140,10 +172,10 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   }
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
-    if (res.status === 429) {
-      const wait = Number(res.headers.get("Retry-After")) || 30;
-      throw new ApiError(ERRORS.busy(Math.ceil(wait)), 429);
-    }
+    const wait = Number(res.headers.get("Retry-After")) || 0;
+    if (res.status === 429)
+      throw new ApiError(ERRORS.busy(Math.ceil(wait || 30)), 429, wait || 30);
+    if (res.status === 503) throw new ApiError(ERRORS.server, 503, wait || 10);
     if (res.status >= 500) throw new ApiError(ERRORS.server, res.status);
     // Validation errors come back as {field: [message]}; show the first.
     const detail = Object.values(data).flat()[0];
@@ -160,11 +192,51 @@ export const registerPhone = (phone: string) =>
     phone,
     // The sign-in screen only submits after the consent box is ticked.
     consent: true,
+    ...(BRANCH && { branch: BRANCH }),
   });
-/** The server picks the prize, once per mobile number. */
-export const spinPrize = async (phone: string, face: number[] | null) =>
-  (await postJson<{ reward: string }>("/customers/spin/", { phone, face }))
-    .reward;
+export const NO_PHOTO = "Take your selfie first, then spin for your gift.";
+// How long a customer may wait in the queue when SKY is busy.
+const QUEUE_LIMIT_MS = 3 * 60_000;
+/** The server picks the prize, once per mobile number and once per face.
+ *  The selfie goes with it: no photo, no spin. When the server is busy the
+ *  customer waits in line (onQueue reports it) and the request is retried. */
+export async function spinPrize(
+  phone: string,
+  face: number[] | null,
+  selfie: Blob | null | undefined,
+  onQueue?: (waiting: boolean) => void,
+) {
+  if (!selfie) throw new ApiError(NO_PHOTO, 400);
+  const form = new FormData();
+  form.append("phone", phone);
+  if (face) form.append("face", JSON.stringify(face));
+  form.append("selfie", await asJpeg(selfie), "selfie.jpg");
+  if (BRANCH) form.append("branch", BRANCH);
+  const started = Date.now();
+  for (;;) {
+    try {
+      const { reward } = await postJson<{ reward: string }>(
+        "/customers/spin/",
+        form,
+      );
+      onQueue?.(false);
+      return reward;
+    } catch (e) {
+      const err = e as ApiError;
+      const queued =
+        err.status === 503 || err.status === 429 || err.status === 0;
+      if (!queued || Date.now() - started > QUEUE_LIMIT_MS) {
+        onQueue?.(false);
+        throw err;
+      }
+      onQueue?.(true);
+      const wait = Math.min(15, err.retryAfter || 5) * 1000;
+      await new Promise((r) =>
+        setTimeout(r, wait * (0.8 + Math.random() * 0.4)),
+      );
+    }
+  }
+}
 type Upload = {
   session: string;
   phone?: string | null;
@@ -172,6 +244,7 @@ type Upload = {
   reward?: string | null;
   poster: Blob;
   selfie?: Blob;
+  branch?: string;
 };
 // Uploads wait in an on-device outbox until the backend confirms them, so a
 // dropped connection, a down backend or a closed tab never loses a customer.
@@ -206,6 +279,7 @@ async function send(data: Upload) {
   form.append("mirror", data.mirror);
   if (data.phone) form.append("phone", data.phone);
   if (data.reward) form.append("reward", data.reward);
+  if (data.branch) form.append("branch", data.branch);
   const ext = (b: Blob) => (b.type === "image/png" ? "png" : "jpg");
   form.append("poster", data.poster, `poster.${ext(data.poster)}`);
   if (data.selfie)
@@ -308,6 +382,7 @@ export async function uploadCustomer(data: Upload) {
   setUploadState("saving");
   data = {
     ...data,
+    branch: data.branch ?? (BRANCH || undefined),
     poster: await asJpeg(data.poster),
     selfie: data.selfie && (await asJpeg(data.selfie)),
   };

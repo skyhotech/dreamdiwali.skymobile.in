@@ -86,6 +86,35 @@ class Mirror(models.Model):
         super().save(*args, **kwargs)
 
 
+class Branch(models.Model):
+    """A SKY store. Its studio link (…/?branch=<slug>) files every customer,
+    selfie and prize from that link under this branch."""
+
+    slug = models.SlugField(unique=True, max_length=60, blank=True)
+    name = models.CharField(max_length=80)
+    address = models.CharField(max_length=200, blank=True)
+    phone = models.CharField(max_length=20, blank=True)
+    # An inactive branch's link and QR code stop working.
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name", "id"]
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            base = slugify(self.name)[:50] or "branch"
+            slug, n = base, 2
+            while Branch.objects.filter(slug=slug).exclude(pk=self.pk).exists():
+                slug, n = f"{base}-{n}", n + 1
+            self.slug = slug
+        super().save(*args, **kwargs)
+
+
 # Spin-the-wheel prizes; ids match REWARDS in src/lib/rewards.ts.
 REWARD_IDS = [
     "neckband", "mini-speaker", "smart-watch",
@@ -105,6 +134,12 @@ class Customer(models.Model):
     )
     # Kept so the record still says which theme was used if the mirror is deleted.
     mirror_name = models.CharField(max_length=80, blank=True)
+    # Store whose link the customer came through; the name is kept if the
+    # branch is later deleted.
+    branch = models.ForeignKey(
+        Branch, null=True, blank=True, on_delete=models.SET_NULL, related_name="customers"
+    )
+    branch_name = models.CharField(max_length=80, blank=True)
     # Spin-the-wheel prize id from the studio (e.g. "smart-watch").
     reward = models.CharField(max_length=40, blank=True)
     # When the customer agreed to storing their selfie and face fingerprint.

@@ -65,14 +65,31 @@ export function canvasBlob(
     }
   });
 }
+/** A covered lens, a black or white frame or one flat colour: not a photo. */
+export function looksBlank(image: CanvasImageSource) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 32;
+  const ctx = c.getContext("2d", { willReadFrequently: true })!;
+  ctx.drawImage(image, 0, 0, 32, 32);
+  const px = ctx.getImageData(0, 0, 32, 32).data;
+  let sum = 0,
+    sq = 0;
+  const n = px.length / 4;
+  for (let i = 0; i < px.length; i += 4) {
+    const y = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+    sum += y;
+    sq += y * y;
+  }
+  const mean = sum / n,
+    spread = Math.sqrt(Math.max(0, sq / n - mean * mean));
+  return mean < 20 || mean > 248 || spread < 6;
+}
+export const BLANK_PHOTO =
+  "Your photo looks blank or too dark. Make sure nothing covers the camera and try again.";
 /** Selfie brightening: lifts the picture 10% toward white ("screen" blend,
  *  which works in every browser, unlike canvas filters on iPhone). */
 export const BRIGHTEN = 0.1;
-export function brighten(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-) {
+export function brighten(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalCompositeOperation = "screen";

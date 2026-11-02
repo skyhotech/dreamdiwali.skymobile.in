@@ -38,8 +38,9 @@ export default function Editor() {
   const s = useStudio();
   // A reload between the product photo and claiming the prize lands here;
   // reopen the wheel (it lands on the already-locked prize, if any).
+  // No photo, no wheel.
   const [wheelOpen, setWheelOpen] = useState(
-    () => s.products.length > 0 && !s.reward,
+    () => Boolean(s.selfie) && s.products.length > 0 && !s.reward,
   );
   const [selected, setSelected] = useState("selfie"),
     [busy, setBusy] = useState(false),
@@ -267,8 +268,13 @@ export default function Editor() {
     <div className="workspace editor-workspace">
       {wheelOpen && (
         <SpinWheel
-          getPrize={async () =>
-            spinPrize(s.phone ?? "", await faceFingerprint(s.selfie?.image))
+          getPrize={async (onQueue) =>
+            spinPrize(
+              s.phone ?? "",
+              await faceFingerprint(s.selfie?.image),
+              s.selfie?.blob,
+              onQueue,
+            )
           }
           onClaim={(r) => {
             s.setReward(r.id);

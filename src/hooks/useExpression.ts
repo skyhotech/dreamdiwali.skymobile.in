@@ -15,8 +15,9 @@ export function useExpression(
   const output = useRef(canvas);
   const [status, setStatus] = useState(""),
     [ready, setReady] = useState(false);
-  /** Latest smile strength (0–1) and hand gesture, for hands-free capture. */
-  const cues = useRef({ smile: 0, gesture: "" });
+  /** Latest smile strength (0–1), hand gesture and when a face was last
+   *  seen (performance.now()), for hands-free capture and the face check. */
+  const cues = useRef({ smile: 0, gesture: "", faceAt: 0 });
   useEffect(() => {
     setReady(false);
     if (!active) {
@@ -119,6 +120,7 @@ export function useExpression(
                   cues.current.smile = result.faceLandmarks.length
                     ? (score("mouthSmileLeft") + score("mouthSmileRight")) / 2
                     : 0;
+                  if (result.faceLandmarks.length) cues.current.faceAt = now;
                 } catch {
                   face.close();
                   face = null;
@@ -162,7 +164,7 @@ export function useExpression(
       clearInterval(timer);
       face?.close();
       gestures?.close();
-      cues.current = { smile: 0, gesture: "" };
+      cues.current = { smile: 0, gesture: "", faceAt: 0 };
     };
   }, [active, video, canvas]);
   return { output, status, ready, cues };

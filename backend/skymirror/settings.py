@@ -105,6 +105,9 @@ if os.environ.get("MYSQL_DATABASE"):
         "OPTIONS": {"charset": "utf8mb4", "init_command": "SET sql_mode='STRICT_TRANS_TABLES'"},
     }
 
+# Public address of the selfie studio; branch links and QR codes point here.
+STUDIO_URL = (os.environ.get("STUDIO_URL") or "http://localhost:5173").rstrip("/")
+
 # Where `manage.py backup` writes snapshots, and how many to keep.
 BACKUP_DIR = Path(os.environ.get("BACKUP_DIR") or BASE_DIR / "backups")
 BACKUP_KEEP = int(os.environ.get("BACKUP_KEEP") or "14")
@@ -143,6 +146,9 @@ CORS_URLS_REGEX =r"^/(api|media)/.*$"
 # The studio reads Retry-After to tell customers how long to wait.
 CORS_EXPOSE_HEADERS = ["Retry-After"]
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS", "")
+if DEBUG:
+    # `npm run dev` serves the dashboard through Vite's proxy on :5173.
+    CSRF_TRUSTED_ORIGINS += ["http://localhost:5173", "http://127.0.0.1:5173"]
 
 # --- Security headers and cookies -------------------------------------------
 SECURE_CONTENT_TYPE_NOSNIFF = True

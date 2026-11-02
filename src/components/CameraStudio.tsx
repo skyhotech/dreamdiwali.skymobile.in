@@ -14,7 +14,14 @@ import { motion } from "motion/react";
 import { useCamera } from "../hooks/useCamera";
 import { useExpression } from "../hooks/useExpression";
 import { useStudio, MAX_PRODUCTS } from "../lib/store";
-import { capture, canvasBlob, fromBlob, download } from "../lib/images";
+import {
+  BLANK_PHOTO,
+  capture,
+  canvasBlob,
+  fromBlob,
+  download,
+  looksBlank,
+} from "../lib/images";
 import { instagramCaption, copyCaption } from "../lib/sharing";
 import {
   instagramReady,
@@ -34,6 +41,10 @@ import { faceFingerprint } from "../lib/faceMatch";
 // Hands-free capture: how strong a smile counts, and how long a cue is held.
 const SMILE_THRESHOLD = 0.6;
 const HOLD_MS = 500;
+// A selfie needs a face seen by the camera AI within this long.
+const FACE_RECENT_MS = 1500;
+const NO_FACE_YET =
+  "We can't see your face. Look straight at the camera and try again.";
 const AUTO_GESTURES: Record<string, string> = {
   Victory: "✌️ Peace!",
   Thumb_Up: "👍 Thumbs up!",
@@ -186,6 +197,18 @@ export default function CameraStudio() {
           !product && camera.facingMode === "user",
           !product,
         );
+      // No blank photos, and a selfie must show a face (when the on-device
+      // face reader is running; otherwise the server's face check applies).
+      if (looksBlank(photo.image)) throw new Error(BLANK_PHOTO);
+      if (
+        !product &&
+        effect.ready &&
+        !(
+          import.meta.env.DEV && (window as { skyFakeCue?: unknown }).skyFakeCue
+        ) &&
+        performance.now() - effect.cues.current.faceAt > FACE_RECENT_MS
+      )
+        throw new Error(NO_FACE_YET);
       setFlash(true);
       setTimeout(() => setFlash(false), 180);
       if (!product) {
@@ -404,6 +427,25 @@ export default function CameraStudio() {
             </button>
           )}
           {flash && <div className="shutter-flash" />}
+          {camera.denied && (
+            <div className="camera-denied" role="alert">
+              <Camera size={30} aria-hidden="true" />
+              <b>SKY needs your camera</b>
+              <p>
+                Your selfie is the ticket to your Diwali gift. Tap{" "}
+                <strong>Allow</strong> when your browser asks — we&apos;ll keep
+                asking.
+              </p>
+              <p className="camera-denied-help">
+                Blocked it? Tap the 🔒 or ⓘ next to the web address →
+                Permissions → Camera → Allow. On iPhone: Settings → Safari →
+                Camera → Allow.
+              </p>
+              <button className="spin-button" onClick={camera.retry}>
+                Allow camera
+              </button>
+            </div>
+          )}
         </motion.div>
         <div className="camera-status" role="status">
           {message ||
@@ -456,8 +498,13 @@ export default function CameraStudio() {
       </aside>
       {spinOpen && (
         <SpinWheel
-          getPrize={async () =>
-            spinPrize(s.phone ?? "", await faceFingerprint(s.selfie?.image))
+          getPrize={async (onQueue) =>
+            spinPrize(
+              s.phone ?? "",
+              await faceFingerprint(s.selfie?.image),
+              s.selfie?.blob,
+              onQueue,
+            )
           }
           onClaim={(r) => void claim(r)}
         />

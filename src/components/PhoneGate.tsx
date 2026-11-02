@@ -1,8 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, ShieldCheck } from "lucide-react";
 import skyLogo from "../assets/brand/sky.webp";
 import { AnimatePresence, motion, useAnimationControls } from "motion/react";
-import { PHONE_PATTERN, registerPhone } from "../lib/backend";
+import {
+  BRANCH,
+  PHONE_PATTERN,
+  fetchBranch,
+  registerPhone,
+} from "../lib/backend";
 import { useStudio } from "../lib/store";
 import { Fireworks } from "./Fireworks";
 const PARTICLES = 18;
@@ -21,6 +26,16 @@ export function PhoneGate() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
+  // The store whose link or QR code opened the studio.
+  const [branch, setBranch] = useState<{ name?: string; error?: string }>({});
+  useEffect(() => {
+    if (!BRANCH) return;
+    let live = true;
+    void fetchBranch().then((b) => live && b && setBranch(b));
+    return () => {
+      live = false;
+    };
+  }, []);
   const shake = useAnimationControls();
   const valid = PHONE_PATTERN.test(phone);
   const fake = phone.length === 10 && !valid;
@@ -129,6 +144,16 @@ export function PhoneGate() {
           <motion.h1 variants={item} className="phone-title">
             Celebrate Diwali with SKY
           </motion.h1>
+          {branch.name && (
+            <motion.p variants={item} className="phone-branch">
+              📍 SKY {branch.name}
+            </motion.p>
+          )}
+          {branch.error && (
+            <motion.p variants={item} className="phone-help-error" role="alert">
+              {branch.error}
+            </motion.p>
+          )}
           <motion.p variants={item}>
             Enter your mobile number to take your selfie and spin for a gift.
           </motion.p>
@@ -182,7 +207,7 @@ export function PhoneGate() {
             variants={item}
             className="spin-button phone-continue"
             type="submit"
-            disabled={!valid || busy}
+            disabled={!valid || busy || Boolean(branch.error)}
             whileTap={{ scale: 0.96 }}
           >
             {done ? "Welcome!" : busy ? "Checking…" : "Proceed"}
