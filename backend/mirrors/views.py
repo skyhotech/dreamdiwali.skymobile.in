@@ -60,6 +60,10 @@ INACTIVE_BRANCH = (
 )
 
 
+# Purchase recorded, but no finished poster yet.
+ABANDONED = Q(poster="") & Q(spin_token__isnull=False)
+
+
 def _branch(slug, strict=True):
     """The branch a studio link points at; None without one. A link to an
     unknown or switched-off branch is refused rather than filed nowhere,
@@ -460,7 +464,9 @@ class CustomerViewSet(
         return CustomerDetailSerializer if self.action == "retrieve" else CustomerSerializer
 
     def get_queryset(self):
-        qs = Customer.objects.select_related("mirror")
+        qs = Customer.objects.select_related("mirror").prefetch_related("events")
+        if self.request.query_params.get("abandoned"):
+            qs = qs.filter(ABANDONED)
         mirror = self.request.query_params.get("mirror")
         if mirror:
             qs = qs.filter(mirror_id=mirror)
@@ -497,12 +503,14 @@ class CustomerViewSet(
         )
         writer = csv.writer(response)
         writer.writerow(["id", "phone", "name", "branch", "mirror", "reward", "same_face_as",
-                         "consent_at", "created_at", "poster_url", "selfie_url", "email",
+                         "consent_at", "created_at", "poster_url", "selfie_url", "stage", "email",
                          "product_details", "imei", "invoice_number", "bill_value",
                          "invoice_image_url"])
         rows = Customer.objects.select_related("repeat_of").order_by("created_at")
         if request.query_params.get("branch"):
             rows = rows.filter(branch_id=request.query_params["branch"])
+        if request.query_params.get("abandoned"):
+            rows = rows.filter(ABANDONED)
         for c in rows:
             writer.writerow([
                 c.pk, c.phone, c.name, c.branch_name, c.mirror_name, c.reward,
@@ -511,7 +519,7 @@ class CustomerViewSet(
                 c.created_at.isoformat(),
                 request.build_absolute_uri(c.poster.url) if c.poster else "",
                 request.build_absolute_uri(c.selfie.url) if c.selfie else "",
-                c.email, c.product_details, c.imei, c.invoice_number, c.bill_value or "",
+                c.stage, c.email, c.product_details, c.imei, c.invoice_number, c.bill_value or "",
                 request.build_absolute_uri(c.invoice_image.url) if c.invoice_image else "",
             ])
         return response
@@ -548,6 +556,7 @@ def _customer_stats(customers):
             "poster_saved": reached("poster_saved"),
             "shared": customers.filter(events__kind__in=CustomerEvent.SHARE_KINDS).distinct().count(),
         },
+        "abandoned": customers.filter(ABANDONED).count(),
         "customers": customers.count(),
         "customers_today": customers.filter(created_at__gte=today).count(),
         "gifts": customers.exclude(reward="").count(),

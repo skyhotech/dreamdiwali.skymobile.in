@@ -64,6 +64,14 @@ class BranchFlowTests(TestCase):
         links = [b["link"] for b in data]
         self.assertIn("https://studio.example/?branch=anna-nagar", links)
 
+    def test_abandoned_customers_show_their_stage(self):
+        self.spin(self.token(self.check()))
+        Customer.objects.create(phone="9845022222", session="done", spin_token="t", poster="p.jpg")
+        self.client.force_login(self.staff)
+        rows = self.client.get("/api/admin/customers/?abandoned=1").json()["results"]
+        self.assertEqual([(c["phone"], c["stage"]) for c in rows], [("9845011111", "spun")])
+        self.assertEqual(self.client.get("/api/admin/stats/").json()["abandoned"], 1)
+
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)
         self.assertTrue(Branch.objects.filter(slug="thiruvannamalai-1").exists())

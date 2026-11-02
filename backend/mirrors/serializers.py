@@ -108,6 +108,7 @@ class CustomerSerializer(serializers.ModelSerializer):
     mirror_slug = serializers.CharField(source="mirror.slug", read_only=True, default=None)
     has_face = serializers.SerializerMethodField()
     repeat_of_phone = serializers.CharField(source="repeat_of.phone", read_only=True, default=None)
+    stage = serializers.CharField(read_only=True)
 
     def get_has_face(self, obj):
         return bool(obj.face)
@@ -120,7 +121,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             "consent_at", "has_face", "repeat_of", "repeat_of_phone",
             "poster_thumb", "selfie_thumb", "branch", "branch_name",
             "email", "product_details", "imei", "invoice_number", "bill_value",
-            "invoice_image", "blur_score", "link_version",
+            "invoice_image", "blur_score", "link_version", "stage",
         ]
         read_only_fields = fields
 

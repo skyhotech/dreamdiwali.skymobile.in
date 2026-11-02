@@ -198,6 +198,18 @@ class Customer(models.Model):
     def __str__(self):
         return self.name or self.phone or f"Customer #{self.pk}"
 
+    @property
+    def stage(self):
+        """How far this customer got; anything but "completed" is abandoned."""
+        if self.poster:
+            return "completed"
+        if self.reward:
+            return "spun"
+        kinds = {e.kind for e in self.events.all()}
+        if "link_opened" in kinds:
+            return "link_opened"
+        return "whatsapp_sent" if "whatsapp_sent" in kinds else "checked"
+
 
 class CustomerEvent(models.Model):
     """One step of a purchase's journey, for the admin timeline. Failed checks

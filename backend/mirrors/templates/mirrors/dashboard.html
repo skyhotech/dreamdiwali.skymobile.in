@@ -316,6 +316,7 @@
       <div class="toolbar">
         <h2>Customers</h2>
         <div class="row">
+          <select id="c-status"><option value="">All customers</option><option value="1">Abandoned</option></select>
           <input id="c-q" placeholder="Search name, phone, IMEI or invoice">
           <a class="btn" href="/api/admin/customers/export/" download>Export CSV</a>
           <select id="c-branch"><option value="">All branches</option></select>
@@ -397,7 +398,7 @@
     $("#nav-customers").textContent = s.customers;
     $("#s-bars").innerHTML = bars(s.per_day);
     $("#s-top").innerHTML = rankRows(s.top_mirrors, "No selfies yet.");
-    $("#s-funnel").innerHTML = funnelRows(s.funnel) + `<div class="row" style="justify-content:space-between;padding:6px 0"><span>Failed checks</span><b>${s.failed_checks}</b></div>`;
+    $("#s-funnel").innerHTML = funnelRows(s.funnel) + `<div class="row" style="justify-content:space-between;padding:6px 0"><span>Failed checks</span><b>${s.failed_checks}</b></div><div class="row" style="justify-content:space-between;padding:6px 0"><span>Abandoned</span><b>${s.abandoned}</b></div>`;
     $("#s-branch-top").innerHTML = s.top_branches.length
       ? s.top_branches.map((b) => `<a href="#branches/${b.id}" class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);color:inherit;text-decoration:none"><span>📍 ${esc(b.name)}</span><b>${b.n}</b></a>`).join("")
       : `<p class="hint">No branches yet. <a href="#branches">Add your first branch</a>.</p>`;
@@ -595,6 +596,7 @@
     document.body.appendChild(d);
     d.showModal();
   }
+  const STAGES = { checked: "link not sent", whatsapp_sent: "link not opened", link_opened: "not spun", spun: "no poster" };
   const rewardLabel = (id) => id.split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
   function customerCard(c) {
     const el = document.createElement("div");
@@ -606,6 +608,7 @@
       <div class="info"><b>${esc(c.name || "Guest #" + c.id)}</b>
         ${c.reward ? `<span class="pill">🎁 ${esc(rewardLabel(c.reward))}</span>` : ""}
         ${c.repeat_of_phone ? `<span class="pill warn" title="Same face as an earlier customer; no second gift">⚠ Same face as ${esc(c.repeat_of_phone)}</span>` : ""}
+        ${c.stage !== "completed" && c.imei ? `<span class="pill warn">Stopped at: ${esc(STAGES[c.stage] || c.stage)}</span>` : ""}
         ${c.branch_name ? `<span class="tag">📍 ${esc(c.branch_name)}</span>` : ""}
         <small>${esc(c.mirror_name || "—")}${c.phone ? " · " + esc(c.phone) : ""}</small>
         ${c.imei ? `<small>${esc(c.product_details)} · IMEI ${esc(c.imei)}</small><small>Invoice ${esc(c.invoice_number)} · ₹${esc(c.bill_value)}</small>` : ""}
@@ -637,6 +640,7 @@
     if ($("#c-q").value.trim()) params.set("q", $("#c-q").value.trim());
     if ($("#c-mirror").value) params.set("mirror", $("#c-mirror").value);
     if ($("#c-branch").value) params.set("branch", $("#c-branch").value);
+    if ($("#c-status").value) params.set("abandoned", "1");
     const data = await api("customers/?" + params);
     $("#nav-customers").textContent = data.count;
     const grid = $("#c-grid");
@@ -645,6 +649,7 @@
     $("#c-more").hidden = !data.next;
   }
   $("#c-more").addEventListener("click", () => { cPage++; loadCustomers(false).catch((e) => toast(e.message, true)); });
+  $("#c-status").addEventListener("change", () => loadCustomers(true).catch((e) => toast(e.message, true)));
   $("#c-mirror").addEventListener("change", () => loadCustomers(true).catch((e) => toast(e.message, true)));
   $("#c-branch").addEventListener("change", () => loadCustomers(true).catch((e) => toast(e.message, true)));
   $("#c-q").addEventListener("input", () => { clearTimeout(cTimer); cTimer = setTimeout(() => loadCustomers(true).catch((e) => toast(e.message, true)), 300); });
