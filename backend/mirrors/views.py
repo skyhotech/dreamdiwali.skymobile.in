@@ -565,6 +565,43 @@ def _customer_stats(customers):
 
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
+def database_backup(request):
+    """The whole database (every table and row) as a .sql file, streamed."""
+    import os
+    import subprocess
+
+    from django.db import connection
+
+    db = settings.DATABASES["default"]
+    name = f"sky-database-{timezone.localtime():%Y%m%d-%H%M}.sql"
+    if connection.vendor == "mysql":
+        proc = subprocess.Popen(
+            ["mysqldump", "--single-transaction", "--quick", "--no-tablespaces",
+             "--routines", "-h", db["HOST"] or "127.0.0.1", "-P", str(db["PORT"] or 3306),
+             "-u", db["USER"], db["NAME"]],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            env={**os.environ, "MYSQL_PWD": db["PASSWORD"]},  # never on the command line
+        )
+
+        def chunks():
+            try:
+                yield from iter(lambda: proc.stdout.read(64 * 1024), b"")
+            finally:
+                proc.stdout.close()
+                proc.wait()
+
+        body = chunks()
+    else:
+        connection.ensure_connection()
+        body = (line + "\n" for line in connection.connection.iterdump())
+    response = StreamingHttpResponse(body, content_type="application/sql")
+    response["Content-Disposition"] = f'attachment; filename="{name}"'
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
 def stats(request):
     data = _customer_stats(Customer.objects.all())
     data.update(

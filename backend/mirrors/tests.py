@@ -182,3 +182,13 @@ class BranchFlowTests(TestCase):
 
     def test_branch_admin_needs_staff(self):
         self.assertEqual(self.client.get("/api/admin/branches/").status_code, 403)
+
+    def test_database_download_is_staff_only_sql(self):
+        self.check()
+        self.assertEqual(self.client.get("/api/admin/backup.sql").status_code, 403)
+        self.client.force_login(self.staff)
+        res = self.client.get("/api/admin/backup.sql")
+        self.assertIn(".sql", res["Content-Disposition"])
+        sql = b"".join(res.streaming_content).decode()
+        self.assertIn("CREATE TABLE", sql)
+        self.assertIn("9845011111", sql)
