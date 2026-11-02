@@ -15,6 +15,13 @@ IMEI = "490154203237518"
 OTHER_IMEI = "356938035643809"
 
 
+def bill_text(phone, imei, invoice=None, name="Asha", product="Phone 15"):
+    return (
+        f"Invoice No : {invoice or 'INV-' + imei}\nBilled To,\n{name}\nPh: {phone}\n"
+        f"{product}\nIMEI NO: {imei}\nNet Total 1 24,999.00\n"
+    )
+
+
 def jpeg(name="selfie.jpg"):
     out = io.BytesIO()
     Image.new("RGB", (640, 800), (180, 120, 90)).save(out, "JPEG")
@@ -38,7 +45,7 @@ class BranchFlowTests(TestCase):
             "name": "Asha", "phone": phone, "product_details": "Phone 15", "imei": imei,
             "invoice_number": f"INV-{imei}", "bill_value": "24999.00",
             "branch": "anna-nagar", "invoice_image": jpeg("invoice.jpg"), "blur_score": 200,
-            "ocr_text": f"Bill INV-{imei} IMEI {imei} Total 24,999.00", **extra,
+            "ocr_text": bill_text(phone, imei), **extra,
         }
         return self.client.post("/api/manager/check/", body)
 
@@ -65,30 +72,32 @@ class BranchFlowTests(TestCase):
         self.assertTrue(c.invoice_image)
 
     def test_invoice_text_must_match_and_failures_are_tracked(self):
-        res = self.check(ocr_text="Invoice IMEI Total 100.00")
+        res = self.check(ocr_text="Invoice No : X123\nBilled To,\nAsha\nNet Total 100.00")
         self.assertEqual(res.status_code, 400)
         self.assertIn("invoice number", res.json()["invoice_image"][0])
         self.assertEqual(CustomerEvent.objects.get().kind, "check_failed")
 
     def test_labelled_invoice_number_must_match_exactly(self):
-        text = f"Invoice No : SI2627VLR31054 Invoice Date : 31/10/2026 IMEI NO: {IMEI}"
+        text = bill_text("9845011111", IMEI, "SI2627VLR31054")
         ok = self.check(invoice_number="SI2627VLR31054", ocr_text=text)
         self.assertEqual(ok.status_code, 200)
-        bad = self.check("9845022222", OTHER_IMEI, invoice_number="SI2627VLR31055", ocr_text=text)
+        bad = self.check(invoice_number="SI2627VLR31055", ocr_text=text)
         self.assertEqual(bad.status_code, 400)
 
     def test_tv_serial_is_read_from_the_imei_label(self):
-        text = "Invoice No : SI2627VLR31054\nIMEI NO: P-12568801-D\n"
+        text = bill_text("9845011111", "P-12568801-D", "SI2627VLR31054")
         res = self.check(imei="P-12568801-D", invoice_number="SI2627VLR31054", ocr_text=text)
         self.assertEqual(res.status_code, 200)
 
     def test_scanner_letter_mixups_still_match(self):
-        res = self.check(ocr_text=f"lNV-{IMEI.replace('0', 'O')}")
+        res = self.check(ocr_text=bill_text("9845011111", IMEI, f"lNV-{IMEI.replace('0', 'O')}"))
         self.assertEqual(res.status_code, 200)
 
     def test_changed_details_replace_the_link(self):
         first = self.token(self.check())
-        second = self.token(self.check(bill_value="24999.00", product_details="Phone 16"))
+        second = self.token(self.check(
+            product_details="Phone 16", ocr_text=bill_text("9845011111", IMEI, product="Phone 16")
+        ))
         self.assertNotEqual(first, second)
         self.assertEqual(self.spin(first).status_code, 404)
         self.assertEqual(Customer.objects.get().link_version, 2)
@@ -121,7 +130,7 @@ class BranchFlowTests(TestCase):
         self.assertIn("IMEI", self.check("9845022222").json()["imei"][0])
         res = self.check(
             "9845022222", OTHER_IMEI, invoice_number=f"INV-{IMEI}",
-            ocr_text=f"INV-{IMEI} {OTHER_IMEI} 24999.00",
+            ocr_text=bill_text("9845022222", OTHER_IMEI, f"INV-{IMEI}"),
         )
         self.assertIn("invoice", res.json()["invoice_number"][0])
 
@@ -131,7 +140,7 @@ class BranchFlowTests(TestCase):
 
     def test_correction_before_spin_updates_the_same_customer(self):
         self.check()
-        self.check(name="Asha K")
+        self.check(name="Asha K", ocr_text=bill_text("9845011111", IMEI, name="Asha K"))
         self.assertEqual(Customer.objects.get().name, "Asha K")
 
     def test_no_second_entry_after_spinning(self):

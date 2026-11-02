@@ -1,22 +1,37 @@
 import { expect, test } from "vitest";
 import { invoiceMissing, sharpness } from "./invoiceScan";
-const BILL =
-  "TAX INVOICE\nInvoice No : SI2627VLR31054 Invoice Date : 31/10/2026\nSONY LED TV\nIMEI NO: P-12568801-D\nTotal 64,000.00";
-const SERIAL = "P-12568801-D";
-test("values are read from their labels, whatever they are", () => {
-  expect(invoiceMissing(BILL, SERIAL, "SI2627VLR31054")).toEqual([]);
-  expect(invoiceMissing(BILL, "p12568801d", "si2627vlr31054")).toEqual([]);
-  const other = BILL.replace("SI2627VLR31054", "AB/99-77").replace(SERIAL, "490154203237518");
-  expect(invoiceMissing(other, "490154203237518", "AB/99-77")).toEqual([]);
+const BILL = `SKY WORLD
+VELAPADI,VELLORE-632001 Ph: 8754740002
+Invoice No : SI2627VLR31054 Invoice Date : 31/10/2026
+Billed To, Shipped To,
+M MAHENDRAN M MAHENDRAN
+Ph: 9787372973 Ph: 9787372973
+SONY:LED TV:SONY (KD - 65X82L) 65INCH LED TV
+IMEI NO: P-12568801-D
+Total 64,000.00
+Round Off(-) 0.01
+Net Total 1 64,000.00
+Total 4,881.36 4,881.36 9,762.71`;
+const OK = {
+  name: "M Mahendran",
+  phone: "9787372973",
+  product: "SONY (KD - 65X82L)",
+  imei: "P-12568801-D",
+  invoice: "SI2627VLR31054",
+  bill: "64000",
+};
+test("every field is read from its place on the bill", () => {
+  expect(invoiceMissing(BILL, OK)).toEqual([]);
 });
-test("a value that differs from the label is named", () => {
-  expect(invoiceMissing(BILL, SERIAL, "SI2627VLR31055")).toEqual(["invoice number"]);
-  expect(invoiceMissing(BILL, "P-12568802-D", "SI2627VLR31054")).toEqual(["IMEI"]);
-});
-test("any listed IMEI counts, and no label falls back to the page", () => {
-  const two = "IMEI 1: 490154203237518\nIMEI 2: 356938035643809";
-  expect(invoiceMissing(two + " INV-77", "356938035643809", "INV-77")).toEqual([]);
-  expect(invoiceMissing("Total 100", "Q7Q7", "Q7")).toEqual(["invoice number", "IMEI"]);
+test.each([
+  ["name", "Ravi", "customer name"],
+  ["phone", "8754740002", "contact number"],
+  ["product", "iPhone 15", "product details"],
+  ["imei", "P-12568802-D", "IMEI"],
+  ["invoice", "SI2627VLR31055", "invoice number"],
+  ["bill", "9762.71", "bill value"],
+])("a wrong %s is named", (field, value, label) => {
+  expect(invoiceMissing(BILL, { ...OK, [field]: value })).toEqual([label]);
 });
 test("a flat image has no sharpness and hard edges have plenty", () => {
   const flat = new Float32Array(100).fill(128);

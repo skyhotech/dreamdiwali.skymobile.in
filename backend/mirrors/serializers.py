@@ -2,6 +2,7 @@ from django.conf import settings
 from rest_framework import serializers
 
 import re
+from decimal import Decimal
 
 from .models import Branch, Customer, CustomerEvent, Mirror, validate_rect
 
@@ -214,15 +215,36 @@ def _printed(text, labelled, typed):
     return len(want) >= 4 and want in _compact(text)
 
 
-def invoice_missing(text, imei, invoice_number):
-    """Which typed details don't match the invoice. Values are read by their
-    location after the label, so any number or format works. Kept in sync with
-    invoiceMissing in src/lib/invoiceScan.ts."""
+def _bill_amount(text):
+    """The Amount column of the Net Total row: the last figure on that line."""
+    row = re.search(r"net\s*total[^\n]*", text, re.I) or re.search(
+        r"^(?!.*tax).*\btotal\b[^\n]*", text, re.I | re.M
+    )
+    figures = re.findall(r"\d[\d,]*\.\d{2}|\d[\d,]*", row[0]) if row else []
+    return Decimal(figures[-1].replace(",", "")) if figures else None
+
+
+def invoice_missing(text, data):
+    """Which typed details don't match the invoice. Each is read from its place
+    on the bill, so any value or format works. Kept in sync with invoiceMissing
+    in src/lib/invoiceScan.ts."""
     missing = []
-    if not _printed(text, _INVOICE_LABEL.findall(text)[:1], invoice_number):
-        missing.append("invoice number")
-    if not _printed(text, _IMEI_LABEL.findall(text), imei):
+    at = re.search(r"billed\s*to", text, re.I)
+    billed = text[at.start():] if at else text
+    name_line = next((l for l in billed.split("\n")[1:] if l.strip()), text)
+    if _compact(data["name"]) not in _compact(name_line):
+        missing.append("customer name")
+    phone = re.search(r"ph\w*\s*[.:;\-]*\s*((?:\+?91)?\d{10})", billed, re.I)
+    if not (phone[1].endswith(data["phone"]) if phone else data["phone"] in text):
+        missing.append("contact number")
+    if _compact(data["product_details"]) not in _compact(text):
+        missing.append("product details")
+    if not _printed(text, _IMEI_LABEL.findall(text), data["imei"]):
         missing.append("IMEI")
+    if not _printed(text, _INVOICE_LABEL.findall(text)[:1], data["invoice_number"]):
+        missing.append("invoice number")
+    if _bill_amount(text) != data["bill_value"]:
+        missing.append("bill value")
     return missing
 
 
@@ -245,7 +267,7 @@ class CustomerIntakeSerializer(serializers.Serializer):
     blur_score = serializers.FloatField(min_value=0)
 
     def validate(self, data):
-        missing = invoice_missing(data["ocr_text"], data["imei"], data["invoice_number"])
+        missing = invoice_missing(data["ocr_text"], data)
         if missing:
             raise serializers.ValidationError(
                 {"invoice_image": [f"Invoice does not show this {' or '.join(missing)}."]}

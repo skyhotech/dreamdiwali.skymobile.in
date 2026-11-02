@@ -114,7 +114,14 @@ export function ManagerIntake() {
       // The full-size photo is read, since compressing would cost accuracy.
       setStage("Scanning invoice…");
       const { text, sharpness } = await readInvoice(image!);
-      const missing = invoiceMissing(text, form.imei, form.invoice);
+      const missing = invoiceMissing(text, {
+        name: form.name,
+        phone: form.phone,
+        product: form.product,
+        imei: form.imei,
+        invoice: form.invoice,
+        bill: form.bill,
+      });
       if (missing.length) {
         fail(`${MISMATCH}: Invoice does not show this ${missing.join(" or ")}.`);
         return;
@@ -286,7 +293,13 @@ export function ManagerIntake() {
                     {b.name}
                   </li>
                 ))}
-                {!matches.length && <li>No branch found</li>}
+                {!matches.length && (
+                  <li>
+                    {branches?.length
+                      ? "No branch found"
+                      : "No branches yet. Add them in the admin dashboard."}
+                  </li>
+                )}
               </ul>
             )}
           </div>

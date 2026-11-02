@@ -63,7 +63,8 @@ function Studio() {
   }, []);
   if (!hydrated)
     return <div className="loading">Opening your saved studio…</div>;
-  const signedIn = phone && token;
+  // Only the link itself opens a customer; the main page is always the form.
+  const signedIn = phone && token && token === SPIN_TOKEN;
   if (!signedIn)
     return (
       <MotionConfig reducedMotion="user">
