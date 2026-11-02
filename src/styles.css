@@ -3350,3 +3350,10 @@ body {
     animation: none !important;
   }
 }
+/* Diwali crackers behind the sign-in card. */
+.phone-fireworks {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}

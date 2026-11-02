@@ -4,6 +4,7 @@ import skyLogo from "../assets/brand/sky.webp";
 import { AnimatePresence, motion, useAnimationControls } from "motion/react";
 import { PHONE_PATTERN, registerPhone } from "../lib/backend";
 import { useStudio } from "../lib/store";
+import { Fireworks } from "./Fireworks";
 const PARTICLES = 18;
 const item = {
   hidden: { opacity: 0, y: 18 },
@@ -72,6 +73,7 @@ export function PhoneGate() {
       <div className="phone-bg" aria-hidden="true">
         <div className="phone-glow" />
         <div className="phone-mandala" />
+        <Fireworks />
         {particles.map((p, i) => (
           <span
             key={i}
