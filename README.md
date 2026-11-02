@@ -1,3 +1,12 @@
+# Production
+
+Live site: https://dreamdiwali.skymobile.in. Pushing to `main` runs CI, then deploys to the VPS.
+
+1. Point the domain's DNS A record at the VPS.
+2. As root on a fresh Ubuntu VPS: `bash deploy/vps/bootstrap.sh`, then fill in `/etc/skymirror/.env`.
+3. Add repo secrets `VPS_HOST`, `VPS_SSH_KEY` and `VPS_KNOWN_HOSTS`.
+4. After the first deploy: `skymirror-manage createsuperuser`.
+
 # SKY Diwali Selfie Studio
 
 A mobile-first, browser-only Diwali poster camera for **SKY Mobile & Electronics**. Customers take a selfie, capture their actual purchase in the poster’s small product card, and share the completed poster with a generated SKY Instagram caption.

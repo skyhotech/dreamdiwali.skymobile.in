@@ -268,7 +268,7 @@ export default function Editor() {
       {wheelOpen && (
         <SpinWheel
           getPrize={({ onQueue }) =>
-            spinPrize(s.phone ?? "", s.selfie?.blob, onQueue)
+            spinPrize(s.token ?? "", onQueue)
           }
           onClaim={(r) => {
             s.setReward(r.id);

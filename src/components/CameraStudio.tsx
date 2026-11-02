@@ -33,10 +33,8 @@ import { frameAsset } from "../lib/frameAssets";
 import { getTemplate, templates } from "../templates";
 import { Poster } from "./Poster";
 import { Templates } from "./Templates";
-import { SpinWheel } from "./SpinWheel";
 import { UploadStatus } from "./StatusNotices";
-import type { Reward } from "../lib/rewards";
-import { spinPrize } from "../lib/backend";
+import { ShareButtons } from "./ShareButtons";
 // Hands-free capture: how strong a smile counts, and how long a cue is held.
 const SMILE_THRESHOLD = 0.6;
 const HOLD_MS = 500;
@@ -58,8 +56,7 @@ export default function CameraStudio() {
     [flash, setFlash] = useState(false),
     [completed, setCompleted] = useState(false),
     [poster, setPoster] = useState<Blob | null>(null),
-    [captionMessage, setCaptionMessage] = useState(""),
-    [spinOpen, setSpinOpen] = useState(false);
+    [captionMessage, setCaptionMessage] = useState("");
   const busyRef = useRef(false);
   const camera = useCamera(
     product ? "environment" : "user",
@@ -222,26 +219,6 @@ export default function CameraStudio() {
       s.addProduct(photo);
       camera.stop();
       setCompleted(true);
-      // First product unlocks the prize wheel; its result goes on the poster.
-      if (!useStudio.getState().reward) {
-        setSpinOpen(true);
-        setMessage("Spin the wheel for your free gift!");
-        return;
-      }
-      await publish();
-    } catch (e) {
-      setMessage((e as Error).message);
-    } finally {
-      busyRef.current = false;
-      setBusy(false);
-    }
-  }
-  async function claim(reward: Reward) {
-    s.setReward(reward.id);
-    setSpinOpen(false);
-    busyRef.current = true;
-    setBusy(true);
-    try {
       await publish();
     } catch (e) {
       setMessage((e as Error).message);
@@ -503,16 +480,15 @@ export default function CameraStudio() {
           </div>
         )}
       </aside>
-      {spinOpen && (
-        <SpinWheel
-          getPrize={({ onQueue }) =>
-            spinPrize(s.phone ?? "", s.selfie?.blob, onQueue)
-          }
-          onClaim={(r) => void claim(r)}
-        />
-      )}
       {completed && (
         <section className="inline-caption-panel">
+          {poster && (
+            <ShareButtons
+              poster={poster}
+              caption={caption}
+              filename={`${filename}.jpg`}
+            />
+          )}
           <label htmlFor="inline-sky-caption">Your SKY Instagram caption</label>
           <textarea
             id="inline-sky-caption"

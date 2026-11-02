@@ -1,19 +1,11 @@
 import { replaceTemplates, type Template } from "../templates";
 
 // Same-origin by default (Vite proxies /api in dev); set VITE_API_URL otherwise.
-// The Vercel-hosted studio talks to the VPS API (a public URL, not a secret).
-const VPS_API = "https://222.167.207.123";
-const onVercel =
-  typeof location !== "undefined" && location.hostname.endsWith(".vercel.app");
 /** Backend origin; empty when the studio and API share one site. */
-export const API_ORIGIN = (
-  import.meta.env.VITE_API_URL ?? (onVercel ? VPS_API : "")
-).replace(/\/$/, "");
+export const API_ORIGIN = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 const API = API_ORIGIN + "/api";
-/** Where /media files load from. On Vercel they go through its CDN (see
- *  vercel.json), so each image leaves the VPS once and loads from nearby. */
-export const MEDIA_ORIGIN =
-  onVercel && !import.meta.env.VITE_API_URL ? "" : API_ORIGIN;
+/** Where /media files load from. */
+export const MEDIA_ORIGIN = API_ORIGIN;
 // Fallback when the event stream is unavailable (e.g. a proxy that buffers it).
 export const POLL_MS = 1000;
 
@@ -133,31 +125,21 @@ export const BRANCH: string = (() => {
     return "";
   }
 })();
-/** Name of the branch for this link, or an error if the link is switched off. */
-export async function fetchBranch(): Promise<
-  { name: string } | { error: string } | null
-> {
-  if (!BRANCH) return null;
-  try {
-    const res = await fetch(`${API}/branches/${encodeURIComponent(BRANCH)}/`, {
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    const data = (await res.json()) as { name?: string; detail?: string };
-    if (res.ok && data.name) return { name: data.name };
-    if (res.status === 404) return { error: data.detail ?? ERRORS.unreachable };
-  } catch {
-    // Offline: sign-in reports it; the branch name is only decoration.
-  }
-  return null;
-}
-async function postJson<T>(path: string, body: unknown): Promise<T> {
+async function postJson<T>(
+  path: string,
+  body: unknown,
+  headers?: Record<string, string>,
+): Promise<T> {
   if (!navigator.onLine) throw new ApiError(ERRORS.offline);
   let res: Response;
   try {
     const form = body instanceof FormData;
     res = await fetch(`${API}${path}`, {
       method: "POST",
-      headers: form ? undefined : { "Content-Type": "application/json" },
+      headers: {
+        ...(form ? undefined : { "Content-Type": "application/json" }),
+        ...headers,
+      },
       body: form ? body : JSON.stringify(body),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS * (form ? 3 : 1)),
     });
@@ -186,37 +168,96 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   }
   return data as T;
 }
-/** Signs the customer in by mobile number; returns their prize if already spun. */
-export const registerPhone = (phone: string) =>
-  postJson<{ phone: string; reward: string | null }>("/customers/register/", {
-    phone,
-    // The sign-in screen only submits after the consent box is ticked.
-    consent: true,
-    ...(BRANCH && { branch: BRANCH }),
-  });
-export const NO_PHOTO = "Take your selfie first, then spin for your gift.";
+// The secret from the customer's WhatsApp link (?spin=…).
+export const SPIN_TOKEN =
+  typeof location === "undefined"
+    ? ""
+    : (new URLSearchParams(location.search).get("spin") ?? "");
+/** Who a WhatsApp link belongs to; their prize if they already spun. */
+export async function fetchLink(token: string) {
+  let res: Response;
+  try {
+    res = await fetch(`${API}/customers/link/${encodeURIComponent(token)}/`, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch {
+    throw new ApiError(ERRORS.unreachable);
+  }
+  const data = (await res.json().catch(() => ({}))) as {
+    phone?: string;
+    reward?: string | null;
+    detail?: string;
+  };
+  if (!res.ok || !data.phone)
+    throw new ApiError(data.detail ?? ERRORS.server, res.status);
+  return { phone: data.phone, reward: data.reward ?? null };
+}
+const managerHeaders = (key: string) => ({ "X-Manager-Key": key });
+export type BranchOption = { slug: string; name: string };
+/** Active stores for the manager page; also proves the passcode is right. */
+export async function fetchManagerBranches(key: string) {
+  let res: Response;
+  try {
+    res = await fetch(`${API}/manager/branches/`, {
+      headers: managerHeaders(key),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch {
+    throw new ApiError(ERRORS.unreachable);
+  }
+  if (res.status === 403) throw new ApiError("Wrong manager passcode.", 403);
+  if (!res.ok) throw new ApiError(ERRORS.server, res.status);
+  return (await res.json()) as BranchOption[];
+}
+/** Validates and saves the purchase; returns the customer's spin link. */
+export const checkPurchase = (key: string, form: FormData) =>
+  postJson<{ phone: string; link: string }>(
+    "/manager/check/",
+    form,
+    managerHeaders(key),
+  );
+/** Timeline entries; a lost one must never interrupt the customer. */
+export function trackSent(key: string, phone: string) {
+  void fetch(`${API}/manager/sent/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...managerHeaders(key) },
+    body: JSON.stringify({ phone }),
+    keepalive: true,
+  }).catch(() => {});
+}
+export function trackShare(token: string, target: string) {
+  void fetch(`${API}/customers/event/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, kind: `shared_${target}` }),
+    keepalive: true,
+  }).catch(() => {});
+}
+// A phone's IMEI is 15 digits passing the Luhn check. Kept in sync with
+// imei_valid in backend/mirrors/serializers.py.
+export function imeiValid(imei: string) {
+  if (!/^\d{15}$/.test(imei)) return false;
+  let total = 0;
+  for (let i = 0; i < 15; i++) {
+    const n = Number(imei[i]) * (i % 2 ? 2 : 1);
+    total += n > 9 ? n - 9 : n;
+  }
+  return total % 10 === 0;
+}
 // How long a customer may wait in the queue when SKY is busy.
 const QUEUE_LIMIT_MS = 60_000;
-/** The server picks the prize, once per mobile number and once per face.
- *  The selfie goes with it: no photo, no spin. When the server is busy the
+/** The server picks the prize, once per customer. When it is busy the
  *  customer waits in line (onQueue reports it) and the request is retried. */
 export async function spinPrize(
-  phone: string,
-  selfie: Blob | null | undefined,
+  token: string,
   onQueue?: (waiting: boolean) => void,
 ) {
-  if (!selfie) throw new ApiError(NO_PHOTO, 400);
-  const form = new FormData();
-  form.append("phone", phone);
-  // The server reads the face from it; 1280 px is plenty and uploads fast.
-  form.append("selfie", await asJpeg(selfie, 1280), "selfie.jpg");
-  if (BRANCH) form.append("branch", BRANCH);
   const started = Date.now();
   for (;;) {
     try {
       const { reward } = await postJson<{ reward: string }>(
         "/customers/spin/",
-        form,
+        { token },
       );
       onQueue?.(false);
       return reward;

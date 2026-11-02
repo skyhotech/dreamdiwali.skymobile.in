@@ -7,10 +7,10 @@ from datetime import timedelta
 from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.views import LoginView
-from django.db import close_old_connections, transaction
+from django.db import IntegrityError, close_old_connections, transaction
 from django.core.cache import cache
 from django.http import JsonResponse, StreamingHttpResponse
-from django.db.models import Count, Max
+from django.db.models import Count, Max, Q
 from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -18,20 +18,23 @@ from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.permissions import AllowAny, BasePermission, IsAdminUser
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .images import POSTER_SIZE, SELFIE_SIZE, THUMB_SIZE, compressed_photo, optimized
-from .models import REWARD_IDS, Branch, Customer, Mirror
+from .models import REWARD_IDS, Branch, Customer, CustomerEvent, Mirror
 from .serializers import (
     BranchSerializer,
     PublicBranchSerializer,
     branch_link,
+    spin_link,
+    CustomerDetailSerializer,
+    CustomerIntakeSerializer,
+    EventSerializer,
     CustomerSerializer,
     CustomerUploadSerializer,
-    RegisterSerializer,
     SpinSerializer,
     MirrorSerializer,
     PublicMirrorSerializer,
@@ -40,7 +43,7 @@ from .throttles import (
     client_ip,
     CustomerRegisterThrottle,
     CustomerSpinThrottle,
-    PhoneThrottle,
+    ManagerThrottle,
     CustomerUploadThrottle,
     MirrorPollThrottle,
     MirrorVersionThrottle,
@@ -49,6 +52,8 @@ from .throttles import (
 # Photo compression is CPU-bound; one at a time per server process.
 _IMAGE_WORK = threading.BoundedSemaphore(1)
 IMAGE_WAIT_SECONDS = 25
+
+INVALID_LINK = "This gift link isn't valid. Please ask the SKY team for a new one."
 
 INACTIVE_BRANCH = (
     "This store link is no longer active. Please ask the SKY team for the current QR code."
@@ -68,6 +73,12 @@ def _branch(slug, strict=True):
     if branch is None:
         raise ValidationError({"branch": [INACTIVE_BRANCH]})
     return branch
+
+
+def _log(customer, kind, **detail):
+    CustomerEvent.objects.create(
+        customer=customer, phone=customer.phone, kind=kind, detail=detail
+    )
 
 
 def _file_under(customer, branch):
@@ -223,92 +234,188 @@ class CustomerUpload(APIView):
             _file_under(customer, branch)
             if data.get("name"):
                 customer.name = data["name"]
-            # The first prize is final; later uploads can't change it.
-            if data.get("reward") in REWARD_IDS and not customer.reward:
-                customer.reward = data["reward"]
             customer.save()
         for name in replaced:
             if name:
                 customer.poster.storage.delete(name)
+        _log(customer, "poster_saved", mirror=customer.mirror_name)
         return Response(
             {"id": customer.pk},
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
 
-class CustomerRegister(APIView):
-    """Sign-in by mobile number. Returns the customer's prize if they already spun."""
+class CustomerLink(APIView):
+    """Who a WhatsApp link belongs to, and their prize if they already spun."""
 
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [CustomerRegisterThrottle, PhoneThrottle]
+    throttle_classes = [CustomerRegisterThrottle]
 
-    def post(self, request):
-        ser = RegisterSerializer(data=request.data)
-        ser.is_valid(raise_exception=True)
-        phone = ser.validated_data["phone"]
-        branch = _branch(ser.validated_data.get("branch"))
-        customer, created = Customer.objects.get_or_create(
-            phone=phone, defaults={"session": f"phone-{phone}"}
-        )
-        changed = _file_under(customer, branch)
-        if not customer.consent_at:
-            customer.consent_at = timezone.now()
-            changed.append("consent_at")
-        if changed:
-            customer.save(update_fields=[*changed, "updated_at"])
-        return Response(
-            {"phone": phone, "reward": customer.reward or None, "returning": not created},
-            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
-        )
+    def get(self, request, token):
+        customer = Customer.objects.filter(spin_token=token).first()
+        if customer is None:
+            return Response({"detail": INVALID_LINK}, status=status.HTTP_404_NOT_FOUND)
+        _log(customer, "link_opened", version=customer.link_version)
+        return Response({"phone": customer.phone, "reward": customer.reward or None})
 
 
 class CustomerSpin(APIView):
-    """Picks the prize on the server, once per mobile number. The selfie comes
-    with it: no photo, no spin."""
+    """Picks the prize on the server, once per customer. Only the token from
+    the WhatsApp link can spin; the selfie comes after the prize."""
 
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [CustomerSpinThrottle, PhoneThrottle]
-    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    throttle_classes = [CustomerSpinThrottle]
 
     def post(self, request):
         ser = SpinSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
-        branch = _branch(ser.validated_data.get("branch"))
-        # No photo, no spin: the selfie is stored before the prize is drawn.
-        if not _IMAGE_WORK.acquire(timeout=IMAGE_WAIT_SECONDS):
-            return Response(
-                {"detail": "SKY is busy. Please try again in a moment."},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                headers={"Retry-After": "10"},
-            )
-        try:
-            raw = ser.validated_data["selfie"]
-            selfie = compressed_photo(raw, SELFIE_SIZE) or raw
-            selfie_thumb = optimized(selfie, THUMB_SIZE, 78) or ""
-        finally:
-            _IMAGE_WORK.release()
         with transaction.atomic():
             customer = (
                 Customer.objects.select_for_update()
-                .filter(phone=ser.validated_data["phone"], consent_at__isnull=False)
+                .filter(spin_token=ser.validated_data["token"])
                 .first()
             )
             if customer is None:
-                return Response({"phone": "Register this number first."}, status=400)
-            old = [f.name for f in (customer.selfie, customer.selfie_thumb) if f]
-            customer.selfie, customer.selfie_thumb = selfie, selfie_thumb
-            # Old photos are deleted only if the new ones are really saved.
-            storage = Customer.selfie.field.storage
-            transaction.on_commit(lambda: [storage.delete(name) for name in old])
-            photo_fields = ["selfie", "selfie_thumb", *_file_under(customer, branch)]
-            if customer.reward:
-                customer.save(update_fields=[*photo_fields, "updated_at"])
-                return Response({"reward": customer.reward, "repeat": bool(customer.repeat_of_id)})
-            customer.reward = secrets.choice(REWARD_IDS)
-            customer.save(update_fields=["reward", *photo_fields, "updated_at"])
-        return Response({"reward": customer.reward, "repeat": False})
+                return Response({"detail": INVALID_LINK}, status=status.HTTP_404_NOT_FOUND)
+            if not customer.reward:
+                customer.reward = secrets.choice(REWARD_IDS)
+                customer.save(update_fields=["reward", "updated_at"])
+                _log(customer, "spun", reward=customer.reward)
+        return Response({"reward": customer.reward})
+
+
+# --- Store manager API, unlocked by MANAGER_KEY ------------------------------
+
+
+class HasManagerKey(BasePermission):
+    message = "Wrong manager passcode."
+
+    def has_permission(self, request, view):
+        key = settings.MANAGER_KEY
+        sent = request.headers.get("X-Manager-Key", "")
+        return bool(key) and secrets.compare_digest(sent.encode(), key.encode())
+
+
+class ManagerBranches(APIView):
+    authentication_classes = []
+    permission_classes = [HasManagerKey]
+    throttle_classes = [ManagerThrottle]
+
+    def get(self, request):
+        branches = Branch.objects.filter(is_active=True)
+        return Response(PublicBranchSerializer(branches, many=True).data)
+
+
+class ManagerCheck(APIView):
+    """Checks a purchase and, if it holds up, saves it and returns the spin
+    link. Pressing Check again after a correction updates the same customer
+    until they have spun."""
+
+    authentication_classes = []
+    permission_classes = [HasManagerKey]
+    throttle_classes = [ManagerThrottle]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        try:
+            return self.check(request)
+        except ValidationError as exc:
+            CustomerEvent.objects.create(
+                phone=str(request.data.get("phone", ""))[:20], kind="check_failed",
+                detail={
+                    "errors": json.loads(json.dumps(exc.detail, default=str)),
+                    "branch": str(request.data.get("branch", ""))[:60],
+                },
+            )
+            raise
+
+    def check(self, request):
+        ser = CustomerIntakeSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+        branch = _branch(data["branch"])
+        try:
+            with transaction.atomic():
+                customer = Customer.objects.select_for_update().filter(phone=data["phone"]).first()
+                if customer and customer.reward:
+                    raise ValidationError({"phone": ["This customer has already claimed a gift."]})
+                others = Customer.objects.exclude(pk=customer.pk if customer else None)
+                if others.filter(imei=data["imei"]).exists():
+                    raise ValidationError({"imei": ["This IMEI is already registered."]})
+                if others.filter(branch=branch, invoice_number=data["invoice_number"]).exists():
+                    raise ValidationError(
+                        {"invoice_number": ["This invoice is already registered at this branch."]}
+                    )
+                customer = customer or Customer(
+                    phone=data["phone"], session=f"phone-{data['phone']}"
+                )
+                old = customer.invoice_image.name
+                new = customer.pk is None
+                # Changed details get a fresh link; the old one stops working.
+                changed = not new and (
+                    customer.name, customer.email, customer.product_details, customer.imei,
+                    customer.invoice_number, customer.bill_value, customer.branch_id,
+                ) != (
+                    data["name"], data.get("email", ""), data["product_details"], data["imei"],
+                    data["invoice_number"], data["bill_value"], branch.pk,
+                )
+                customer.name = data["name"]
+                customer.email = data.get("email", "")
+                customer.product_details = data["product_details"]
+                customer.imei = data["imei"]
+                customer.invoice_number = data["invoice_number"]
+                customer.bill_value = data["bill_value"]
+                customer.invoice_image = data["invoice_image"]
+                customer.branch, customer.branch_name = branch, branch.name
+                customer.consent_at = customer.consent_at or timezone.now()
+                customer.ocr_text = data["ocr_text"]
+                customer.blur_score = data["blur_score"]
+                if changed or not customer.spin_token:
+                    customer.spin_token = secrets.token_urlsafe(24)
+                    customer.link_version += 1
+                customer.save()
+                _log(customer, "checked", version=customer.link_version, link_changed=changed)
+                if old:
+                    storage = Customer.invoice_image.field.storage
+                    transaction.on_commit(lambda: storage.delete(old))
+        except IntegrityError:
+            # Two counters submitted the same purchase at the same moment.
+            raise ValidationError({"imei": ["This purchase is already registered."]})
+        return Response({"phone": customer.phone, "link": spin_link(customer.spin_token)})
+
+
+class ManagerSent(APIView):
+    """The manager opened WhatsApp with this customer's link."""
+
+    authentication_classes = []
+    permission_classes = [HasManagerKey]
+    throttle_classes = [ManagerThrottle]
+
+    def post(self, request):
+        customer = Customer.objects.filter(phone=str(request.data.get("phone", ""))).first()
+        if customer is None:
+            return Response({"detail": "Customer not found."}, status=404)
+        _log(customer, "whatsapp_sent", version=customer.link_version)
+        return Response({"ok": True})
+
+
+class CustomerEventView(APIView):
+    """Records which share button a customer pressed."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [CustomerSpinThrottle]
+
+    def post(self, request):
+        ser = EventSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        customer = Customer.objects.filter(spin_token=ser.validated_data["token"]).first()
+        if customer is None:
+            return Response({"detail": INVALID_LINK}, status=status.HTTP_404_NOT_FOUND)
+        _log(customer, ser.validated_data["kind"])
+        return Response({"ok": True})
 
 
 # --- Staff API used by /sky/mirror/admin/ -----------------------------------
@@ -363,6 +470,9 @@ class CustomerViewSet(
     permission_classes = [IsAdminUser]
     pagination_class = AdminPagination
 
+    def get_serializer_class(self):
+        return CustomerDetailSerializer if self.action == "retrieve" else CustomerSerializer
+
     def get_queryset(self):
         qs = Customer.objects.select_related("mirror")
         mirror = self.request.query_params.get("mirror")
@@ -375,11 +485,15 @@ class CustomerViewSet(
             qs = qs.filter(branch_id=branch)
         search = self.request.query_params.get("q")
         if search:
-            qs = qs.filter(name__icontains=search) | qs.filter(phone__icontains=search)
+            qs = qs.filter(
+                Q(name__icontains=search) | Q(phone__icontains=search)
+                | Q(imei__icontains=search) | Q(invoice_number__icontains=search)
+            )
         return qs
 
     def perform_destroy(self, instance):
-        for f in (instance.poster, instance.selfie, instance.poster_thumb, instance.selfie_thumb):
+        for f in (instance.poster, instance.selfie, instance.poster_thumb, instance.selfie_thumb,
+                  instance.invoice_image):
             if f:
                 f.delete(save=False)
         instance.delete()
@@ -397,7 +511,9 @@ class CustomerViewSet(
         )
         writer = csv.writer(response)
         writer.writerow(["id", "phone", "name", "branch", "mirror", "reward", "same_face_as",
-                         "consent_at", "created_at", "poster_url", "selfie_url"])
+                         "consent_at", "created_at", "poster_url", "selfie_url", "email",
+                         "product_details", "imei", "invoice_number", "bill_value",
+                         "invoice_image_url"])
         rows = Customer.objects.select_related("repeat_of").order_by("created_at")
         if request.query_params.get("branch"):
             rows = rows.filter(branch_id=request.query_params["branch"])
@@ -409,6 +525,8 @@ class CustomerViewSet(
                 c.created_at.isoformat(),
                 request.build_absolute_uri(c.poster.url) if c.poster else "",
                 request.build_absolute_uri(c.selfie.url) if c.selfie else "",
+                c.email, c.product_details, c.imei, c.invoice_number, c.bill_value or "",
+                request.build_absolute_uri(c.invoice_image.url) if c.invoice_image else "",
             ])
         return response
 
@@ -432,7 +550,18 @@ def _customer_stats(customers):
         customers.exclude(mirror_name="").values("mirror_name")
         .annotate(n=Count("id")).order_by("-n")[:5]
     )
+    def reached(kind):
+        return customers.filter(events__kind=kind).distinct().count()
+
     return {
+        "funnel": {
+            "checked": reached("checked"),
+            "whatsapp_sent": reached("whatsapp_sent"),
+            "link_opened": reached("link_opened"),
+            "spun": reached("spun"),
+            "poster_saved": reached("poster_saved"),
+            "shared": customers.filter(events__kind__in=CustomerEvent.SHARE_KINDS).distinct().count(),
+        },
         "customers": customers.count(),
         "customers_today": customers.filter(created_at__gte=today).count(),
         "gifts": customers.exclude(reward="").count(),
@@ -451,6 +580,7 @@ def stats(request):
         mirrors=Mirror.objects.count(),
         active_mirrors=Mirror.objects.filter(is_active=True).count(),
         branches=Branch.objects.count(),
+        failed_checks=CustomerEvent.objects.filter(kind="check_failed").count(),
         top_branches=list(
             Branch.objects.annotate(n=Count("customers")).order_by("-n").values("id", "name", "n")[:5]
         ),

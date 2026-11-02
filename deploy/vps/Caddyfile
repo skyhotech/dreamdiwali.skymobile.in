@@ -1,8 +1,5 @@
 # SKY Diwali API on the Ubuntu VPS, installed as /etc/caddy/Caddyfile.
-# The frontend is on Vercel; this serves only the API, dashboard and media.
-# Let's Encrypt issues short-lived (about 6 day) certificates for bare IP
-# addresses; Caddy renews them on its own. sslip.io is a fallback hostname
-# that resolves to the same IP.
+# Serves the studio, API, dashboard and media from one site.
 {
 	servers {
 		timeouts {
@@ -12,12 +9,7 @@
 	}
 }
 
-222.167.207.123, 222-167-207-123.sslip.io {
-	tls {
-		issuer acme {
-			profile shortlived
-		}
-	}
+dreamdiwali.skymobile.in {
 	encode zstd gzip
 	log {
 		output file /var/log/caddy/skymirror.log {
@@ -61,7 +53,13 @@
 	handle /media/* {
 		respond 404
 	}
-	handle {
+	@backend path /api/* /sky/*
+	handle @backend {
 		reverse_proxy 127.0.0.1:8000
+	}
+	handle {
+		root * /opt/skymirror/web
+		try_files {path} /index.html
+		file_server
 	}
 }

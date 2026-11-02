@@ -178,6 +178,7 @@
         <div class="card stat"><span>Gifts given</span><b id="s-gifts">–</b></div>
         <div class="card stat"><span>Branches</span><b id="s-branches">–</b></div>
       </div>
+      <div class="card" style="margin-bottom:14px"><b>Customer journey</b><div id="s-funnel" style="margin-top:10px"></div></div>
       <div class="grid2">
         <div class="card"><b>Selfies, last 7 days</b><div class="bars" id="s-bars"></div></div>
         <div class="card"><b>Most used mirrors</b><div id="s-top" style="margin-top:10px"></div></div>
@@ -315,7 +316,7 @@
       <div class="toolbar">
         <h2>Customers</h2>
         <div class="row">
-          <input id="c-q" placeholder="Search name or phone">
+          <input id="c-q" placeholder="Search name, phone, IMEI or invoice">
           <a class="btn" href="/api/admin/customers/export/" download>Export CSV</a>
           <select id="c-branch"><option value="">All branches</option></select>
           <select id="c-mirror"><option value="">All mirrors</option></select>
@@ -396,6 +397,7 @@
     $("#nav-customers").textContent = s.customers;
     $("#s-bars").innerHTML = bars(s.per_day);
     $("#s-top").innerHTML = rankRows(s.top_mirrors, "No selfies yet.");
+    $("#s-funnel").innerHTML = funnelRows(s.funnel) + `<div class="row" style="justify-content:space-between;padding:6px 0"><span>Failed checks</span><b>${s.failed_checks}</b></div>`;
     $("#s-branch-top").innerHTML = s.top_branches.length
       ? s.top_branches.map((b) => `<a href="#branches/${b.id}" class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);color:inherit;text-decoration:none"><span>📍 ${esc(b.name)}</span><b>${b.n}</b></a>`).join("")
       : `<p class="hint">No branches yet. <a href="#branches">Add your first branch</a>.</p>`;
@@ -572,6 +574,27 @@
   });
 
   // ---------------- Customers ----------------
+  const FUNNEL = { checked: "Purchases checked", whatsapp_sent: "WhatsApp links sent", link_opened: "Links opened", spun: "Spun the wheel", poster_saved: "Posters made", shared: "Shared" };
+  function funnelRows(f) {
+    return Object.entries(FUNNEL).map(([k, label]) => `<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><span>${label}</span><b>${f[k]}</b></div>`).join("");
+  }
+  const EVENTS = { ...FUNNEL, checked: "Purchase checked", whatsapp_sent: "WhatsApp link sent", link_opened: "Link opened", poster_saved: "Poster made", shared_instagram: "Shared: Instagram", shared_facebook: "Shared: Facebook", shared_whatsapp: "Shared: WhatsApp", shared_more: "Shared: other" };
+  async function customerDetail(id) {
+    const c = await api(`customers/${id}/`);
+    const row = (k, v) => `<tr><th style="text-align:left;padding:4px 12px 4px 0">${k}</th><td>${esc(v ?? "—")}</td></tr>`;
+    const pics = [["Invoice", c.invoice_image], ["Selfie", c.selfie], ["Poster", c.poster]].filter((p) => p[1]);
+    const d = document.createElement("dialog");
+    d.style.cssText = "max-width:640px;width:calc(100% - 32px);border:0;border-radius:12px";
+    d.innerHTML = `<div class="toolbar"><b>${esc(c.name || c.phone)}</b><button class="btn">Close</button></div>
+      <table>${row("Phone", c.phone)}${row("Mail", c.email)}${row("Branch", c.branch_name)}${row("Product", c.product_details)}${row("IMEI", c.imei)}${row("Invoice no.", c.invoice_number)}${row("Bill value", c.bill_value)}${row("Reward", c.reward)}${row("Mirror", c.mirror_name)}${row("Photo sharpness", c.blur_score)}${row("Link", c.link)}${row("Link version", c.link_version)}</table>
+      <div class="row" style="flex-wrap:wrap;gap:8px;margin:12px 0">${pics.map(([n, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="${n}" style="height:160px;border-radius:8px"></a>`).join("")}</div>
+      <b>Journey</b><ol>${c.events.map((e) => `<li>${esc(EVENTS[e.kind] || e.kind)} · ${new Date(e.created_at).toLocaleString()}</li>`).join("")}</ol>
+      <details><summary>Text read from invoice</summary><pre style="white-space:pre-wrap">${esc(c.ocr_text)}</pre></details>`;
+    $("button", d).addEventListener("click", () => d.close());
+    d.addEventListener("close", () => d.remove());
+    document.body.appendChild(d);
+    d.showModal();
+  }
   const rewardLabel = (id) => id.split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
   function customerCard(c) {
     const el = document.createElement("div");
@@ -585,10 +608,12 @@
         ${c.repeat_of_phone ? `<span class="pill warn" title="Same face as an earlier customer; no second gift">⚠ Same face as ${esc(c.repeat_of_phone)}</span>` : ""}
         ${c.branch_name ? `<span class="tag">📍 ${esc(c.branch_name)}</span>` : ""}
         <small>${esc(c.mirror_name || "—")}${c.phone ? " · " + esc(c.phone) : ""}</small>
+        ${c.imei ? `<small>${esc(c.product_details)} · IMEI ${esc(c.imei)}</small><small>Invoice ${esc(c.invoice_number)} · ₹${esc(c.bill_value)}</small>` : ""}
         <small>${new Date(c.created_at).toLocaleString()}</small></div>
-      <div class="acts">${c.poster ? `<a class="btn" href="${esc(c.poster)}" download>Poster</a>` : ""}
+      <div class="acts"><button class="details">Details</button>${c.poster ? `<a class="btn" href="${esc(c.poster)}" download>Poster</a>` : ""}
         ${c.selfie ? `<a class="btn" href="${esc(c.selfie)}" download>Selfie</a>` : ""}
         <button class="danger">Delete</button></div>`;
+    $("button.details", el).addEventListener("click", () => customerDetail(c.id).catch((e) => toast(e.message, true)));
     $("button.danger", el).addEventListener("click", async () => {
       if (!confirm("Delete this customer and their photos?")) return;
       try { await api(`customers/${c.id}/`, { method: "DELETE" }); el.remove(); toast("Deleted"); }

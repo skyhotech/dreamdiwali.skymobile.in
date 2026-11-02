@@ -34,6 +34,9 @@ interface State {
   /** Signed-in customer's mobile number; one customer and one spin each. */
   phone: string | null;
   setPhone: (phone: string | null) => void;
+  /** Secret from the customer's WhatsApp link; it authorises their spin. */
+  token: string | null;
+  setToken: (token: string | null) => void;
   savedPoster: Blob | null;
   setSavedPoster: (poster: Blob | null) => void;
   setStep: (step: Step) => void;
@@ -53,6 +56,22 @@ function release(p: Photo | null) {
 // The phone lives in localStorage (not the photo draft) so the sign-in gate
 // can be decided before photos are restored.
 const PHONE_KEY = "sky-customer-phone";
+const TOKEN_KEY = "sky-spin-token";
+function readToken() {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+function writeToken(token: string | null) {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // Storage blocked: the link itself still carries the token.
+  }
+}
 function readPhone() {
   try {
     return localStorage.getItem(PHONE_KEY);
@@ -82,6 +101,11 @@ export const useStudio = create<State>((set, get) => ({
   setPhone: (phone) => {
     writePhone(phone);
     set({ phone });
+  },
+  token: readToken(),
+  setToken: (token) => {
+    writeToken(token);
+    set({ token });
   },
   savedPoster: null,
   setSavedPoster: (savedPoster) => {
@@ -143,9 +167,11 @@ export const useStudio = create<State>((set, get) => ({
     release(get().selfie);
     get().products.forEach(release);
     writePhone(null);
+    writeToken(null);
     clearUploadState();
     set({
       phone: null,
+      token: null,
       selfie: null,
       products: [],
       savedPoster: null,

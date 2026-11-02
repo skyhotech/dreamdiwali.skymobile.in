@@ -3441,3 +3441,124 @@ html.no-pull-refresh body {
     animation: none;
   }
 }
+
+/* Manager page */
+.manager-card {
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  text-align: left;
+}
+.manager-note {
+  text-align: center;
+}
+.manager-card .phone-title {
+  text-align: center;
+}
+.manager-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid rgb(214 164 71 / 55%);
+  border-radius: 12px;
+  background: #fffaf0;
+  color: #3c2418;
+  font: inherit;
+}
+.manager-input:focus {
+  outline: 2px solid #d6a447;
+}
+.manager-card > label {
+  display: block;
+  margin-top: 10px;
+}
+.manager-row {
+  display: flex;
+  gap: 8px;
+}
+.manager-row .manager-input {
+  flex: 1;
+  min-width: 0;
+}
+.manager-scan {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: #7a1631;
+  color: #fff4dc;
+  font: inherit;
+}
+.manager-branch {
+  position: relative;
+}
+.manager-options {
+  position: absolute;
+  z-index: 5;
+  inset: 100% 0 auto;
+  max-height: 200px;
+  margin: 4px 0 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+  border-radius: 12px;
+  background: #fffaf0;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 30%);
+}
+.manager-options li {
+  padding: 10px;
+  border-radius: 8px;
+  color: #3c2418;
+  cursor: pointer;
+}
+.manager-options li:hover {
+  background: #f7e7cc;
+}
+.manager-camera {
+  position: relative;
+  overflow: hidden;
+  margin-top: 8px;
+  border-radius: 12px;
+  background: #000;
+}
+.manager-camera video {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+}
+.manager-camera::after {
+  content: "";
+  position: absolute;
+  inset: 50% 8% auto;
+  height: 2px;
+  background: #d22856;
+}
+.manager-whatsapp {
+  background: #1f8f55 !important;
+  color: #fff !important;
+}
+.share-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.share-buttons button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-height: 60px;
+  padding: 8px 2px;
+  border: 0;
+  border-radius: 12px;
+  background: #7a1631;
+  color: #fff4dc;
+  font: inherit;
+  font-size: 12px;
+}

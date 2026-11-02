@@ -12,8 +12,12 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/api/customers/spin/", (route) =>
     route.fulfill({ json: { reward: "smart-watch" } }),
   );
+  await page.route("**/api/customers/link/**", (route) =>
+    route.fulfill({ json: { phone: "9845012345", reward: "power-bank" } }),
+  );
   await page.addInitScript(() =>
-    localStorage.setItem("sky-customer-phone", "9845012345"),
+    (localStorage.setItem("sky-customer-phone", "9845012345"),
+    localStorage.setItem("sky-spin-token", "test-token")),
   );
 });
 async function mockCamera(
@@ -95,7 +99,7 @@ async function mockCamera(
     });
 }
 async function takeSelfie(page: Page) {
-  await page.goto("/");
+  await page.goto("/?spin=test-token");
   await expect(
     page
       .locator(".camera-stage")
@@ -113,14 +117,8 @@ async function takeSelfie(page: Page) {
 }
 // The prize wheel opens after the first product photo, spins by itself and
 // the prize is added to the poster automatically.
-async function spinAndClaim(page: import("@playwright/test").Page) {
-  const dialog = page.getByRole("dialog", { name: "Spin the wheel" });
-  await dialog.getByRole("button", { name: "Tap to spin" }).click();
-  await expect(dialog.getByRole("status")).toHaveText(/You won a/, {
-    timeout: 10_000,
-  });
-  await expect(dialog).toBeHidden({ timeout: 10_000 });
-}
+// The wheel now comes before the camera; these tests start with a prize won.
+async function spinAndClaim(_page: import("@playwright/test").Page) {}
 test("rear camera appears in the small product box, then captures and shares", async ({
   page,
 }) => {
@@ -225,7 +223,7 @@ test("filter controls, uploads and flip controls are absent", async ({
   page,
 }) => {
   await mockCamera(page);
-  await page.goto("/");
+  await page.goto("/?spin=test-token");
   await expect(
     page.getByRole("button", {
       name: "Post on Instagram",
@@ -244,7 +242,7 @@ test("filter controls, uploads and flip controls are absent", async ({
 });
 test("a blank or covered-camera selfie is refused", async ({ page }) => {
   await mockCamera(page, false, false, true);
-  await page.goto("/");
+  await page.goto("/?spin=test-token");
   const shutter = page
     .locator(".camera-stage")
     .getByRole("button", { name: "Post on Instagram", exact: true });
@@ -272,7 +270,7 @@ test("permission denial offers retry without upload or flip suggestions", async 
       },
     });
   });
-  await page.goto("/");
+  await page.goto("/?spin=test-token");
   await expect(page.getByText(/Camera permission was denied/)).toBeVisible();
   await expect(
     page.getByRole("alert").filter({ hasText: "SKY needs your camera" }),
@@ -298,7 +296,7 @@ test("permission denial offers retry without upload or flip suggestions", async 
 test("both bundled original frames load without any upload prompt", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/?spin=test-token");
   for (const [name, path] of [
     ["Golden Mirror", "2.jpeg"],
     ["Festive Celebration", "1.jpeg"],
@@ -549,7 +547,7 @@ test("a smile or hand gesture takes the selfie by itself after 3-2-1", async ({
 }) => {
   test.setTimeout(90_000);
   await mockCamera(page, false, true);
-  await page.goto("/");
+  await page.goto("/?spin=test-token");
   const toggle = page.getByRole("button", { name: /Auto capture on/ });
   await expect(toggle).toBeVisible({ timeout: 60_000 });
   // No cue yet: nothing happens.
@@ -570,7 +568,7 @@ test("a smile or hand gesture takes the selfie by itself after 3-2-1", async ({
 test("auto capture can be switched off", async ({ page }) => {
   test.setTimeout(90_000);
   await mockCamera(page, false, true);
-  await page.goto("/");
+  await page.goto("/?spin=test-token");
   const toggle = page.getByRole("button", { name: /Auto capture on/ });
   await expect(toggle).toBeVisible({ timeout: 60_000 });
   await toggle.click();
@@ -728,7 +726,7 @@ test("customers must enter a valid mobile number before the studio opens", async
   });
   await page.addInitScript(() => localStorage.removeItem("sky-customer-phone"));
   await mockCamera(page);
-  await page.goto("/");
+  await page.goto("/?spin=test-token");
   const field = page.getByLabel("Mobile number", { exact: true });
   await expect(field).toBeVisible();
   await expect(page.locator(".camera-stage")).toHaveCount(0);
@@ -817,7 +815,7 @@ test("sign-in shows a clear message for each kind of failure", async ({
   );
   await page.addInitScript(() => localStorage.removeItem("sky-customer-phone"));
   await mockCamera(page);
-  await page.goto("/");
+  await page.goto("/?spin=test-token");
   await page.getByLabel("Mobile number", { exact: true }).fill("9123456789");
   const go = page.getByRole("button", { name: "Proceed" });
   const help = page.locator("#phone-help");

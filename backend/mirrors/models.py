@@ -152,6 +152,20 @@ class Customer(models.Model):
     repeat_of = models.ForeignKey(
         "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="repeats"
     )
+    # Purchase details entered by the store manager.
+    email = models.EmailField(blank=True)
+    product_details = models.CharField(max_length=160, blank=True)
+    imei = models.CharField(max_length=15, blank=True)
+    invoice_number = models.CharField(max_length=40, blank=True)
+    bill_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    invoice_image = models.ImageField(upload_to=customer_path, blank=True)
+    # Every word read from the invoice photo, and how sharp that photo was.
+    ocr_text = models.TextField(blank=True)
+    blur_score = models.FloatField(null=True, blank=True)
+    # Counts how often the link changed because the purchase details changed.
+    link_version = models.PositiveIntegerField(default=0)
+    # Secret in the WhatsApp link; only its holder can spin for this customer.
+    spin_token = models.CharField(max_length=43, null=True, blank=True, unique=True)
     selfie = models.ImageField(upload_to=customer_path, blank=True)
     poster = models.ImageField(upload_to=customer_path, blank=True)
     # Small previews for the dashboard grid; full images open on click.
@@ -167,8 +181,38 @@ class Customer(models.Model):
                 fields=["phone"],
                 condition=~models.Q(phone=""),
                 name="unique_customer_phone",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["imei"],
+                condition=~models.Q(imei=""),
+                name="unique_customer_imei",
+            ),
+            models.UniqueConstraint(
+                fields=["branch", "invoice_number"],
+                condition=~models.Q(invoice_number=""),
+                name="unique_branch_invoice",
+            ),
         ]
 
     def __str__(self):
         return self.name or self.phone or f"Customer #{self.pk}"
+
+
+class CustomerEvent(models.Model):
+    """One step of a purchase's journey, for the admin timeline. Failed checks
+    have no customer yet, so they keep the number that was typed."""
+
+    SHARE_KINDS = [
+        "shared_instagram", "shared_facebook", "shared_whatsapp", "shared_more",
+    ]
+
+    customer = models.ForeignKey(
+        Customer, null=True, blank=True, on_delete=models.CASCADE, related_name="events"
+    )
+    phone = models.CharField(max_length=20, blank=True)
+    kind = models.CharField(max_length=30, db_index=True)
+    detail = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]

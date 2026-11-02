@@ -1,6 +1,4 @@
-# Tests only, on GitHub-hosted runners. Deploys follow once this passes on main:
-# the Windows server pulls main itself (deploy/poll-and-deploy.ps1), and the Ubuntu
-# VPS is pushed to by deploy-vps.yml. No self-hosted runner is exposed on this public repo.
+# Tests only, on GitHub-hosted runners. deploy-vps.yml follows once this passes on main.
 name: CI
 on:
   push:

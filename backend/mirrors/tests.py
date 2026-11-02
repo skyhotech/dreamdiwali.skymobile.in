@@ -8,9 +8,11 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from PIL import Image
 
-from .models import Branch, Customer
+from .models import Branch, Customer, CustomerEvent
 
 MEDIA = tempfile.mkdtemp()
+IMEI = "490154203237518"
+OTHER_IMEI = "356938035643809"
 
 
 def jpeg(name="selfie.jpg"):
@@ -19,7 +21,7 @@ def jpeg(name="selfie.jpg"):
     return SimpleUploadedFile(name, out.getvalue(), content_type="image/jpeg")
 
 
-@override_settings(MEDIA_ROOT=MEDIA, STUDIO_URL="https://studio.example")
+@override_settings(MEDIA_ROOT=MEDIA, STUDIO_URL="https://studio.example", MANAGER_KEY="test-key")
 class BranchFlowTests(TestCase):
     @classmethod
     def tearDownClass(cls):
@@ -31,19 +33,22 @@ class BranchFlowTests(TestCase):
         self.branch = Branch.objects.create(name="Anna Nagar")
         self.staff = User.objects.create_user("staff@sky.in", password="x", is_staff=True)
 
-    def register(self, phone, branch=None):
-        body = {"phone": phone, "consent": True}
-        if branch:
-            body["branch"] = branch
-        return self.client.post("/api/customers/register/", body, content_type="application/json")
+    def check(self, phone="9845011111", imei=IMEI, key="test-key", **extra):
+        body = {
+            "name": "Asha", "phone": phone, "product_details": "Phone 15", "imei": imei,
+            "invoice_number": f"INV-{imei}", "bill_value": "24999.00",
+            "branch": "anna-nagar", "invoice_image": jpeg("invoice.jpg"), "blur_score": 200,
+            "ocr_text": f"Invoice INV-{imei} IMEI {imei} Total 24,999.00", **extra,
+        }
+        return self.client.post("/api/manager/check/", body, headers={"X-Manager-Key": key})
 
-    def spin(self, phone, branch=None, selfie=True):
-        data = {"phone": phone}
-        if selfie:
-            data["selfie"] = jpeg()
-        if branch:
-            data["branch"] = branch
-        return self.client.post("/api/customers/spin/", data)
+    def token(self, res):
+        return res.json()["link"].split("spin=")[1]
+
+    def spin(self, token):
+        return self.client.post(
+            "/api/customers/spin/", {"token": token}, content_type="application/json"
+        )
 
     def test_slug_and_link_are_generated(self):
         self.assertEqual(self.branch.slug, "anna-nagar")
@@ -51,23 +56,87 @@ class BranchFlowTests(TestCase):
         data = self.client.get("/api/admin/branches/").json()
         self.assertEqual(data[0]["link"], "https://studio.example/?branch=anna-nagar")
 
-    def test_customer_signed_in_through_a_branch_link_is_filed_there(self):
-        self.assertEqual(self.register("9845011111", "anna-nagar").status_code, 201)
+    def test_check_files_the_customer_and_returns_a_link(self):
+        res = self.check()
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.json()["link"].startswith("https://studio.example/?spin="))
         c = Customer.objects.get(phone="9845011111")
-        self.assertEqual((c.branch, c.branch_name), (self.branch, "Anna Nagar"))
+        self.assertEqual((c.branch, c.branch_name, c.imei), (self.branch, "Anna Nagar", IMEI))
+        self.assertTrue(c.invoice_image)
 
-    def test_first_branch_keeps_the_customer(self):
-        other = Branch.objects.create(name="T Nagar")
-        self.register("9845011111", "anna-nagar")
-        self.register("9845011111", other.slug)
-        self.assertEqual(Customer.objects.get(phone="9845011111").branch, self.branch)
+    def test_invoice_text_must_match_and_failures_are_tracked(self):
+        res = self.check(ocr_text="Invoice IMEI Total 100.00")
+        self.assertEqual(res.status_code, 400)
+        for word in ("IMEI", "invoice number", "bill value"):
+            self.assertIn(word, res.json()["invoice_image"][0])
+        self.assertEqual(CustomerEvent.objects.get().kind, "check_failed")
 
-    def test_switched_off_branch_link_is_refused(self):
+    def test_scanner_letter_mixups_still_match(self):
+        res = self.check(ocr_text=f"lNV-{IMEI} {IMEI.replace('0', 'O')} Rs 24,999")
+        self.assertEqual(res.status_code, 200)
+
+    def test_changed_details_replace_the_link(self):
+        first = self.token(self.check())
+        second = self.token(self.check(bill_value="24999.00", product_details="Phone 16"))
+        self.assertNotEqual(first, second)
+        self.assertEqual(self.spin(first).status_code, 404)
+        self.assertEqual(Customer.objects.get().link_version, 2)
+
+    def test_journey_is_tracked_for_the_admin(self):
+        token = self.token(self.check())
+        self.client.post("/api/manager/sent/", {"phone": "9845011111"},
+                         headers={"X-Manager-Key": "test-key"})
+        self.client.get(f"/api/customers/link/{token}/")
+        self.spin(token)
+        self.client.post("/api/customers/event/", {"token": token, "kind": "shared_whatsapp"},
+                         content_type="application/json")
+        self.client.force_login(self.staff)
+        c = Customer.objects.get()
+        data = self.client.get(f"/api/admin/customers/{c.pk}/").json()
+        self.assertEqual(
+            [e["kind"] for e in data["events"]],
+            ["checked", "whatsapp_sent", "link_opened", "spun", "shared_whatsapp"],
+        )
+        self.assertIn("IMEI", data["ocr_text"])
+        funnel = self.client.get("/api/admin/stats/").json()["funnel"]
+        self.assertEqual((funnel["spun"], funnel["shared"]), (1, 1))
+
+    def test_manager_passcode_is_required(self):
+        self.assertEqual(self.check(key="wrong").status_code, 403)
+        self.assertEqual(self.client.get("/api/manager/branches/").status_code, 403)
+        self.assertFalse(Customer.objects.exists())
+
+    def test_invalid_imei_is_refused(self):
+        res = self.check(imei="490154203237519")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("not valid", res.json()["imei"][0])
+
+    def test_used_imei_or_invoice_is_refused(self):
+        self.check()
+        self.assertIn("IMEI", self.check("9845022222").json()["imei"][0])
+        res = self.check(
+            "9845022222", OTHER_IMEI, invoice_number=f"INV-{IMEI}",
+            ocr_text=f"INV-{IMEI} {OTHER_IMEI} 24999.00",
+        )
+        self.assertIn("invoice", res.json()["invoice_number"][0])
+
+    def test_large_invoice_image_is_refused(self):
+        big = SimpleUploadedFile("i.jpg", jpeg().read() + b"0" * 260_000, "image/jpeg")
+        self.assertEqual(self.check(invoice_image=big).status_code, 400)
+
+    def test_correction_before_spin_updates_the_same_customer(self):
+        self.check()
+        self.check(name="Asha K")
+        self.assertEqual(Customer.objects.get().name, "Asha K")
+
+    def test_no_second_entry_after_spinning(self):
+        self.spin(self.token(self.check()))
+        self.assertEqual(self.check().status_code, 400)
+
+    def test_switched_off_branch_is_refused(self):
         self.branch.is_active = False
         self.branch.save()
-        res = self.register("9845011111", "anna-nagar")
-        self.assertEqual(res.status_code, 400)
-        self.assertIn("no longer active", res.json()["branch"][0])
+        self.assertEqual(self.check().status_code, 400)
         self.assertEqual(self.client.get("/api/branches/anna-nagar/").status_code, 404)
 
     def test_public_lookup_gives_the_branch_name(self):
@@ -76,30 +145,28 @@ class BranchFlowTests(TestCase):
             {"slug": "anna-nagar", "name": "Anna Nagar"},
         )
 
-    def test_same_number_keeps_its_first_gift(self):
-        self.register("9845011111")
-        first = self.spin("9845011111").json()["reward"]
-        self.assertEqual(self.spin("9845011111").json()["reward"], first)
+    def test_spin_is_once_only_and_needs_no_selfie(self):
+        token = self.token(self.check())
+        first = self.spin(token).json()["reward"]
+        self.assertEqual(self.spin(token).json()["reward"], first)
+        link = self.client.get(f"/api/customers/link/{token}/").json()
+        self.assertEqual(link, {"phone": "9845011111", "reward": first})
 
-    def test_no_photo_no_spin(self):
-        self.register("9845011111", "anna-nagar")
-        res = self.spin("9845011111", selfie=False)
-        self.assertEqual(res.status_code, 400)
-        self.assertIn("Take your selfie first", res.json()["selfie"][0])
-        self.assertEqual(Customer.objects.get(phone="9845011111").reward, "")
+    def test_unknown_token_cannot_spin(self):
+        self.assertEqual(self.spin("nope").status_code, 404)
+        self.assertEqual(self.client.get("/api/customers/link/nope/").status_code, 404)
 
-    def test_spin_stores_the_selfie_under_the_branch(self):
-        self.register("9845011111")
-        res = self.spin("9845011111", branch="anna-nagar")
-        self.assertEqual(res.status_code, 200)
-        c = Customer.objects.get(phone="9845011111")
-        self.assertTrue(c.reward and c.selfie and c.selfie_thumb)
-        self.assertEqual(c.branch, self.branch)
+    def test_upload_cannot_set_a_prize(self):
+        self.check()
+        self.client.post("/api/customers/", {
+            "session": "s", "phone": "9845011111", "reward": "smart-watch",
+            "poster": jpeg("poster.jpg"),
+        })
+        self.assertEqual(Customer.objects.get().reward, "")
 
     def test_branch_stats_qr_and_customer_filter(self):
-        self.register("9845011111", "anna-nagar")
-        self.register("9845022222")
-        self.spin("9845011111")
+        self.spin(self.token(self.check()))
+        Customer.objects.create(phone="9845022222", session="other")
         self.client.force_login(self.staff)
         pk = self.branch.pk
         stats = self.client.get(f"/api/admin/branches/{pk}/stats/").json()
@@ -112,7 +179,7 @@ class BranchFlowTests(TestCase):
         self.assertEqual([c["phone"] for c in listed["results"]], ["9845011111"])
 
     def test_deleting_a_branch_keeps_its_customers(self):
-        self.register("9845011111", "anna-nagar")
+        self.check()
         self.client.force_login(self.staff)
         self.assertEqual(self.client.delete(f"/api/admin/branches/{self.branch.pk}/").status_code, 204)
         c = Customer.objects.get(phone="9845011111")

@@ -56,17 +56,8 @@ class CustomerSpinThrottle(ScopedIPThrottle):
     scope = "customer_spin"
 
 
-class PhoneThrottle(ScopedIPThrottle):
-    """Limits by mobile number instead of IP, so one number can't be hammered
-    from many networks."""
-
-    scope = "customer_phone"
-
-    def get_cache_key(self, request, view):
-        phone = str(request.data.get("phone", ""))[:20]
-        if not phone:
-            return None
-        return self.cache_format % {"scope": self.scope, "ident": phone}
+class ManagerThrottle(ScopedIPThrottle):
+    scope = "manager"
 
 
 class BurstThrottle(ScopedIPThrottle):
