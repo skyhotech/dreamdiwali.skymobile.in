@@ -44,6 +44,8 @@ export function SpinWheel({
   const [won, setWon] = useState<Reward | null>(null);
   const [error, setError] = useState("");
   const [queued, setQueued] = useState(false);
+  // The two turns are done but the prize is still on its way.
+  const [slow, setSlow] = useState(false);
   const queuedRef = useRef(false);
   const onQueue = (waiting: boolean) => {
     queuedRef.current = waiting;
@@ -121,6 +123,8 @@ export function SpinWheel({
     setSpinMs(ms);
     setEase(LANDING_EASE);
     setRotation(base + SPIN_TURNS * 360);
+    setSlow(false);
+    const slowTimer = window.setTimeout(() => setSlow(true), ms);
     let index: number;
     try {
       // Never spin for ever: give up after a while and offer Try again.
@@ -141,12 +145,16 @@ export function SpinWheel({
       index = REWARDS.findIndex((r) => r.id === prize);
       if (index < 0) throw new Error("Unknown prize. Try again.");
     } catch (e) {
+      window.clearTimeout(slowTimer);
+      setSlow(false);
       audio?.pause();
       setError((e as Error).message);
       setPhase("ready");
       spinLock.current = false;
       return;
     }
+    window.clearTimeout(slowTimer);
+    setSlow(false);
     // Same two turns, ending with the middle of the prize slice under the
     // pointer. If the prize came late, this is one short final move.
     const landing = 360 - (index * SLICE + SLICE / 2);
@@ -217,7 +225,9 @@ export function SpinWheel({
             : phase === "spinning"
               ? queued
                 ? "You're in the queue — SKY is busy, your spin is next…"
-                : "Good luck…"
+                : slow
+                  ? "Almost there — checking your photo…"
+                  : "Good luck…"
               : "Thanks for your purchase. Spin for a free gift!"}
         </p>
         <div className="spin-wheel-wrap">

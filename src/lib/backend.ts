@@ -223,8 +223,9 @@ export async function spinPrize(
       return reward;
     } catch (e) {
       const err = e as ApiError;
-      // Only a busy server queues; network errors and timeouts stop at once.
-      const queued = err.status === 503 || err.status === 429;
+      // Only a busy server queues. A rate limit (429), network errors and
+      // timeouts stop at once with their message.
+      const queued = err.status === 503;
       if (!queued || Date.now() - started > QUEUE_LIMIT_MS) {
         onQueue?.(false);
         throw err;

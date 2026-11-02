@@ -201,8 +201,8 @@ REST_FRAMEWORK = {
         "customer_upload": "120/m",
         "customer_register": "60/m",
         # New spins per network (a busy kiosk) and per mobile number.
-        "customer_spin": "120/h",
-        "customer_phone": "10/h",
+        "customer_spin": "600/h",  # per network: a store shares one Wi-Fi address
+        "customer_phone": "20/h",
         # Ceiling for every other API call per IP.
         "burst": "600/m",
     },

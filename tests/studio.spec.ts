@@ -602,6 +602,34 @@ test("the wheel turns right away even when the prize is slow to arrive", async (
     },
   );
 });
+test("a rate-limited spin explains itself at once instead of waiting", async ({
+  page,
+}) => {
+  await page.route("**/api/customers/spin/", (route) =>
+    route.fulfill({
+      status: 429,
+      headers: { "Retry-After": "600" },
+      json: { detail: "Request was throttled." },
+    }),
+  );
+  await mockCamera(page);
+  await takeSelfie(page);
+  await page
+    .getByRole("button", {
+      name: "Capture product and post on Instagram",
+      exact: true,
+    })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Spin the wheel" });
+  await dialog.getByRole("button", { name: "Tap to spin" }).click();
+  await expect(dialog.getByRole("alert")).toHaveText(
+    /Too many tries.*10 minutes/,
+    {
+      timeout: 5_000,
+    },
+  );
+  await expect(dialog.getByRole("button", { name: "Try again" })).toBeVisible();
+});
 test("a face that already claimed a gift sees a clear message", async ({
   page,
 }) => {
