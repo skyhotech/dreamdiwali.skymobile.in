@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { invoiceMissing, sharpness } from "./invoiceScan";
+import { extractInvoice, invoiceMissing, sharpness } from "./invoiceScan";
 const BILL = `SKY WORLD
 VELAPADI,VELLORE-632001 Ph: 8754740002
 Invoice No : SI2627VLR31054 Invoice Date : 31/10/2026
@@ -32,6 +32,22 @@ test.each([
   ["bill", "9762.71", "bill value"],
 ])("a wrong %s is named", (field, value, label) => {
   expect(invoiceMissing(BILL, { ...OK, [field]: value })).toEqual([label]);
+});
+test("an invoice fills in the form, and the result passes its own check", () => {
+  const text = BILL.replace("SONY:LED", "SNo Particulars HSN/SAC Qty\n1 SONY:LED").replace(
+    "LED TV\nIMEI",
+    "LED TV 85287217 1 64,000.00\nIMEI",
+  );
+  const f = extractInvoice(text);
+  expect(f).toEqual({
+    name: "M MAHENDRAN",
+    phone: "9787372973",
+    product: "SONY:LED TV:SONY (KD - 65X82L) 65INCH LED TV",
+    imei: "P-12568801-D",
+    invoice: "SI2627VLR31054",
+    bill: "64000",
+  });
+  expect(invoiceMissing(text, f as typeof OK)).toEqual([]);
 });
 test("a flat image has no sharpness and hard edges have plenty", () => {
   const flat = new Float32Array(100).fill(128);

@@ -62,6 +62,37 @@ export function invoiceMissing(text: string, f: InvoiceFields) {
   if (billAmount(text) !== Number(f.bill)) missing.push("bill value");
   return missing;
 }
+/** The customer details printed on an invoice, for filling in the form. */
+export function extractInvoice(text: string): Partial<InvoiceFields> {
+  const lines = text.split("\n").map((l) => l.replace(/[|\[\]]/g, " ").trim());
+  const billedAt = lines.findIndex((l) => /billed\s*to/i.test(l));
+  // Billed To and Shipped To sit side by side, so a name can appear twice.
+  const after = billedAt < 0 ? [] : lines.slice(billedAt + 1).filter(Boolean);
+  const words = (after[0] ?? "").split(/\s+/);
+  const half = words.length / 2;
+  const twice =
+    half % 1 === 0 && words.slice(0, half).join(" ") === words.slice(half).join(" ");
+  const name = (twice ? words.slice(0, half) : words).join(" ");
+  const phone = after
+    .join("\n")
+    .match(/ph\w*\s*[.:;\-]*\s*(?:\+?91)?(\d{10})/i)?.[1];
+  const header = lines.findIndex((l) => /particulars/i.test(l));
+  const product = lines
+    .slice(header + 1)
+    .find((l, i) => header >= 0 && i < 4 && /[a-z]{3}/i.test(l))
+    ?.replace(/^\d+\s+/, "")
+    .replace(/\s+\d{6,8}\b.*$/, "")
+    .trim();
+  const bill = billAmount(text);
+  return {
+    name: name || undefined,
+    phone,
+    product,
+    imei: [...text.matchAll(IMEI_LABEL)][0]?.[1].toUpperCase(),
+    invoice: text.match(INVOICE_LABEL)?.[1],
+    bill: bill ? String(bill) : undefined,
+  };
+}
 /** Variance of the Laplacian: edges vanish in a blurry photo, so it drops. */
 export function sharpness(gray: Float32Array, w: number, h: number) {
   let sum = 0,

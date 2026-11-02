@@ -1,4 +1,12 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Camera, Check, MessageCircle, ScanLine, Upload, X } from "lucide-react";
 import skyLogo from "../assets/brand/sky.webp";
 import { motion, useAnimationControls } from "motion/react";
@@ -12,7 +20,12 @@ import {
   trackSent,
   type BranchOption,
 } from "../lib/backend";
-import { invoiceMissing, pdfToImage, readInvoice } from "../lib/invoiceScan";
+import {
+  extractInvoice,
+  invoiceMissing,
+  pdfToImage,
+  readInvoice,
+} from "../lib/invoiceScan";
 import { Festive } from "./Festive";
 const ImeiScanner = lazy(() => import("./ImeiScanner"));
 const MISMATCH = "Data mismatch";
@@ -38,6 +51,7 @@ export function ManagerIntake() {
   const [scanning, setScanning] = useState(false);
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState("Checking…");
+  const [filling, setFilling] = useState(false);
   const [link, setLink] = useState("");
   const [sent, setSent] = useState(false);
   const shake = useAnimationControls();
@@ -87,6 +101,46 @@ export function ManagerIntake() {
     setError("");
     navigator.vibrate?.(120);
   }, []);
+  // One reading per file: Check reuses what the upload already read.
+  const scan = useRef<{
+    file: File;
+    result: Promise<{ text: string; sharpness: number }>;
+  } | null>(null);
+  function readFile(file: File) {
+    if (scan.current?.file !== file) {
+      const result = (async () =>
+        readInvoice(
+          file.type === "application/pdf" ? await pdfToImage(file) : file,
+        ))();
+      scan.current = { file, result };
+    }
+    return scan.current.result;
+  }
+  async function pick(file: File | null) {
+    setImage(file);
+    setLink("");
+    setError("");
+    if (!file) return;
+    setFilling(true);
+    try {
+      const found = extractInvoice((await readFile(file)).text);
+      // Fills gaps only: what the manager typed stays.
+      setForm((f) => ({
+        name: f.name || found.name || "",
+        phone: f.phone || found.phone || "",
+        email: f.email,
+        product: f.product || found.product || "",
+        imei: f.imei || found.imei || "",
+        invoice: f.invoice || found.invoice || "",
+        bill: f.bill || found.bill || "",
+      }));
+    } catch (e) {
+      scan.current = null;
+      fail((e as Error).message);
+    } finally {
+      setFilling(false);
+    }
+  }
   function problem() {
     if (!form.name.trim()) return "Enter the customer name.";
     if (!PHONE_PATTERN.test(form.phone))
@@ -111,9 +165,10 @@ export function ManagerIntake() {
     try {
       // Read here and dropped: only the text is sent to the server.
       setStage("Scanning invoice…");
-      const page =
-        image!.type === "application/pdf" ? await pdfToImage(image!) : image!;
-      const { text, sharpness } = await readInvoice(page);
+      const { text, sharpness } = await readFile(image!).catch((e: Error) => {
+        scan.current = null;
+        throw e;
+      });
       const missing = invoiceMissing(text, {
         name: form.name,
         phone: form.phone,
@@ -316,16 +371,20 @@ export function ManagerIntake() {
                   capture={capture}
                   hidden
                   onChange={(e) => {
-                    setImage(e.target.files?.[0] ?? null);
+                    void pick(e.target.files?.[0] ?? null);
                     e.target.value = "";
-                    setLink("");
-                    setError("");
                   }}
                 />
               </label>
             ))}
           </div>
-          {image && <p className="phone-help">Selected: {image.name}</p>}
+          {image && (
+            <p className="phone-help" role="status">
+              {filling
+                ? "Reading invoice and filling the details…"
+                : `Selected: ${image.name}. Check the details above.`}
+            </p>
+          )}
           <p className="phone-help phone-help-error" role="alert">
             {error}
           </p>
@@ -346,7 +405,10 @@ export function ManagerIntake() {
               )}
             </>
           ) : (
-            <button className="spin-button phone-continue" disabled={busy}>
+            <button
+              className="spin-button phone-continue"
+              disabled={busy || filling}
+            >
               {busy ? stage : "Check"}
             </button>
           )}
