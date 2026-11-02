@@ -280,8 +280,8 @@ class CustomerSpin(APIView):
                 return Response(
                     {
                         "detail": (
-                            "You're already registered with the number ending "
-                            f"{(earlier.phone or '')[-2:] or '••'}. One gift per person."
+                            "You have already claimed your Diwali gift. Each guest is "
+                            "eligible for one gift only. Thank you for celebrating with SKY!"
                         ),
                         "code": "face_registered",
                     },
