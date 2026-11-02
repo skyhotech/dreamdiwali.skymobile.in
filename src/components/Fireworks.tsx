@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 // Diwali crackers on one canvas: rockets that burst (peony, ring, willow,
-// crackling glitter), a saravedi string popping across the top, anar
+// crackling glitter), two hanging saravedi strings burning upward, anar
 // fountains, spinning chakras and sparklers.
 // One animation loop with a particle cap keeps it smooth on phones; it pauses
 // when the tab is hidden and is skipped for reduced-motion users.
@@ -56,27 +56,63 @@ export function Fireworks() {
       nextGround = 0,
       spin = 0;
     const particles: Particle[] = [];
-    // Saravedi: a string of crackers hung across the top; the fuse pops them
-    // one after another, then the string is restocked.
-    const STRING = lowEnd ? 14 : 22;
-    let popped = 0,
-      nextPop = 0;
-    const cracker = (i: number) => {
-      const t = i / (STRING - 1);
-      return {
-        x: w * (0.06 + t * 0.88),
-        // Sags in the middle like a real garland.
-        y: h * 0.03 + (1 - (2 * t - 1) ** 2) * h * 0.028,
-      };
+    // Saravedi: two hanging strings of red crackers either side of a braided
+    // fuse, in the open space above the card. Each burns from the bottom up,
+    // pair by pair, then is restocked.
+    const ROWS = lowEnd ? 12 : 16;
+    const TILT = 0.2;
+    const jitter = Array.from(
+      { length: ROWS * 2 },
+      () => (Math.random() - 0.5) * 0.14,
+    );
+    const strings = [
+      { at: 0.16, burnt: 0, next: 400 },
+      { at: 0.84, burnt: 0, next: 1600 },
+    ];
+    const sprite = document.createElement("canvas");
+    let gap = 8,
+      len = 26,
+      thick = 7,
+      top = 0;
+    // One shaded cracker (a red tube with gold bands), reused for every cracker.
+    const drawSprite = () => {
+      gap = Math.min(h * 0.155, 170) / ROWS;
+      len = Math.round(gap * 3.3);
+      thick = Math.max(4, Math.round(gap * 0.95));
+      top = 2;
+      sprite.width = len * 2;
+      sprite.height = thick * 2;
+      const c = sprite.getContext("2d")!;
+      c.scale(2, 2);
+      const g = c.createLinearGradient(0, 0, 0, thick);
+      g.addColorStop(0, "#7d0f1c");
+      g.addColorStop(0.35, "#ff5a4f");
+      g.addColorStop(0.55, "#d61f2c");
+      g.addColorStop(1, "#6a0b16");
+      c.fillStyle = g;
+      c.beginPath();
+      c.roundRect(0, 0, len, thick, thick * 0.35);
+      c.fill();
+      c.fillStyle = "#f3cf7a";
+      for (const at of [0.14, 0.86]) c.fillRect(len * at, 0, 1, thick);
+      c.fillStyle = "rgba(0,0,0,0.25)";
+      c.fillRect(len - 2, 0, 2, thick);
     };
-    const pop = (i: number) => {
-      const { x, y } = cracker(i);
-      add({ x, y, max: 7, size: 13, gravity: 0, color: "#fff9f0" });
+    // Where cracker k sits: pairs, bottom row first.
+    const crackerAt = (x: number, k: number) => {
+      const row = ROWS - 1 - Math.floor(k / 2),
+        side = k % 2 ? 1 : -1;
+      const y = top + gap * (row + 0.5);
+      const angle = (side > 0 ? TILT : Math.PI - TILT) + jitter[k];
+      return { x, y, angle, row };
+    };
+    const pop = (x: number, y: number) => {
+      add({ x, y, max: 7, size: 14, gravity: 0, color: "#fff9f0" });
       for (let k = 0; k < (lowEnd ? 5 : 9); k++)
         add({
           x,
           y,
-          vx: (Math.random() - 0.5) * 4,
+          vx: (Math.random() - 0.5) * 4.5,
           vy: -Math.random() * 2.5,
           max: 40 + Math.random() * 25,
           color: pick(["#d22856", "#ff3b3b", "#d6a447", "#7a1631"]),
@@ -88,7 +124,7 @@ export function Fireworks() {
       add({
         x,
         y,
-        vy: -0.25,
+        vy: -0.3,
         max: 55,
         size: 5,
         gravity: 0,
@@ -106,6 +142,7 @@ export function Fireworks() {
       canvas.width = Math.round(w * dpr);
       canvas.height = Math.round(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawSprite();
     };
     resize();
     addEventListener("resize", resize);
@@ -240,14 +277,19 @@ export function Fireworks() {
         ground();
         nextGround = now + (lowEnd ? 70 : 45);
       }
-      if (now > nextPop) {
-        if (popped < STRING) {
-          pop(popped++);
+      for (const str of strings) {
+        if (now < str.next) continue;
+        if (str.burnt < ROWS * 2) {
+          const c = crackerAt(w * str.at, str.burnt++);
+          pop(
+            c.x + Math.cos(c.angle) * len * 0.5,
+            c.y + Math.sin(c.angle) * len * 0.5,
+          );
           // Uneven rhythm, like a real string going off.
-          nextPop = now + 60 + Math.random() * 90;
+          str.next = now + 45 + Math.random() * 85;
         } else {
-          popped = 0;
-          nextPop = now + 2600;
+          str.burnt = 0;
+          str.next = now + 2400;
         }
       }
       // Fade the previous frame instead of clearing it: every spark gets a tail.
@@ -291,30 +333,57 @@ export function Fireworks() {
         ctx.fill();
       }
       ctx.globalAlpha = 1;
-      // The saravedi string and its unpopped crackers.
-      ctx.strokeStyle = "#7a5a3a";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      for (let i = 0; i < STRING; i++) {
-        const { x, y } = cracker(i);
-        if (i) ctx.lineTo(x, y);
-        else ctx.moveTo(x, y);
-      }
-      ctx.stroke();
-      for (let i = popped; i < STRING; i++) {
-        const { x, y } = cracker(i);
-        ctx.fillStyle = "#c81e3a";
-        ctx.fillRect(x - 2.5, y, 5, 11);
-        ctx.fillStyle = "#f3cf7a";
-        ctx.fillRect(x - 2.5, y + 4, 5, 2);
-      }
-      // Glowing fuse spark at the next cracker.
-      if (popped < STRING) {
-        const { x, y } = cracker(popped);
-        ctx.fillStyle = Math.random() < 0.5 ? "#fff4dc" : "#ff7a1a";
+      // The saravedi strings: fuse, unburnt crackers and the burning tip.
+      for (const str of strings) {
+        const x = w * str.at;
+        const left = ROWS * 2 - str.burnt;
+        const lowestRow = left > 0 ? Math.floor((left - 1) / 2) : -1;
+        const tipY = top + gap * (lowestRow + 1) + 3;
+        ctx.strokeStyle = "#9a8a78";
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(x, y - 1, 2.6, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.moveTo(x, -4);
+        ctx.lineTo(x, tipY);
+        ctx.stroke();
+        // Braided fuse texture.
+        ctx.strokeStyle = "#6f604f";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let y = 0; y < tipY; y += gap / 2) {
+          ctx.moveTo(x - 2, y);
+          ctx.lineTo(x + 2, y + gap / 4);
+        }
+        ctx.stroke();
+        for (let k = str.burnt; k < ROWS * 2; k++) {
+          const c = crackerAt(x, k);
+          ctx.save();
+          ctx.translate(c.x, c.y);
+          ctx.rotate(c.angle);
+          ctx.drawImage(sprite, 1, -thick / 2, len, thick);
+          ctx.restore();
+        }
+        if (left > 0) {
+          // Burning tip: a flickering glow and sparks like a sparkler.
+          const r = 6 + Math.random() * 4;
+          const glow = ctx.createRadialGradient(x, tipY, 0, x, tipY, r * 1.8);
+          glow.addColorStop(0, "#fffbe6");
+          glow.addColorStop(0.35, "#ffb02e");
+          glow.addColorStop(1, "rgba(255,120,20,0)");
+          ctx.fillStyle = glow;
+          ctx.beginPath();
+          ctx.arc(x, tipY, r * 1.8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "#ffcf5a";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          for (let n = 0; n < 9; n++) {
+            const a = Math.random() * Math.PI * 2,
+              d = r + Math.random() * 10;
+            ctx.moveTo(x + Math.cos(a) * r * 0.5, tipY + Math.sin(a) * r * 0.5);
+            ctx.lineTo(x + Math.cos(a) * d, tipY + Math.sin(a) * d);
+          }
+          ctx.stroke();
+        }
       }
       // Chakra wheels: a coloured spinning disc with a bright centre.
       for (const cx of wheels()) {
