@@ -1,5 +1,6 @@
 import json
 import secrets
+import threading
 import time
 from datetime import timedelta
 
@@ -39,6 +40,10 @@ from .throttles import (
     MirrorPollThrottle,
     MirrorVersionThrottle,
 )
+
+# Photo compression is CPU-bound; one at a time per server process.
+_IMAGE_WORK = threading.BoundedSemaphore(1)
+IMAGE_WAIT_SECONDS = 25
 
 
 # --- Public API used by the selfie studio ---------------------------------
@@ -136,10 +141,24 @@ class CustomerUpload(APIView):
         upload.is_valid(raise_exception=True)
         data = upload.validated_data
         mirror = Mirror.objects.filter(slug=data.get("mirror") or "").first()
-        # Compress photos to ≤200 KB at the highest quality that fits.
-        for field, size in (("poster", POSTER_SIZE), ("selfie", SELFIE_SIZE)):
-            if field in data:
-                data[field] = compressed_photo(data[field], size) or data[field]
+        # One vCPU: compress one upload at a time per process so a rush of
+        # uploads queues briefly instead of slowing every request down.
+        if not _IMAGE_WORK.acquire(timeout=IMAGE_WAIT_SECONDS):
+            return Response(
+                {"detail": "SKY is busy saving other photos. Retrying shortly."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                headers={"Retry-After": "10"},
+            )
+        try:
+            # Compress photos to ≤200 KB at the highest quality that fits.
+            for field, size in (("poster", POSTER_SIZE), ("selfie", SELFIE_SIZE)):
+                if field in data:
+                    data[field] = compressed_photo(data[field], size) or data[field]
+            thumbs = {"poster_thumb": optimized(data["poster"], THUMB_SIZE, 78) or ""}
+            if "selfie" in data:
+                thumbs["selfie_thumb"] = optimized(data["selfie"], THUMB_SIZE, 78) or ""
+        finally:
+            _IMAGE_WORK.release()
         replaced = []
         with transaction.atomic():
             # Registered customers are matched by mobile number, others by session.
@@ -158,12 +177,12 @@ class CustomerUpload(APIView):
             for thumb in ("poster_thumb", "selfie_thumb"):
                 if getattr(customer, thumb):
                     replaced.append(getattr(customer, thumb).name)
-            customer.poster_thumb = optimized(data["poster"], THUMB_SIZE, 78) or ""
+            customer.poster_thumb = thumbs["poster_thumb"]
             if "selfie" in data:
                 if customer.selfie:
                     replaced.append(customer.selfie.name)
                 customer.selfie = data["selfie"]
-                customer.selfie_thumb = optimized(data["selfie"], THUMB_SIZE, 78) or ""
+                customer.selfie_thumb = thumbs["selfie_thumb"]
             customer.mirror = mirror
             customer.mirror_name = mirror.name if mirror else data.get("mirror", "")
             if data.get("name"):

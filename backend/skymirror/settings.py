@@ -101,7 +101,8 @@ if os.environ.get("MYSQL_DATABASE"):
         "PORT": os.environ.get("MYSQL_PORT", "3306"),
         "CONN_MAX_AGE": 60,
         "CONN_HEALTH_CHECKS": True,
-        "OPTIONS": {"charset": "utf8mb4"},
+        # Strict mode rejects bad data instead of silently truncating it.
+        "OPTIONS": {"charset": "utf8mb4", "init_command": "SET sql_mode='STRICT_TRANS_TABLES'"},
     }
 
 # Where `manage.py backup` writes snapshots, and how many to keep.
@@ -129,6 +130,7 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 25 * 1024 * 1024
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOGIN_URL = "mirror-login"
+DJANGO_ADMIN_ENABLED = os.environ.get("DJANGO_ADMIN_ENABLED", "1") == "1"
 LOGIN_REDIRECT_URL = "mirror-dashboard"
 
 # The selfie studio runs on Vite (5173) in development.
@@ -168,6 +170,9 @@ if os.environ.get("REDIS_URL"):
         "default": {
             "BACKEND": "django.core.cache.backends.redis.RedisCache",
             "LOCATION": os.environ["REDIS_URL"],
+            "KEY_PREFIX": "skymirror",
+            # A slow or missing Redis must not hang requests.
+            "OPTIONS": {"socket_connect_timeout": 1, "socket_timeout": 1},
         }
     }
 

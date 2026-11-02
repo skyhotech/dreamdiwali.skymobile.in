@@ -1,5 +1,5 @@
 import type { Template } from "../templates";
-import { API_ORIGIN } from "./backend";
+import { MEDIA_ORIGIN } from "./backend";
 type Asset = {
   image: HTMLImageElement | null;
   status: "loading" | "ready" | "missing";
@@ -44,7 +44,7 @@ export function frameAsset(template: Template, priority = true): Asset {
   // the export canvas stays untainted.
   const fromBackend = template.artwork.startsWith("/");
   const url = fromBackend
-    ? new URL(API_ORIGIN + template.artwork, location.href)
+    ? new URL(MEDIA_ORIGIN + template.artwork, location.href)
     : /^https?:\/\//.test(template.artwork)
       ? new URL(template.artwork)
       : new URL(import.meta.env.BASE_URL + template.artwork, location.href);

@@ -10,5 +10,9 @@ urlpatterns = [
     path("", RedirectView.as_view(url="/sky/mirror/admin/")),
     path("sky/mirror/admin/", include(dashboard_urlpatterns)),
     path("api/", include(api_urlpatterns)),
-    path("django-admin/", admin.site.urls),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# Django's built-in admin has no sign-in lockout; production turns it off and
+# staff use the dashboard at /sky/mirror/admin/ instead.
+if settings.DJANGO_ADMIN_ENABLED:
+    urlpatterns.append(path("django-admin/", admin.site.urls))

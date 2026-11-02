@@ -50,8 +50,9 @@
 	@media_image path_regexp media_image (?i)^/media/.+\.(jpe?g|png|webp)$
 	handle @media_image {
 		root * /var/lib/skymirror
-		# Uploaded files get unique names, so browsers may keep them for good.
-		header Cache-Control "public, max-age=31536000, immutable"
+		# Uploaded files get unique names, so browsers and Vercel's CDN may keep
+		# them for good: each image leaves this server about once.
+		header Cache-Control "public, max-age=31536000, s-maxage=31536000, immutable"
 		header Access-Control-Allow-Origin *
 		header Cross-Origin-Resource-Policy cross-origin
 		header Content-Security-Policy "default-src 'none'; sandbox"

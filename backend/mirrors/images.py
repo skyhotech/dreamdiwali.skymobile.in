@@ -12,6 +12,20 @@ POSTER_SIZE = (1080, 2400)
 SELFIE_SIZE = (1280, 1280)
 THUMB_SIZE = (360, 800)
 
+# 1 GB server: refuse "decompression bombs" (a small file that decodes to a
+# huge bitmap). Pillow errors above twice this, i.e. ~50 megapixels.
+Image.MAX_IMAGE_PIXELS = 25_000_000
+
+
+def _open(file, max_size):
+    """Open an image, letting JPEG decode at a reduced scale when the target
+    is much smaller (a 12 MP photo then needs a fraction of the memory)."""
+    file.seek(0)
+    image = Image.open(file)
+    if image.format == "JPEG":
+        image.draft("RGB", max_size)
+    return ImageOps.exif_transpose(image)
+
 
 def optimized(file, max_size, quality=88, name=None, only_if_smaller=False):
     """Return the image fitted inside max_size as a ContentFile.
@@ -21,9 +35,7 @@ def optimized(file, max_size, quality=88, name=None, only_if_smaller=False):
     image, or with only_if_smaller when the result wouldn't save any bytes.
     """
     try:
-        file.seek(0)
-        image = Image.open(file)
-        image = ImageOps.exif_transpose(image)
+        image = _open(file, max_size)
     except Exception:
         return None
     image.thumbnail(max_size, Image.Resampling.LANCZOS)
@@ -84,8 +96,7 @@ def compressed_photo(file, max_size, target=PHOTO_TARGET_BYTES, name=None):
     (returns None, so the caller keeps the original).
     """
     try:
-        file.seek(0)
-        image = ImageOps.exif_transpose(Image.open(file))
+        image = _open(file, max_size)
     except Exception:
         return None
     if getattr(file, "size", 0) and file.size <= target:
