@@ -162,6 +162,11 @@ test("rear camera appears in the small product box, then captures and shares", a
   await expect(
     page.getByRole("textbox", { name: "Your SKY Instagram caption" }),
   ).toBeVisible();
+  // Sharing opens from the customer's tap on Post on Instagram.
+  await page
+    .locator(".camera-stage")
+    .getByRole("button", { name: "Post on Instagram", exact: true })
+    .click();
   await expect
     .poll(() =>
       page.evaluate(
@@ -333,14 +338,15 @@ test("Post on Instagram shares the completed poster with generated SKY caption",
     Object.defineProperty(navigator, "canShare", { value: () => true });
     Object.defineProperty(navigator, "share", {
       value: async (data: ShareData) => {
-        const bytes = new Uint8Array(await data.files![0].arrayBuffer());
+        // Decode the shared image to check its real size (any format).
+        const image = await createImageBitmap(data.files![0]);
         Object.assign(window, {
           skyShare: {
             text: data.text,
             files: data.files!.length,
             type: data.files![0].type,
-            width: new DataView(bytes.buffer).getUint32(16),
-            height: new DataView(bytes.buffer).getUint32(20),
+            width: image.width,
+            height: image.height,
           },
         });
       },
@@ -354,6 +360,14 @@ test("Post on Instagram shares the completed poster with generated SKY caption",
     })
     .click();
   await spinAndClaim(page);
+  // Sharing opens from the customer's tap (phones refuse it otherwise).
+  await expect(
+    page.getByRole("status").filter({ hasText: "Your poster is ready" }),
+  ).toBeVisible();
+  await page
+    .locator(".camera-stage")
+    .getByRole("button", { name: "Post on Instagram", exact: true })
+    .click();
   await expect
     .poll(() =>
       page.evaluate(
@@ -362,7 +376,7 @@ test("Post on Instagram shares the completed poster with generated SKY caption",
     )
     .toMatchObject({
       files: 1,
-      type: "image/png",
+      type: "image/jpeg",
       width: 1080,
       height: 2400,
       text: expect.stringContaining("@skymobileindia"),
@@ -395,8 +409,6 @@ test("Instagram fallback downloads poster and opens Instagram with caption ready
     });
   });
   await takeSelfie(page);
-  const dl = page.waitForEvent("download"),
-    popup = page.waitForEvent("popup");
   await page
     .getByRole("button", {
       name: "Capture product and post on Instagram",
@@ -404,7 +416,13 @@ test("Instagram fallback downloads poster and opens Instagram with caption ready
     })
     .click();
   await spinAndClaim(page);
-  expect((await dl).suggestedFilename()).toContain("SKY-Diwali");
+  const dl = page.waitForEvent("download"),
+    popup = page.waitForEvent("popup");
+  await page
+    .locator(".camera-stage")
+    .getByRole("button", { name: "Post on Instagram", exact: true })
+    .click();
+  expect((await dl).suggestedFilename()).toMatch(/^SKY-Diwali-.+\.jpg$/);
   const instagram = await popup;
   await expect(instagram).toHaveURL("https://www.instagram.com/");
   await instagram.close();

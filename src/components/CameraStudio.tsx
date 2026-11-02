@@ -128,9 +128,12 @@ export default function CameraStudio() {
       s.products.length,
       s.products.map((p) => p.label),
     ),
-    filename = `SKY-Diwali-${s.template}.png`;
+    filename = `SKY-Diwali-${s.template}`;
+  // Only ever called from a tap: phones open the share sheet (and allow the
+  // Instagram fallback tab) only straight after one.
   async function post(blob: Blob, text: string) {
-    const file = new File([blob], filename, { type: blob.type });
+    const name = `${filename}.${blob.type === "image/png" ? "png" : "jpg"}`;
+    const file = new File([blob], name, { type: blob.type });
     void copyCaption(text).then((ok) =>
       setCaptionMessage(
         ok
@@ -149,7 +152,7 @@ export default function CameraStudio() {
           text,
         });
       } else {
-        download(blob, filename);
+        download(blob, name);
         window.open(
           "https://www.instagram.com/",
           "_blank",
@@ -267,17 +270,15 @@ export default function CameraStudio() {
       layout: current.layout,
       reward: current.reward,
     });
-    const blob = await canvasBlob(c);
+    // High-quality JPEG: a fraction of the PNG's size, so the share sheet
+    // opens fast; Instagram accepts it and recompresses anyway.
+    const blob = await canvasBlob(c, "image/jpeg", 0.92);
     c.width = c.height = 1;
     setPoster(blob);
     s.setSavedPoster(blob);
-    await post(
-      blob,
-      instagramCaption(
-        current.products.length,
-        current.products.map((p) => p.label),
-      ),
-    );
+    // No automatic share here (it isn't a tap, so phones would refuse it):
+    // the customer taps Post on Instagram, which opens the share sheet.
+    setMessage("Your poster is ready! Tap Post on Instagram to share it.");
   }
   function changeTemplate(direction: number) {
     if (completed) return;
@@ -395,7 +396,9 @@ export default function CameraStudio() {
             </div>
           )}
           <button
-            className="instagram-shutter poster-post-action"
+            className={`instagram-shutter poster-post-action${
+              completed && poster && !busy ? " ready-to-share" : ""
+            }`}
             aria-label={
               product && !completed
                 ? "Capture product and post on Instagram"
@@ -487,7 +490,12 @@ export default function CameraStudio() {
             {poster && (
               <button
                 className="text-button"
-                onClick={() => download(poster, filename)}
+                onClick={() =>
+                  download(
+                    poster,
+                    `${filename}.${poster.type === "image/png" ? "png" : "jpg"}`,
+                  )
+                }
               >
                 <Download size={13} /> Download
               </button>
