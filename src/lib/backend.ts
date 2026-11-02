@@ -7,10 +7,14 @@ export const API_ORIGIN = (
   (import.meta.env.PROD ? "https://87.232.72.141" : "")
 ).replace(/\/$/, "");
 const API = API_ORIGIN + "/api";
-/** Where /media files load from. */
-export const MEDIA_ORIGIN = API_ORIGIN;
+/** Where /media files load from. On Vercel they go through its CDN (see
+ *  vercel.json), so each image leaves the VPS once and loads from nearby. */
+export const MEDIA_ORIGIN =
+  typeof location !== "undefined" && location.hostname.endsWith(".vercel.app")
+    ? ""
+    : API_ORIGIN;
 // Fallback when the event stream is unavailable (e.g. a proxy that buffers it).
-export const POLL_MS = 1000;
+export const POLL_MS = 30_000;
 
 let lastPayload = "";
 let lastVersion = "";
@@ -403,6 +407,9 @@ export function startUploadSync() {
 }
 // The server stores ≤200 KB photos anyway, so a PNG (3–5 MB) is re-encoded as
 // JPEG on the phone first: uploads get ~10× smaller and finish sooner.
+// The server keeps ≤200 KB; sending more only costs VPS bandwidth.
+const UPLOAD_QUALITY = 0.72;
+const POSTER_SIDE = 1280;
 async function asJpeg(blob: Blob, maxSide = Infinity): Promise<Blob> {
   try {
     const bitmap = await createImageBitmap(blob);
@@ -417,7 +424,7 @@ async function asJpeg(blob: Blob, maxSide = Infinity): Promise<Blob> {
     canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close();
     const jpeg = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", 0.9),
+      canvas.toBlob(resolve, "image/jpeg", UPLOAD_QUALITY),
     );
     return jpeg && jpeg.size < blob.size ? jpeg : blob;
   } catch {
@@ -430,7 +437,7 @@ export async function uploadCustomer(data: Upload) {
   data = {
     ...data,
     branch: data.branch ?? (BRANCH || undefined),
-    poster: await asJpeg(data.poster),
+    poster: await asJpeg(data.poster, POSTER_SIDE),
     selfie: data.selfie && (await asJpeg(data.selfie)),
   };
   try {
