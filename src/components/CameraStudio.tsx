@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Camera,
   Instagram,
@@ -8,6 +8,7 @@ import {
   ExternalLink,
   Download,
   UserPlus,
+  Sparkles,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useCamera } from "../hooks/useCamera";
@@ -30,6 +31,14 @@ import { UploadStatus } from "./StatusNotices";
 import type { Reward } from "../lib/rewards";
 import { spinPrize } from "../lib/backend";
 import { faceFingerprint } from "../lib/faceMatch";
+// Hands-free capture: how strong a smile counts, and how long a cue is held.
+const SMILE_THRESHOLD = 0.6;
+const HOLD_MS = 500;
+const AUTO_GESTURES: Record<string, string> = {
+  Victory: "✌️ Peace!",
+  Thumb_Up: "👍 Thumbs up!",
+  Open_Palm: "✋ High five!",
+};
 export default function CameraStudio() {
   const s = useStudio(),
     product = s.step === "product";
@@ -52,6 +61,60 @@ export default function CameraStudio() {
     "smile",
     1,
   );
+  // Hands-free selfie: a smile or ✌️ / 👍 / ✋ held briefly starts a 3-2-1.
+  const [autoCapture, setAutoCapture] = useState(true),
+    [countdown, setCountdown] = useState<number | null>(null),
+    [cueLabel, setCueLabel] = useState("");
+  const autoArmed =
+    autoCapture &&
+    !product &&
+    !completed &&
+    !closed &&
+    !busy &&
+    camera.ready &&
+    effect.ready;
+  useEffect(() => {
+    if (!autoArmed || countdown !== null) return;
+    let heldSince = 0;
+    const id = window.setInterval(() => {
+      // Tests can stand in for a real smile or gesture (dev builds only).
+      const { smile, gesture } =
+        (import.meta.env.DEV &&
+          (window as { skyFakeCue?: { smile: number; gesture: string } })
+            .skyFakeCue) ||
+        effect.cues.current;
+      const cue =
+        AUTO_GESTURES[gesture] ??
+        (smile > SMILE_THRESHOLD ? "😊 Big smile!" : "");
+      if (!cue) {
+        heldSince = 0;
+        return;
+      }
+      heldSince ||= performance.now();
+      if (performance.now() - heldSince >= HOLD_MS) {
+        setCueLabel(cue);
+        setCountdown(3);
+      }
+    }, 120);
+    return () => window.clearInterval(id);
+  }, [autoArmed, countdown, effect.cues]);
+  useEffect(() => {
+    if (countdown === null) return;
+    if (!autoArmed) {
+      setCountdown(null);
+      return;
+    }
+    const id = window.setTimeout(() => {
+      if (countdown > 1) setCountdown(countdown - 1);
+      else {
+        setCountdown(null);
+        void shoot();
+      }
+    }, 800);
+    return () => window.clearTimeout(id);
+    // shoot reads current state; re-running on its identity would reset the timer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countdown, autoArmed]);
   const template = getTemplate(s.template),
     caption = instagramCaption(
       s.products.length,
@@ -266,6 +329,35 @@ export default function CameraStudio() {
                   : undefined,
             }}
           />
+          {!product && !completed && effect.ready && (
+            <div className="auto-capture" aria-live="polite">
+              <button
+                className={`auto-capture-toggle ${autoCapture ? "on" : ""}`}
+                aria-pressed={autoCapture}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => {
+                  setAutoCapture((v) => !v);
+                  setCountdown(null);
+                }}
+              >
+                <Sparkles size={13} aria-hidden="true" />
+                Auto capture {autoCapture ? "on" : "off"}
+              </button>
+              {autoCapture && countdown === null && (
+                <span className="auto-capture-hint">
+                  Smile or show ✌️ 👍 ✋ — the photo takes itself
+                </span>
+              )}
+            </div>
+          )}
+          {countdown !== null && (
+            <div className="auto-countdown" role="status">
+              <span key={countdown} className="auto-countdown-number">
+                {countdown}
+              </span>
+              <span className="auto-countdown-cue">{cueLabel}</span>
+            </div>
+          )}
           {product && !completed && (
             <div
               className="inline-product-hint"

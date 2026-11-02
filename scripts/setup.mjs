@@ -65,6 +65,31 @@ try {
     );
   }
 }
+// Hand-gesture model for hands-free selfies (✌️ 👍 ✋), about 8 MB.
+const gestureModel = join(target, "gesture_recognizer.task");
+try {
+  await access(gestureModel);
+} catch {
+  console.log("Preparing local hand-gesture model (about 8 MB)…");
+  try {
+    const response = await fetch(
+      "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task",
+      { signal: AbortSignal.timeout(60000) },
+    );
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    await import("node:fs/promises").then((fs) =>
+      fs.writeFile(gestureModel + ".tmp", bytes),
+    );
+    await rename(gestureModel + ".tmp", gestureModel);
+  } catch (error) {
+    await rm(gestureModel + ".tmp", { force: true });
+    console.warn(
+      "Gesture model unavailable. Smile auto-capture and the shutter still work. Retry npm run setup. " +
+        error.message,
+    );
+  }
+}
 // Face-match models (repeat-customer check), served from public/ai/face.
 const faceSource = join(root, "node_modules/@vladmandic/face-api/model");
 const faceTarget = join(target, "face");

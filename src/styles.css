@@ -3241,3 +3241,112 @@ body {
   background: #b51d4733;
   color: #ffb3c4;
 }
+/* Hands-free selfie: toggle, hint and the 3-2-1 countdown over the camera. */
+.auto-capture {
+  position: absolute;
+  top: 12%;
+  left: 50%;
+  z-index: 6;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: max-content;
+  max-width: 92%;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.auto-capture-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 14px;
+  border: 1px solid rgba(255, 244, 220, 0.6);
+  border-radius: 999px;
+  background: rgba(23, 18, 13, 0.72);
+  color: #fff4dc;
+  font: 600 13px/1 system-ui, sans-serif;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+.auto-capture-toggle.on {
+  border-color: #d6a447;
+  background: linear-gradient(135deg, #d22856, #7a1631);
+  box-shadow: 0 0 0 3px rgba(214, 164, 71, 0.35);
+}
+.auto-capture-hint {
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(23, 18, 13, 0.62);
+  color: #fff4dc;
+  font: 500 12px/1.3 system-ui, sans-serif;
+  text-align: center;
+  animation: auto-hint 2.4s ease-in-out infinite;
+}
+.auto-countdown {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  pointer-events: none;
+}
+.auto-countdown-number {
+  display: grid;
+  place-items: center;
+  width: clamp(96px, 28vw, 140px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(210, 40, 86, 0.85), rgba(122, 22, 49, 0.85));
+  border: 5px solid #f3cf7a;
+  color: #fff9f0;
+  font: 800 clamp(52px, 16vw, 80px)/1 Georgia, serif;
+  animation: auto-count 0.8s ease-out both;
+}
+.auto-countdown-number::after {
+  content: "";
+  position: absolute;
+  width: inherit;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 3px solid #f3cf7a;
+  animation: spin-halo 0.8s ease-out infinite;
+}
+.auto-countdown-cue {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(23, 18, 13, 0.75);
+  color: #f3cf7a;
+  font: 700 16px/1 system-ui, sans-serif;
+}
+@keyframes auto-count {
+  0% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+  35% {
+    transform: scale(0.92);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes auto-hint {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auto-capture-hint,
+  .auto-countdown-number,
+  .auto-countdown-number::after {
+    animation: none !important;
+  }
+}

@@ -16,8 +16,8 @@ test.beforeEach(async ({ page }) => {
     localStorage.setItem("sky-customer-phone", "9845012345"),
   );
 });
-async function mockCamera(page: Page, rearUnavailable = false) {
-  await page.route("**/ai/**", (r) => r.abort());
+async function mockCamera(page: Page, rearUnavailable = false, withAi = false) {
+  if (!withAi) await page.route("**/ai/**", (r) => r.abort());
   await page.addInitScript(
     ({ rearUnavailable }) => {
       const calls: string[] = [],
@@ -565,6 +565,45 @@ test("prize wheel spins after the product photo and puts the reward on the poste
   ).toBeVisible();
 });
 
+test("a smile or hand gesture takes the selfie by itself after 3-2-1", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await mockCamera(page, false, true);
+  await page.goto("/");
+  const toggle = page.getByRole("button", { name: /Auto capture on/ });
+  await expect(toggle).toBeVisible({ timeout: 60_000 });
+  // No cue yet: nothing happens.
+  await page.waitForTimeout(1000);
+  await expect(page.locator(".auto-countdown")).toHaveCount(0);
+  // A held ✌️ starts the countdown, then the selfie is taken.
+  await page.evaluate(() =>
+    Object.assign(window, { skyFakeCue: { smile: 0, gesture: "Victory" } }),
+  );
+  await expect(page.locator(".auto-countdown")).toContainText("✌️");
+  await expect(
+    page.getByRole("button", {
+      name: "Capture product and post on Instagram",
+      exact: true,
+    }),
+  ).toBeVisible({ timeout: 10_000 });
+});
+test("auto capture can be switched off", async ({ page }) => {
+  test.setTimeout(90_000);
+  await mockCamera(page, false, true);
+  await page.goto("/");
+  const toggle = page.getByRole("button", { name: /Auto capture on/ });
+  await expect(toggle).toBeVisible({ timeout: 60_000 });
+  await toggle.click();
+  await expect(
+    page.getByRole("button", { name: /Auto capture off/ }),
+  ).toBeVisible();
+  await page.evaluate(() =>
+    Object.assign(window, { skyFakeCue: { smile: 0.9, gesture: "" } }),
+  );
+  await page.waitForTimeout(1500);
+  await expect(page.locator(".auto-countdown")).toHaveCount(0);
+});
 test("the wheel turns right away even when the prize is slow to arrive", async ({
   page,
 }) => {
