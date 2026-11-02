@@ -61,7 +61,12 @@ class BranchFlowTests(TestCase):
         self.assertEqual(self.branch.slug, "anna-nagar")
         self.client.force_login(self.staff)
         data = self.client.get("/api/admin/branches/").json()
-        self.assertEqual(data[0]["link"], "https://studio.example/?branch=anna-nagar")
+        links = [b["link"] for b in data]
+        self.assertIn("https://studio.example/?branch=anna-nagar", links)
+
+    def test_excel_branches_are_seeded(self):
+        self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)
+        self.assertTrue(Branch.objects.filter(slug="thiruvannamalai-1").exists())
 
     def test_check_files_the_customer_and_returns_a_link(self):
         res = self.check()
