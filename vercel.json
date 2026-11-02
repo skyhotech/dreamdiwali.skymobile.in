@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/sky/(.*)", "destination": "https://87.232.72.141/sky/$1" },
+    { "source": "/sky", "destination": "https://87.232.72.141/sky/" },
+    { "source": "/api/(.*)", "destination": "https://87.232.72.141/api/$1" },
+    { "source": "/static/(.*)", "destination": "https://87.232.72.141/static/$1" },
+    { "source": "/media/(.*)", "destination": "https://87.232.72.141/media/$1" }
+  ]
+}

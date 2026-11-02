@@ -24,8 +24,8 @@ if [ ! -f /etc/skymirror/.env ]; then
 DJANGO_SECRET_KEY=$(openssl rand -base64 48 | tr -d '\n/+=')
 DJANGO_DEBUG=0
 DJANGO_ALLOWED_HOSTS=87.232.72.141,dreamdiwali.skymobile.in
-CORS_ALLOWED_ORIGINS=https://87.232.72.141,https://dreamdiwali.skymobile.in
-CSRF_TRUSTED_ORIGINS=https://87.232.72.141,https://dreamdiwali.skymobile.in
+CORS_ALLOWED_ORIGINS=https://87.232.72.141,https://dreamdiwali.skymobile.in,https://dreamdiwali-skymobile-in.vercel.app
+CSRF_TRUSTED_ORIGINS=https://87.232.72.141,https://dreamdiwali.skymobile.in,https://dreamdiwali-skymobile-in.vercel.app
 DJANGO_SSL_REDIRECT=0
 TRUSTED_PROXIES=1
 REDIS_URL=redis://127.0.0.1:6379/0
