@@ -196,7 +196,7 @@ export const registerPhone = (phone: string) =>
   });
 export const NO_PHOTO = "Take your selfie first, then spin for your gift.";
 // How long a customer may wait in the queue when SKY is busy.
-const QUEUE_LIMIT_MS = 3 * 60_000;
+const QUEUE_LIMIT_MS = 60_000;
 /** The server picks the prize, once per mobile number and once per face.
  *  The selfie goes with it: no photo, no spin. When the server is busy the
  *  customer waits in line (onQueue reports it) and the request is retried. */
@@ -223,8 +223,8 @@ export async function spinPrize(
       return reward;
     } catch (e) {
       const err = e as ApiError;
-      const queued =
-        err.status === 503 || err.status === 429 || err.status === 0;
+      // Only a busy server queues; network errors and timeouts stop at once.
+      const queued = err.status === 503 || err.status === 429;
       if (!queued || Date.now() - started > QUEUE_LIMIT_MS) {
         onQueue?.(false);
         throw err;

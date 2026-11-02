@@ -23,6 +23,8 @@ function slicePath(i: number) {
 }
 // Time to enjoy the win (sound, confetti) before the prize is added automatically.
 const AUTO_CLAIM_MS = 2200;
+// Longest the wheel turns while waiting for the prize (the queue can extend it).
+const MAX_WAIT_MS = 25_000;
 // Starts at roughly the waiting speed, then a long smooth slow-down.
 const LANDING_EASE = "cubic-bezier(0.33, 0.6, 0.3, 1)";
 export function SpinWheel({
@@ -41,6 +43,11 @@ export function SpinWheel({
   const [won, setWon] = useState<Reward | null>(null);
   const [error, setError] = useState("");
   const [queued, setQueued] = useState(false);
+  const queuedRef = useRef(false);
+  const onQueue = (waiting: boolean) => {
+    queuedRef.current = waiting;
+    setQueued(waiting);
+  };
   const spinAudio = useRef<HTMLAudioElement | null>(null);
   const winAudio = useRef<HTMLAudioElement | null>(null);
   const timer = useRef(0);
@@ -55,11 +62,6 @@ export function SpinWheel({
     const win = new Audio(sounds.win);
     win.preload = "auto";
     winAudio.current = win;
-    // The wheel spins by itself. Two frames first, so the browser paints the
-    // starting angle; otherwise it skips the transition and nothing turns.
-    let frame = requestAnimationFrame(() => {
-      frame = requestAnimationFrame(() => void spinRef.current());
-    });
     // No refresh or leaving mid-spin (the server never re-rolls anyway).
     const block = (e: BeforeUnloadEvent) => {
       e.preventDefault();
@@ -68,7 +70,6 @@ export function SpinWheel({
     addEventListener("beforeunload", block);
     document.documentElement.classList.add("no-pull-refresh");
     return () => {
-      cancelAnimationFrame(frame);
       spin.pause();
       window.clearTimeout(timer.current);
       window.clearTimeout(claimTimer.current);
@@ -93,8 +94,6 @@ export function SpinWheel({
       }),
     [],
   );
-  const spinRef = useRef(spin);
-  spinRef.current = spin;
   // While the server decides the prize, the wheel already turns at a steady
   // speed (a CSS transition, so it stays smooth even when the phone is busy).
   const WAIT_DEG_PER_MS = 0.72;
@@ -119,7 +118,21 @@ export function SpinWheel({
     setRotation(from + WAIT_DEG_PER_MS * WAIT_MS);
     let index: number;
     try {
-      const prize = await getPrize(setQueued);
+      // Never spin for ever: give up after a while and offer Try again.
+      let watchdog = 0;
+      const prize = await Promise.race([
+        getPrize(onQueue).finally(() => window.clearInterval(watchdog)),
+        new Promise<never>((_, reject) => {
+          const since = performance.now();
+          // Waiting in the queue is fine; silence for too long is not.
+          watchdog = window.setInterval(() => {
+            if (!queuedRef.current && performance.now() - since > MAX_WAIT_MS) {
+              window.clearInterval(watchdog);
+              reject(new Error("SKY is taking too long. Tap Try again."));
+            }
+          }, 500);
+        }),
+      ]);
       index = REWARDS.findIndex((r) => r.id === prize);
       if (index < 0) throw new Error("Unknown prize. Try again.");
     } catch (e) {
@@ -390,11 +403,11 @@ export function SpinWheel({
             <Gift size={18} /> Adding your gift to the poster…
           </motion.p>
         ) : (
-          error &&
           phase === "ready" && (
+            // One tap, one spin: the button is gone once the wheel starts.
             <button className="spin-button" onClick={() => void spin()}>
               <Sparkles size={20} />
-              Try again
+              {error ? "Try again" : "Tap to spin"}
             </button>
           )
         )}

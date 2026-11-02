@@ -115,7 +115,7 @@ async function takeSelfie(page: Page) {
 // the prize is added to the poster automatically.
 async function spinAndClaim(page: import("@playwright/test").Page) {
   const dialog = page.getByRole("dialog", { name: "Spin the wheel" });
-  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Tap to spin" }).click();
   await expect(dialog.getByRole("status")).toHaveText(/You won a/, {
     timeout: 10_000,
   });
@@ -498,7 +498,8 @@ test("prize wheel spins after the product photo and puts the reward on the poste
     .click();
   const dialog = page.getByRole("dialog", { name: "Spin the wheel" });
   await expect(dialog).toBeVisible();
-  // The wheel starts by itself; there is no spin button.
+  // A double tap must not start two spins.
+  await dialog.getByRole("button", { name: "Tap to spin" }).dblclick();
   await expect(dialog.getByRole("status")).toHaveText("Good luck…");
   await expect(dialog.getByRole("button")).toHaveCount(0);
   // The wheel must visibly turn, not jump straight to the result.
@@ -581,7 +582,7 @@ test("the wheel turns right away even when the prize is slow to arrive", async (
     })
     .click();
   const dialog = page.getByRole("dialog", { name: "Spin the wheel" });
-  // The wheel starts by itself; there is no spin button.
+  await dialog.getByRole("button", { name: "Tap to spin" }).click();
   const angle = () =>
     page
       .locator(".spin-wheel")
@@ -623,7 +624,7 @@ test("a face that already claimed a gift sees a clear message", async ({
     })
     .click();
   const dialog = page.getByRole("dialog", { name: "Spin the wheel" });
-  // The wheel starts by itself; there is no spin button.
+  await dialog.getByRole("button", { name: "Tap to spin" }).click();
   await expect(dialog.getByRole("alert")).toHaveText(
     /already claimed your Diwali gift/,
   );
@@ -641,7 +642,7 @@ test("reloading during the prize wheel cannot re-roll the prize", async ({
     })
     .click();
   const dialog = page.getByRole("dialog", { name: "Spin the wheel" });
-  // The wheel starts by itself; there is no spin button.
+  await dialog.getByRole("button", { name: "Tap to spin" }).click();
   await expect(dialog.getByRole("status")).toHaveText(/You won a (.+)!/, {
     timeout: 10_000,
   });
@@ -650,6 +651,7 @@ test("reloading during the prize wheel cannot re-roll the prize", async ({
   await page.reload();
   const again = page.getByRole("dialog", { name: "Spin the wheel" });
   await expect(again).toBeVisible();
+  await again.getByRole("button", { name: "Tap to spin" }).click();
   await expect(again.getByRole("status")).toHaveText(first!, {
     timeout: 10_000,
   });
