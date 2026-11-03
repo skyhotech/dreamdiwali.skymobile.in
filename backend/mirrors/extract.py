@@ -12,8 +12,10 @@ MAX_BYTES = 15 * 1024 * 1024
 # Small print reads best at about this width (≈300 dpi for an A4 bill).
 OCR_WIDTH = 2400
 MIN_PDF_TEXT = 40
-# Tesseract: LSTM engine, one block of uniform text (a bill's table).
-OCR_CONFIG = "--oem 1 --psm 6"
+# Tesseract's LSTM engine, read as one block of lines (psm 6) and as sparse
+# text (psm 11). Tested on photos of real SKY invoices: only together do they
+# give both the line layout and the table cells.
+OCR_CONFIGS = ("--oem 1 --psm 6", "--oem 1 --psm 11")
 
 
 class UnreadableInvoice(Exception):
@@ -41,10 +43,38 @@ def _pdf_first_page(data):
         pdf.close()
 
 
+# Hand-held photos lean a few degrees; this covers it in half-degree steps.
+SKEW_LIMIT, SKEW_STEP = 8, 0.5
+
+
+def _row_spread(image):
+    """How sharply rows alternate between ink and paper: highest when the
+    text lines are exactly level."""
+    rows = list(image.resize((1, image.height), Image.Resampling.BOX).getdata())
+    mean = sum(rows) / len(rows)
+    return sum((r - mean) ** 2 for r in rows)
+
+
+def deskew(image):
+    """Turns a leaning photo so its text lines are level (searches the angle
+    on a small black-and-white copy, then rotates the full image once)."""
+    small = image.copy()
+    small.thumbnail((900, 900))
+    small = _binarized(ImageOps.autocontrast(small, cutoff=1))
+    steps = int(SKEW_LIMIT / SKEW_STEP)
+    angle = max(
+        (i * SKEW_STEP for i in range(-steps, steps + 1)),
+        key=lambda a: _row_spread(small.rotate(a, resample=Image.Resampling.BILINEAR, fillcolor=255)),
+    )
+    if not angle:
+        return image
+    return image.rotate(angle, resample=Image.Resampling.BICUBIC, expand=True, fillcolor=255)
+
+
 def enhance(image):
-    """Upright, grey, large enough, full contrast and sharp: what OCR needs
-    from a phone photo taken at an angle in shop lighting."""
-    image = ImageOps.exif_transpose(image).convert("L")
+    """Upright, grey, level, large enough, full contrast and sharp: what OCR
+    needs from a phone photo taken at an angle in shop lighting."""
+    image = deskew(ImageOps.exif_transpose(image).convert("L"))
     if image.width < OCR_WIDTH:
         scale = OCR_WIDTH / image.width
         image = image.resize((OCR_WIDTH, round(image.height * scale)), Image.Resampling.LANCZOS)
@@ -72,14 +102,16 @@ def _binarized(image):
 
 
 def ocr_image(image):
-    """Two readings, enhanced and black-and-white, combined: a field missed in
-    one is usually caught in the other."""
+    """Two readings combined. The block reading keeps each printed line
+    together (name under Billed To, labels beside values); the sparse reading
+    finds text inside table boxes, which the block reading skips on photos
+    (the IMEI sits in the Particulars cell)."""
     import pytesseract
 
     clean = enhance(image)
-    readings = [pytesseract.image_to_string(clean, config=OCR_CONFIG)]
-    readings.append(pytesseract.image_to_string(_binarized(clean), config=OCR_CONFIG))
-    return "\n".join(readings)
+    return "\n".join(
+        pytesseract.image_to_string(clean, config=config) for config in OCR_CONFIGS
+    )
 
 
 def extract_text(data, name=""):
