@@ -195,6 +195,7 @@ export async function fetchLink(token: string) {
     reward?: string | null;
     items?: { id: string; label: string; image: string }[];
     poster?: string | null;
+    next?: string;
     detail?: string;
   };
   if (!res.ok || !data.phone)
@@ -204,6 +205,7 @@ export async function fetchLink(token: string) {
     reward: data.reward ?? null,
     items: data.items ?? [],
     poster: data.poster ? MEDIA_ORIGIN + data.poster : null,
+    reviewed: data.next !== "review" && data.next !== "spin",
   };
 }
 export type BranchOption = { slug: string; name: string };
@@ -223,6 +225,9 @@ export async function fetchManagerBranches() {
 /** Validates and saves the purchase; returns the customer's spin link. */
 export const checkPurchase = (form: FormData) =>
   postJson<{ phone: string; link: string }>("/manager/check/", form);
+/** Star rating and review, sent once after the spin. */
+export const sendReview = (token: string, rating: number, review: string) =>
+  postJson<{ next: string }>("/customers/review/", { token, rating, review });
 /** Timeline entries; a lost one must never interrupt the customer. */
 export function trackSent(phone: string) {
   void fetch(`${API}/manager/sent/`, {

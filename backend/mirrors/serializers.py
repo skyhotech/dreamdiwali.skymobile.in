@@ -184,7 +184,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             "consent_at", "has_face", "repeat_of", "repeat_of_phone",
             "poster_thumb", "selfie_thumb", "branch", "branch_name",
             "email", "product_details", "imei", "invoice_number", "bill_value",
-            "invoice_image", "blur_score", "link_version", "stage",
+            "invoice_image", "blur_score", "link_version", "stage", "rating", "review",
         ]
         read_only_fields = fields
 
@@ -244,6 +244,13 @@ def imei_valid(imei):
 
 class SpinSerializer(serializers.Serializer):
     token = serializers.CharField(max_length=43)
+
+
+class ReviewSerializer(SpinSerializer):
+    rating = serializers.IntegerField(
+        min_value=1, max_value=5, error_messages={"required": "Please choose a star rating."}
+    )
+    review = serializers.CharField(max_length=1000, required=False, allow_blank=True)
 
 
 class EventSerializer(SpinSerializer):

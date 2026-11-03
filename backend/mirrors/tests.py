@@ -149,12 +149,28 @@ class BranchFlowTests(TestCase):
         token = self.token(self.check())
         first = self.spin(token).json()["reward"]
         again = self.spin(token).json()
-        self.assertEqual(again, {"reward": first, "next": "mirror"})
+        self.assertEqual(again, {"reward": first, "next": "review"})
         link = self.client.get(f"/api/customers/link/{token}/").json()
-        self.assertEqual((link["next"], link["poster"]), ("mirror", None))
+        self.assertEqual((link["next"], link["poster"]), ("review", None))
         Customer.objects.update(poster="customers/p.jpg")
         link = self.client.get(f"/api/customers/link/{token}/").json()
         self.assertEqual((link["next"], link["poster"]), ("share", "/media/customers/p.jpg"))
+
+    def review(self, token, **body):
+        return self.client.post("/api/customers/review/", {"token": token, **body},
+                                content_type="application/json")
+
+    def test_rating_and_review_come_after_the_spin(self):
+        token = self.token(self.check())
+        self.assertEqual(self.review(token, rating=5).status_code, 400)  # not spun yet
+        self.spin(token)
+        self.assertEqual(self.review(token, rating=6).status_code, 400)
+        self.assertEqual(self.review(token, rating=4, review="Great").json(), {"next": "mirror"})
+        c = Customer.objects.get()
+        self.assertEqual((c.rating, c.review), (4, "Great"))
+        self.client.force_login(self.staff)
+        stats = self.client.get("/api/admin/stats/").json()
+        self.assertEqual((stats["rating"]["avg"], stats["reviews"][0]["review"]), (4.0, "Great"))
 
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)

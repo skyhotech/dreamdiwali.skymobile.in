@@ -204,6 +204,9 @@ class Customer(models.Model):
     invoice_number = models.CharField(max_length=40, blank=True)
     bill_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     invoice_image = models.ImageField(upload_to=customer_path, blank=True)
+    # Asked straight after the spin, before the mirror selfie.
+    rating = models.PositiveSmallIntegerField(null=True, blank=True)
+    review = models.TextField(blank=True)
     # Every word read from the invoice photo, and how sharp that photo was.
     ocr_text = models.TextField(blank=True)
     blur_score = models.FloatField(null=True, blank=True)
@@ -247,7 +250,9 @@ class Customer(models.Model):
         """Where this customer's link takes them."""
         if self.poster:
             return "share"
-        return "mirror" if self.reward else "spin"
+        if not self.reward:
+            return "spin"
+        return "mirror" if self.rating else "review"
 
     @property
     def stage(self):

@@ -18,6 +18,7 @@ api_urlpatterns = [
     path("customers/link/<str:token>/", views.CustomerLink.as_view(), name="customer-link"),
     path("customers/spin/", views.CustomerSpin.as_view(), name="customer-spin"),
     path("manager/branches/", views.ManagerBranches.as_view(), name="manager-branches"),
+    path("customers/review/", views.CustomerReview.as_view(), name="customer-review"),
     path("customers/event/", views.CustomerEventView.as_view(), name="customer-event"),
     path("manager/sent/", views.ManagerSent.as_view(), name="manager-sent"),
     path("manager/check/", views.ManagerCheck.as_view(), name="manager-check"),

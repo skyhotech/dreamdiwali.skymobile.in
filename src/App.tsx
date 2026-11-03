@@ -3,6 +3,7 @@ import { MotionConfig } from "motion/react";
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Festive } from "./components/Festive";
 import { ManagerIntake } from "./components/ManagerIntake";
+import { ReviewForm } from "./components/ReviewForm";
 import { SavedPoster } from "./components/SavedPoster";
 import { SpinWheel } from "./components/SpinWheel";
 import { OfflineBanner } from "./components/StatusNotices";
@@ -28,6 +29,7 @@ function Studio() {
   const [linkError, setLinkError] = useState("");
   const [linkReady, setLinkReady] = useState(false);
   const [poster, setPoster] = useState<string | null>(null);
+  const [reviewed, setReviewed] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   // Gift pictures and the spin sound start loading once the customer signs
   // in, so the wheel opens with everything already on the phone.
@@ -50,6 +52,7 @@ function Studio() {
         s.setToken(SPIN_TOKEN);
         s.setPhone(c.phone);
         setPoster(c.poster);
+        setReviewed(c.reviewed);
         setLinkReady(true);
       })
       .catch((e: Error) => live && setLinkError(e.message));
@@ -111,6 +114,18 @@ function Studio() {
               getPrize={({ onQueue }) => spinPrize(token, onQueue)}
               onClaim={(r) => useStudio.getState().setReward(r.id)}
             />
+          </Festive>
+        </main>
+      </MotionConfig>
+    );
+  // After the spin: stars and a review, then the mirror selfie.
+  if (!reviewed)
+    return (
+      <MotionConfig reducedMotion="user">
+        <main id="main" className="mobile-studio">
+          <OfflineBanner />
+          <Festive>
+            <ReviewForm token={token} onDone={() => setReviewed(true)} />
           </Festive>
         </main>
       </MotionConfig>

@@ -3576,3 +3576,23 @@ html.no-pull-refresh body {
   margin: 12px 0;
   border-radius: 14px;
 }
+.review-stars {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+.review-stars button {
+  padding: 2px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.review-label {
+  min-height: 1.4em;
+  font-weight: 700;
+  color: #7a1631;
+}
+.review-card textarea {
+  resize: vertical;
+}

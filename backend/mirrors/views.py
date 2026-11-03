@@ -10,7 +10,7 @@ from django.contrib.auth.views import LoginView
 from django.db import IntegrityError, close_old_connections, transaction
 from django.core.cache import cache
 from django.http import JsonResponse, StreamingHttpResponse
-from django.db.models import Count, Max, Q, Sum
+from django.db.models import Avg, Count, Max, Q, Sum
 from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -34,6 +34,7 @@ from .serializers import (
     CustomerEventSerializer,
     CustomerIntakeSerializer,
     EventSerializer,
+    ReviewSerializer,
     SpinItemSerializer,
     wheel_items,
     CustomerSerializer,
@@ -426,6 +427,28 @@ class ManagerSent(APIView):
         return Response({"ok": True})
 
 
+class CustomerReview(APIView):
+    """Star rating and review, given after the spin."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [CustomerSpinThrottle]
+
+    def post(self, request):
+        ser = ReviewSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        customer = Customer.objects.filter(spin_token=ser.validated_data["token"]).first()
+        if customer is None:
+            return Response({"detail": INVALID_LINK}, status=status.HTTP_404_NOT_FOUND)
+        if not customer.reward:
+            return Response({"detail": "Spin the wheel first."}, status=status.HTTP_400_BAD_REQUEST)
+        customer.rating = ser.validated_data["rating"]
+        customer.review = ser.validated_data.get("review", "").strip()
+        customer.save(update_fields=["rating", "review", "updated_at"])
+        _log(customer, "reviewed", rating=customer.rating)
+        return Response({"next": customer.next_step})
+
+
 class CustomerEventView(APIView):
     """Records which share button a customer pressed."""
 
@@ -560,7 +583,7 @@ class CustomerViewSet(
         )
         writer = csv.writer(response)
         writer.writerow(["id", "phone", "name", "branch", "mirror", "reward", "same_face_as",
-                         "consent_at", "created_at", "poster_url", "selfie_url", "stage", "email",
+                         "consent_at", "created_at", "poster_url", "selfie_url", "stage", "rating", "review", "email",
                          "product_details", "imei", "invoice_number", "bill_value",
                          "invoice_image_url"])
         rows = Customer.objects.select_related("repeat_of").order_by("created_at")
@@ -576,7 +599,7 @@ class CustomerViewSet(
                 c.created_at.isoformat(),
                 request.build_absolute_uri(c.poster.url) if c.poster else "",
                 request.build_absolute_uri(c.selfie.url) if c.selfie else "",
-                c.stage, c.email, c.product_details, c.imei, c.invoice_number, c.bill_value or "",
+                c.stage, c.rating or "", c.review, c.email, c.product_details, c.imei, c.invoice_number, c.bill_value or "",
                 request.build_absolute_uri(c.invoice_image.url) if c.invoice_image else "",
             ])
         return response
@@ -614,6 +637,11 @@ def _customer_stats(customers):
             "shared": customers.filter(events__kind__in=CustomerEvent.SHARE_KINDS).distinct().count(),
         },
         "abandoned": _link_unsent(customers).count(),
+        "rating": customers.aggregate(avg=Avg("rating"), n=Count("rating")),
+        "reviews": list(
+            customers.exclude(rating=None).order_by("-updated_at")
+            .values("id", "name", "branch_name", "rating", "review")[:6]
+        ),
         "customers": customers.count(),
         "customers_today": customers.filter(created_at__gte=today).count(),
         "gifts": customers.exclude(reward="").count(),
