@@ -133,7 +133,8 @@ test("sharing asks for the profile, opens the app and records the post link", as
   await page.getByLabel("Link to your post").fill("https://www.facebook.com/asha.k/posts/1");
   await page.getByRole("button", { name: "Submit post link" }).click();
   await expect(page.getByText("Your post is recorded")).toBeVisible();
-  await page.getByRole("button", { name: "WhatsApp" }).click();
+  // Shared elsewhere: WhatsApp Status is suggested next, and sends the image.
+  await page.getByRole("button", { name: "Share on WhatsApp now" }).click();
   expect(events.map((e) => (e.kind as string) ?? "profile")).toEqual([
     "profile", "share_opened_facebook", "shared_facebook", "posted_facebook",
     "share_opened_whatsapp", "shared_whatsapp",

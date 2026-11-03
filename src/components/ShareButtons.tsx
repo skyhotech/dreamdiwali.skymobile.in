@@ -3,11 +3,13 @@ import { Facebook, Instagram, MessageCircle, Share2, X } from "lucide-react";
 import { getPosterUrl, savePostLink, saveProfile, trackShare } from "../lib/backend";
 import { copyCaption, sharePoster } from "../lib/sharing";
 import { useStudio } from "../lib/store";
+import { WhatsAppNudge, shareOnWhatsapp } from "./WhatsAppShare";
 type Platform = "instagram" | "facebook" | "whatsapp" | "more";
+// WhatsApp first: the terms ask for Status and groups.
 const BUTTONS = [
+  ["whatsapp", "WhatsApp", MessageCircle],
   ["instagram", "Instagram", Instagram],
   ["facebook", "Facebook", Facebook],
-  ["whatsapp", "WhatsApp", MessageCircle],
   ["more", "More", Share2],
 ] as const;
 const ASK = {
@@ -43,16 +45,24 @@ export function ShareButtons({
   const [busy, setBusy] = useState(false);
   const token = useStudio((s) => s.token);
   const track = (kind: string) => token && trackShare(token, kind);
+  const [nudge, setNudge] = useState(false);
+  const [whatsappDone, setWhatsappDone] = useState(false);
+  async function shareWhatsapp() {
+    const shared = await shareOnWhatsapp(poster, caption, filename, posterLink);
+    if (shared) setWhatsappDone(true);
+    return shared;
+  }
+  // Shared somewhere else: invite them to WhatsApp too, once.
+  const afterShare = () => {
+    if (!whatsappDone) setNudge(true);
+  };
 
   async function open(platform: Platform) {
     track(`share_opened_${platform}`);
     const url = posterLink || getPosterUrl();
     if (platform === "whatsapp") {
-      void copyCaption(caption);
-      const text = url ? `${caption}\n\n${url}` : caption;
-      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
-      track("shared_whatsapp");
-      setNote("WhatsApp opened with your poster and caption.");
+      const shared = await shareWhatsapp();
+      if (shared) setNote("Thank you! Add it to your Status and 3 groups too.");
       return;
     }
     if (platform === "facebook" && url) {
@@ -81,6 +91,7 @@ export function ShareButtons({
         : `Choose ${platform === "instagram" ? "Instagram" : "Facebook"}, paste the copied caption and post.`,
     );
     if (platform !== "more") setProof(platform);
+    else afterShare();
   }
   async function start(platform: Platform) {
     setError("");
@@ -117,6 +128,7 @@ export function ShareButtons({
       setProof(null);
       setLink("");
       setNote("Thank you! Your post is recorded for the iPhone 15 contest.");
+      afterShare();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -134,6 +146,9 @@ export function ShareButtons({
         ))}
       </div>
       <p role="status">{note}</p>
+      {nudge && (
+        <WhatsAppNudge onShare={() => void shareWhatsapp()} onClose={() => setNudge(false)} />
+      )}
       {(ask || proof) && (
         <div className="notice-shade" role="presentation">
           <form

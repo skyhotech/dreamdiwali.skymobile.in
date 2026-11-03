@@ -37,6 +37,7 @@ import { UploadStatus } from "./StatusNotices";
 import { ShareButtons } from "./ShareButtons";
 import { trackShare } from "../lib/backend";
 import { CameraAlert } from "./CameraAlert";
+import { WhatsAppButton, WhatsAppNudge, shareOnWhatsapp } from "./WhatsAppShare";
 // Hands-free capture: how strong a smile counts, and how long a cue is held.
 const SMILE_THRESHOLD = 0.6;
 const HOLD_MS = 500;
@@ -58,7 +59,8 @@ export default function CameraStudio() {
     [flash, setFlash] = useState(false),
     [completed, setCompleted] = useState(false),
     [poster, setPoster] = useState<Blob | null>(null),
-    [captionMessage, setCaptionMessage] = useState("");
+    [captionMessage, setCaptionMessage] = useState(""),
+    [whatsappNudge, setWhatsappNudge] = useState(false);
   const busyRef = useRef(false);
   const camera = useCamera(
     product ? "environment" : "user",
@@ -154,6 +156,7 @@ export default function CameraStudio() {
           text,
         });
         if (token) trackShare(token, "shared_instagram");
+        setWhatsappNudge(true);
       } else {
         download(blob, name);
         window.open(
@@ -468,8 +471,20 @@ export default function CameraStudio() {
           </div>
         )}
       </aside>
+      {whatsappNudge && poster && (
+        <WhatsAppNudge
+          onShare={() => void shareOnWhatsapp(poster, caption, `${filename}.jpg`)}
+          onClose={() => setWhatsappNudge(false)}
+        />
+      )}
       {completed && (
         <section className="inline-caption-panel">
+          {poster && (
+            <WhatsAppButton
+              label="Share on WhatsApp Status"
+              onShare={() => void shareOnWhatsapp(poster, caption, `${filename}.jpg`)}
+            />
+          )}
           {poster && (
             <ShareButtons
               poster={poster}

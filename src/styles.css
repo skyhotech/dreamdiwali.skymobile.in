@@ -3824,3 +3824,35 @@ html.no-pull-refresh body {
   background: #fffaf0;
   color: #3c2418;
 }
+.whatsapp-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 54px;
+  margin: 0 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #25d366, #128c7e);
+  color: #fff;
+  font: inherit;
+  font-size: 17px;
+  font-weight: 800;
+  box-shadow: 0 10px 24px rgba(18, 140, 126, 0.35);
+  cursor: pointer;
+  animation: wa-pulse 2.4s ease-in-out infinite;
+}
+@keyframes wa-pulse {
+  50% {
+    box-shadow: 0 10px 34px rgba(37, 211, 102, 0.6);
+  }
+}
+.wa-icon {
+  background: linear-gradient(135deg, #25d366, #128c7e) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .whatsapp-cta {
+    animation: none;
+  }
+}
