@@ -53,6 +53,10 @@ chmod 440 /etc/sudoers.d/skymirror-deployer
 install -d -m 755 /var/log/caddy; chown caddy:caddy /var/log/caddy
 # Caddy serves uploads straight from disk, and the app keeps them group-only.
 usermod -aG skymirror caddy
+# Lossy links: BBR keeps transfers fast through packet loss.
+printf 'net.core.default_qdisc = fq\nnet.ipv4.tcp_congestion_control = bbr\nnet.ipv4.tcp_slow_start_after_idle = 0\n' > /etc/sysctl.d/90-skymirror-network.conf
+echo tcp_bbr > /etc/modules-load.d/bbr.conf
+modprobe tcp_bbr && sysctl -q -p /etc/sysctl.d/90-skymirror-network.conf
 systemctl daemon-reload
 systemctl enable skymirror
 systemctl reload-or-restart caddy

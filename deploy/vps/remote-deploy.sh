@@ -23,6 +23,12 @@ sudo /usr/bin/systemctl restart skymirror
 for i in $(seq 1 30); do
   if curl -fs -o /dev/null -H 'Host: 87.232.72.141' -H 'X-Forwarded-Proto: https' http://127.0.0.1:8000/api/mirrors/version/; then
     echo "Backend is up."
+    # Warm every worker (database connection, code paths) so no customer
+    # waits on a cold first request.
+    for _ in $(seq 1 24); do
+      curl -fs -o /dev/null -H 'Host: 87.232.72.141' -H 'X-Forwarded-Proto: https' http://127.0.0.1:8000/api/manager/branches/ &
+    done
+    wait
     exit 0
   fi
   sleep 1
