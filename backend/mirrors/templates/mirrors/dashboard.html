@@ -600,9 +600,9 @@
   function customerCard(c) {
     const el = document.createElement("div");
     el.className = "cust";
-    el.innerHTML = `<div class="imgs">
-        ${c.selfie ? `<img src="${esc(c.selfie_thumb || c.selfie)}" data-full="${esc(c.selfie)}" alt="Selfie" loading="eager" decoding="sync">` : `<div></div>`}
-        ${c.poster ? `<img src="${esc(c.poster_thumb || c.poster)}" data-full="${esc(c.poster)}" alt="Poster" loading="eager" decoding="sync">` : `<div></div>`}
+    el.innerHTML = `<div class="imgs" ${c.selfie && c.poster ? "" : 'style="grid-template-columns:1fr"'}>
+        ${c.selfie ? `<img src="${esc(c.selfie_thumb || c.selfie)}" data-full="${esc(c.selfie)}" alt="Selfie" loading="eager" decoding="sync">` : ""}
+        ${c.poster ? `<img src="${esc(c.poster_thumb || c.poster)}" data-full="${esc(c.poster)}" alt="Poster" loading="eager" decoding="sync">` : ""}
       </div>
       <div class="info"><b>${esc(c.name || "Guest #" + c.id)}</b>
         ${c.reward ? `<span class="pill">🎁 ${esc(rewardLabel(c.reward))}</span>` : ""}

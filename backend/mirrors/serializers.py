@@ -2,6 +2,7 @@ from django.conf import settings
 from rest_framework import serializers
 
 import re
+from urllib.parse import urlsplit
 
 from .models import Branch, Customer, CustomerEvent, Mirror, validate_rect
 
@@ -54,6 +55,9 @@ class MirrorSerializer(serializers.ModelSerializer):
     def validate_artwork(self, image):
         return _limit_size(image)
 
+    def to_representation(self, obj):
+        return _local_images(super().to_representation(obj))
+
     class Meta:
         model = Mirror
         fields = [
@@ -103,6 +107,15 @@ class PublicBranchSerializer(serializers.ModelSerializer):
         fields = ["slug", "name"]
 
 
+def _local_images(data):
+    """Images load from whichever site shows the page: a full VPS address would
+    skip Vercel's cache."""
+    return {
+        key: urlsplit(value).path if isinstance(value, str) and "/media/" in value else value
+        for key, value in data.items()
+    }
+
+
 class CustomerSerializer(serializers.ModelSerializer):
     mirror_slug = serializers.CharField(source="mirror.slug", read_only=True, default=None)
     has_face = serializers.SerializerMethodField()
@@ -111,6 +124,9 @@ class CustomerSerializer(serializers.ModelSerializer):
 
     def get_has_face(self, obj):
         return bool(obj.face)
+
+    def to_representation(self, obj):
+        return _local_images(super().to_representation(obj))
 
     class Meta:
         model = Customer

@@ -77,6 +77,12 @@ class BranchFlowTests(TestCase):
                          invoice_number="INV-12568801")
         self.assertEqual(res.status_code, 200)
 
+    def test_admin_image_links_stay_on_the_current_site(self):
+        Customer.objects.create(phone="9845022222", session="s", poster="customers/p.jpg")
+        self.client.force_login(self.staff)
+        row = self.client.get("/api/admin/customers/").json()["results"][0]
+        self.assertEqual(row["poster"], "/media/customers/p.jpg")
+
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)
         self.assertTrue(Branch.objects.filter(slug="thiruvannamalai-1").exists())
