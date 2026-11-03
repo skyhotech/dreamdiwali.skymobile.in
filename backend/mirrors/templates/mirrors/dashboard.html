@@ -201,6 +201,38 @@
   .live-stat b.down { color: #b3261e; }
   .live-dot { display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%; background: #2b9f6b; box-shadow: 0 0 0 0 #2b9f6b99; animation: live-pulse 1.6s infinite; }
   @keyframes live-pulse { to { box-shadow: 0 0 0 9px #2b9f6b00; } }
+  /* Nothing may push the page wider than the screen. */
+  main, main section, .card, .fields, .two, .four, .si-layout > *, .branches > *, .grid2 > *, .stats > * { min-width: 0; }
+  main input, main select, main textarea, main img, main svg { max-width: 100%; }
+  main input, main select, main textarea { box-sizing: border-box; }
+  .fields label.f > input { width: 100%; }
+  .b-hero { padding-left: 64px; }
+  html, body { overflow-x: hidden; }
+  @media (max-width: 760px) {
+    .toolbar { flex-wrap: wrap; gap: 10px; }
+    .toolbar h2 { margin-right: auto; }
+    .fields .two { grid-template-columns: 1fr; }
+    .si-layout { gap: 12px; }
+    .si-stage { padding: 12px; }
+    .si-wheel { max-width: 340px; margin: 0 auto; width: 100%; }
+    #si-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .si-card img { height: 96px; }
+    .si-card .acts { flex-wrap: nowrap; }
+    .si-card .acts button { flex: 1; }
+    .j-flow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .j-arrow { display: none; }
+    .j-node { min-height: 72px; padding: 10px 8px; }
+    .j-node b { font-size: 22px; }
+    .b-boxes { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .b-box { padding: 10px; gap: 6px; }
+    .b-box span { font-size: 12px; }
+    .blist { grid-template-columns: 1fr; }
+    .bdetail:not([hidden]) { inset: 0; border-radius: 0; padding: 0 12px 20px; }
+    .b-hero { height: 160px; margin: 0 -12px 12px; font-size: 21px; }
+    .cust.pro .acts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    dialog { width: calc(100% - 16px) !important; max-height: 90dvh; padding: 14px !important; }
+    dialog table { display: block; overflow-x: auto; }
+  }
   .menu-btn { display: none; align-items: center; gap: 8px; margin-bottom: 14px; min-height: 44px; padding: 0 14px;
     border: 0; border-radius: 10px; background: var(--side); color: #fff; font: inherit; }
   .menu-shade { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
