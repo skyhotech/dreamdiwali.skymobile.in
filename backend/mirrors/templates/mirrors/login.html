@@ -16,10 +16,27 @@
     .password input { padding-right: 64px; }
     .password button { position: absolute; top: 50%; right: 6px; transform: translateY(-50%); margin: 0; width: auto; padding: 5px 8px; background: none; color: #e8bd62; font-size: 13px; font-weight: 600; }
     .error { color: #ff8a8a; font-size: 14px; }
+    body { overflow: hidden; background: radial-gradient(circle at 50% 30%, #3a1622, #17120d 70%); }
+    .stage { display: grid; justify-items: center; gap: 0; position: relative; z-index: 1; }
+    .wheel-wrap { position: relative; width: min(250px, 62vw); margin-bottom: -46px; z-index: 0; }
+    .wheel-wrap::before { content: ""; position: absolute; inset: -18%; border-radius: 50%; background: radial-gradient(#d6a44766, transparent 65%); animation: glow 3s ease-in-out infinite; }
+    .pointer { position: absolute; z-index: 2; top: -6px; left: 50%; margin-left: -12px; border: 12px solid transparent; border-top: 22px solid #fff4dc; filter: drop-shadow(0 2px 3px #0008); }
+    #wheel { display: block; width: 100%; position: relative; animation: turn 14s linear infinite; filter: drop-shadow(0 14px 28px #000a); }
+    #wheel.fast { animation: whirl .9s cubic-bezier(.3,.1,.2,1) forwards; }
+    form { position: relative; z-index: 1; animation: rise .6s cubic-bezier(.2,.9,.25,1.1) .15s both; }
+    .spark { position: fixed; width: 4px; height: 4px; border-radius: 50%; background: #f3cf7a; animation: float linear infinite; opacity: .7; }
+    @keyframes turn { to { transform: rotate(360deg); } }
+    @keyframes whirl { to { transform: rotate(1440deg); } }
+    @keyframes glow { 50% { transform: scale(1.08); opacity: .6; } }
+    @keyframes rise { from { opacity: 0; transform: translateY(40px); } }
+    @keyframes float { from { transform: translateY(105vh); } to { transform: translateY(-10vh); } }
+    @media (prefers-reduced-motion: reduce) { #wheel, #wheel.fast, form, .spark, .wheel-wrap::before { animation: none; } }
   </style>
 </head>
 <body>
-  <form method="post">
+  <div class="stage">
+  <div class="wheel-wrap" aria-hidden="true"><div class="pointer"></div><svg id="wheel" viewBox="0 0 320 320"></svg></div>
+  <form method="post" id="login">
     {% csrf_token %}
     <h1>SKY Mirror Admin</h1>
     <p>Sign in with a staff account.</p>
@@ -34,7 +51,37 @@
     <input type="hidden" name="next" value="{{ next|default:'/sky/mirror/admin/' }}">
     <button type="submit">Sign in</button>
   </form>
+  </div>
   <script>
+    // The prize wheel the customers spin: idles slowly, whirls on sign-in.
+    const GIFTS = ["neckband", "mini-speaker", "smart-watch", "wired-headphone", "mobile-stand", "power-bank"];
+    const COLORS = ["#d22856", "#d6a447", "#7a1631", "#f3cf7a"];
+    const R = 160, pt = (deg, r) => { const a = ((deg - 90) * Math.PI) / 180; return [R + r * Math.cos(a), R + r * Math.sin(a)]; };
+    let svg = `<circle cx="160" cy="160" r="159" fill="#5a1426"/>`;
+    GIFTS.forEach((g, i) => {
+      const [x1, y1] = pt(i * 60, 146), [x2, y2] = pt(i * 60 + 60, 146), [cx, cy] = pt(i * 60 + 30, 92);
+      svg += `<path d="M160,160 L${x1},${y1} A146,146 0 0 1 ${x2},${y2} Z" fill="${COLORS[i % 4]}" stroke="#fff4dc" stroke-width="2"/>
+        <clipPath id="c${i}"><circle cx="${cx}" cy="${cy}" r="28"/></clipPath><circle cx="${cx}" cy="${cy}" r="30" fill="#fff4dc"/>
+        <image href="/static/mirrors/rewards/${g}.webp" x="${cx - 28}" y="${cy - 28}" width="56" height="56" clip-path="url(#c${i})" preserveAspectRatio="xMidYMid slice"/>`;
+    });
+    for (let i = 0; i < 16; i++) { const [x, y] = pt(i * 22.5, 153); svg += `<circle cx="${x}" cy="${y}" r="4" fill="#f3cf7a"/>`; }
+    document.getElementById("wheel").innerHTML = svg + `<circle cx="160" cy="160" r="24" fill="#d6a447" stroke="#fff4dc" stroke-width="4"/>`;
+    for (let i = 0; i < 18; i++) {
+      const s = document.createElement("i");
+      s.className = "spark";
+      s.style.left = `${(i * 53) % 100}%`;
+      s.style.animationDuration = `${7 + (i % 6)}s`;
+      s.style.animationDelay = `-${(i * 0.7) % 7}s`;
+      document.body.appendChild(s);
+    }
+    const form = document.getElementById("login");
+    form.addEventListener("submit", (e) => {
+      if (form.dataset.sent || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      e.preventDefault();
+      form.dataset.sent = "1";
+      document.getElementById("wheel").classList.add("fast");
+      setTimeout(() => form.submit(), 800);
+    });
     const password = document.getElementById("id_password");
     const toggle = document.getElementById("toggle-password");
     toggle.addEventListener("click", () => {
