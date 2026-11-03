@@ -28,6 +28,20 @@ export default defineConfig({
       "/static": "http://127.0.0.1:8000",
     },
   },
+  // Libraries behind lazy screens are prepared at start-up: otherwise the dev
+  // server finds them mid-visit and reloads the page (browser tests flake).
+  optimizeDeps: {
+    include: [
+      "@mediapipe/tasks-vision",
+      "@zxing/browser",
+      "@zxing/library",
+      "tesseract.js",
+      "pdfjs-dist",
+      "lucide-react",
+      "motion/react",
+      "zustand",
+    ],
+  },
   worker: { format: "es" },
   build: { target: "es2022" },
 });
