@@ -172,7 +172,7 @@ class Customer(models.Model):
     session = models.CharField(max_length=64, unique=True)
     name = models.CharField(max_length=80, blank=True)
     # One customer per mobile number; blank for records made before sign-in.
-    phone = models.CharField(max_length=20, blank=True)
+    phone = models.CharField(max_length=20, blank=True, null=True)
     mirror = models.ForeignKey(
         Mirror, null=True, blank=True, on_delete=models.SET_NULL, related_name="customers"
     )
@@ -200,8 +200,8 @@ class Customer(models.Model):
     email = models.EmailField(blank=True)
     product_details = models.CharField(max_length=160, blank=True)
     # 15-digit IMEI for phones, the serial number for other products.
-    imei = models.CharField(max_length=30, blank=True)
-    invoice_number = models.CharField(max_length=40, blank=True)
+    imei = models.CharField(max_length=30, blank=True, null=True)
+    invoice_number = models.CharField(max_length=40, blank=True, null=True)
     bill_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     invoice_image = models.ImageField(upload_to=customer_path, blank=True)
     # The first screen of the link: terms, and an optional video review pledge.
@@ -231,22 +231,23 @@ class Customer(models.Model):
     class Meta:
         ordering = ["-created_at"]
         constraints = [
+            # Plain unique keys: MySQL ignores conditional ones. Empty values
+            # are stored as NULL (see save), which any number of rows may share.
+            models.UniqueConstraint(fields=["phone"], name="unique_customer_phone"),
+            models.UniqueConstraint(fields=["imei"], name="unique_customer_imei"),
             models.UniqueConstraint(
-                fields=["phone"],
-                condition=~models.Q(phone=""),
-                name="unique_customer_phone",
-            ),
-            models.UniqueConstraint(
-                fields=["imei"],
-                condition=~models.Q(imei=""),
-                name="unique_customer_imei",
-            ),
-            models.UniqueConstraint(
-                fields=["branch", "invoice_number"],
-                condition=~models.Q(invoice_number=""),
-                name="unique_branch_invoice",
+                fields=["branch", "invoice_number"], name="unique_branch_invoice"
             ),
         ]
+
+    # Unique, but optional: "" would count as a value and clash; NULL doesn't.
+    OPTIONAL_UNIQUE = ("phone", "imei", "invoice_number")
+
+    def save(self, *args, **kwargs):
+        for field in self.OPTIONAL_UNIQUE:
+            if getattr(self, field) == "":
+                setattr(self, field, None)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name or self.phone or f"Customer #{self.pk}"

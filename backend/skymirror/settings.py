@@ -194,7 +194,8 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "mirrors.exceptions.friendly_exception_handler",
     # Behind Caddy/nginx every request comes from 127.0.0.1; trust that many
     # proxies' X-Forwarded-For so rate limits apply per visitor, not globally.
-    "NUM_PROXIES": int(os.environ.get("TRUSTED_PROXIES") or 0) or None,
+    # 0 (not None) when unset: None would trust a client's X-Forwarded-For.
+    "NUM_PROXIES": int(os.environ.get("TRUSTED_PROXIES") or 0),
     "DEFAULT_THROTTLE_RATES": {
         # The studio checks the version every second and fetches the full
         # list only when it changes; limits allow several tabs per IP.

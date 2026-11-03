@@ -79,7 +79,8 @@ def _link_unsent(customers):
 def _failed_attempts():
     """Abandoned at the check: each number's latest refusal, dropped as soon as
     that number passes or an admin approves or dismisses it."""
-    passed = Customer.objects.filter(spin_token__isnull=False).values("phone")
+    # NOT IN with a NULL in the list matches nothing, so leave NULLs out.
+    passed = Customer.objects.filter(spin_token__isnull=False, phone__isnull=False).values("phone")
     rows, seen = [], set()
     failed = CustomerEvent.objects.filter(kind="check_failed").exclude(phone__in=passed)
     for event in failed.order_by("-created_at"):
@@ -109,7 +110,7 @@ def _branch(slug, strict=True):
 
 def _log(customer, kind, **detail):
     CustomerEvent.objects.create(
-        customer=customer, phone=customer.phone, kind=kind, detail=detail
+        customer=customer, phone=customer.phone or "", kind=kind, detail=detail
     )
 
 
@@ -252,7 +253,9 @@ class CustomerUpload(APIView):
                 if customer.poster:
                     replaced.append(customer.poster.name)
                 customer.poster = data["poster"]
-            for thumb in ("poster_thumb", "selfie_thumb"):
+            # The selfie preview is replaced only together with a new selfie.
+            thumbs_replaced = ("poster_thumb", "selfie_thumb") if "selfie" in data else ("poster_thumb",)
+            for thumb in thumbs_replaced:
                 if getattr(customer, thumb):
                     replaced.append(getattr(customer, thumb).name)
             customer.poster_thumb = thumbs["poster_thumb"]
@@ -267,9 +270,9 @@ class CustomerUpload(APIView):
             if data.get("name"):
                 customer.name = data["name"]
             customer.save()
-        for name in replaced:
-            if name:
-                customer.poster.storage.delete(name)
+            # Only once the new files are committed are the old ones removed.
+            storage = customer.poster.storage
+            transaction.on_commit(lambda: [storage.delete(n) for n in replaced if n])
         _log(customer, "poster_saved", mirror=customer.mirror_name)
         return Response(
             # Public poster address, for sharing it as a link.
@@ -636,6 +639,22 @@ class AdminPagination(PageNumberPagination):
     max_page_size = 100
 
 
+def _positive_id(value, field):
+    """A filter id from the query string, or a 400 (not a 500) if it's junk."""
+    value = str(value)
+    if not (value.isascii() and value.isdigit() and 0 < int(value) < 2**63):
+        raise ValidationError({field: "Expected a positive id."})
+    return int(value)
+
+
+def _csv_cell(value):
+    """Spreadsheets run cells starting = + - @ as formulas; a customer could
+    type one. A leading apostrophe makes it plain text."""
+    if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@")):
+        return "'" + value
+    return value
+
+
 class MirrorViewSet(viewsets.ModelViewSet):
     serializer_class = MirrorSerializer
     permission_classes = [IsAdminUser]
@@ -661,8 +680,9 @@ class MirrorViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"])
     def reorder(self, request):
         ids = request.data.get("ids")
-        if not isinstance(ids, list):
-            return Response({"ids": "Expected a list of mirror ids."}, status=400)
+        if (not isinstance(ids, list) or len(ids) > 1000 or len(set(map(str, ids))) != len(ids)
+                or any(type(pk) is not int or pk <= 0 for pk in ids)):
+            return Response({"ids": "Expected up to 1000 unique positive mirror ids."}, status=400)
         with transaction.atomic():
             for position, pk in enumerate(ids, start=1):
                 Mirror.objects.filter(pk=pk).update(order=position, updated_at=timezone.now())
@@ -683,7 +703,7 @@ class CustomerViewSet(
         return CustomerDetailSerializer if self.action == "retrieve" else CustomerSerializer
 
     def get_queryset(self):
-        qs = Customer.objects.select_related("mirror").prefetch_related("events")
+        qs = Customer.objects.select_related("mirror", "repeat_of").prefetch_related("events")
         if self.request.query_params.get("abandoned"):
             qs = _link_unsent(qs)
         reached = self.request.query_params.get("reached")
@@ -693,12 +713,12 @@ class CustomerViewSet(
             qs = qs.filter(events__kind=reached).distinct()
         mirror = self.request.query_params.get("mirror")
         if mirror:
-            qs = qs.filter(mirror_id=mirror)
+            qs = qs.filter(mirror_id=_positive_id(mirror, "mirror"))
         branch = self.request.query_params.get("branch")
         if branch == "none":
             qs = qs.filter(branch__isnull=True)
         elif branch:
-            qs = qs.filter(branch_id=branch)
+            qs = qs.filter(branch_id=_positive_id(branch, "branch"))
         search = self.request.query_params.get("q")
         if search:
             qs = qs.filter(
@@ -748,13 +768,9 @@ class CustomerViewSet(
                          "instagram_id", "email",
                          "product_details", "imei", "invoice_number", "bill_value",
                          "invoice_image_url"])
-        rows = Customer.objects.select_related("repeat_of").order_by("created_at")
-        if request.query_params.get("branch"):
-            rows = rows.filter(branch_id=request.query_params["branch"])
-        if request.query_params.get("abandoned"):
-            rows = _link_unsent(rows)
+        rows = self.get_queryset().order_by("created_at")
         for c in rows:
-            writer.writerow([
+            writer.writerow([_csv_cell(v) for v in [
                 c.pk, c.phone, c.name, c.branch_name, c.mirror_name, c.reward,
                 c.repeat_of.phone if c.repeat_of else "",
                 c.consent_at.isoformat() if c.consent_at else "",
@@ -765,7 +781,7 @@ class CustomerViewSet(
                 c.terms_accepted_at.isoformat() if c.terms_accepted_at else "",
                 "yes" if c.video_review else "no", c.instagram_id, c.email, c.product_details, c.imei, c.invoice_number, c.bill_value or "",
                 request.build_absolute_uri(c.invoice_image.url) if c.invoice_image else "",
-            ])
+            ]])
         return response
 
 
@@ -1039,9 +1055,10 @@ class LockoutLoginView(LoginView):
 
     def post(self, request, *args, **kwargs):
         if self._locked():
-            form = self.get_form()
-            form.is_valid()  # populate cleaned_data without trying the password
-            form.errors.clear()
+            # A bound login form checks the password when validated, which
+            # would let a locked-out guesser keep testing passwords.
+            form = self.form_class(request=self.request)
+            form.cleaned_data = {}
             form.add_error(None, "Too many failed sign-ins. Try again in 15 minutes.")
             return self.render_to_response(self.get_context_data(form=form))
         return super().post(request, *args, **kwargs)

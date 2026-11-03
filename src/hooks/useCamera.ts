@@ -88,7 +88,9 @@ export function useCamera(facing: "user" | "environment", active: boolean) {
             });
           } else throw e;
         }
-        if (cancelled) {
+        // The tab may have been hidden while the camera was starting: never
+        // leave it running in the background.
+        if (cancelled || document.hidden) {
           stream.getTracks().forEach((t) => t.stop());
           return;
         }

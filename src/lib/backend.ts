@@ -444,6 +444,7 @@ async function outboxRequest<T>(
     req.onerror = () => reject(req.error);
   });
 }
+const UPLOAD_TIMEOUT_MS = 60_000;
 async function send(data: Upload) {
   const form = new FormData();
   form.append("session", data.session);
@@ -455,7 +456,10 @@ async function send(data: Upload) {
   form.append("poster", data.poster, `poster.${ext(data.poster)}`);
   if (data.selfie)
     form.append("selfie", data.selfie, `selfie.${ext(data.selfie)}`);
-  return fetch(`${API}/customers/`, { method: "POST", body: form });
+  // A request lost on a bad network gives up, so the outbox retries it.
+  return fetch(`${API}/customers/`, { method: "POST", body: form,
+    signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+  });
 }
 // Removes an entry only if it wasn't replaced by a newer export meanwhile.
 async function settle(sent: Pending) {

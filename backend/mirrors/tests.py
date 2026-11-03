@@ -334,7 +334,7 @@ class BranchFlowTests(TestCase):
         text = bill_text("9845011111", "P-12568801-D", "SI2627VLR31054")  # a TV's serial
         res = self.check(imei="", invoice_number="SI2627VLR31054", ocr_text=text)
         self.assertEqual(res.status_code, 200)
-        self.assertEqual(Customer.objects.get().imei, "")
+        self.assertIsNone(Customer.objects.get().imei)  # stored as NULL
 
     def test_admin_approves_a_rejection_with_corrections(self):
         self.check(invoice_number="SI2627VLR31099", ocr_text=bill_text("9845011111", IMEI, "SI2627VLR31054"))
@@ -529,3 +529,63 @@ class BranchFlowTests(TestCase):
         sql = b"".join(res.streaming_content).decode()
         self.assertIn("CREATE TABLE", sql)
         self.assertIn("9845011111", sql)
+
+
+@override_settings(MEDIA_ROOT=MEDIA, STUDIO_URL="https://studio.example")
+class ReliabilityTests(TestCase):
+    """Ported from an audit of the original studio code."""
+
+    def setUp(self):
+        cache.clear()
+        patcher = patch.object(RepeatThrottle, "get_rate", lambda self: None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.staff = User.objects.create_user("staff2@sky.in", password="x", is_staff=True)
+
+    def upload(self, **extra):
+        return self.client.post("/api/customers/", {"session": "s1", "poster": jpeg("poster.jpg"), **extra})
+
+    def test_blank_values_are_null_so_unique_keys_allow_many(self):
+        Customer.objects.create(session="a", phone="", imei="", invoice_number="")
+        Customer.objects.create(session="b", phone="", imei="", invoice_number="")
+        self.assertEqual(Customer.objects.filter(imei__isnull=True).count(), 2)
+
+    def test_database_refuses_a_duplicate_imei(self):
+        from django.db import IntegrityError
+
+        Customer.objects.create(session="a", phone="9845011111", imei=IMEI)
+        with self.assertRaises(IntegrityError):
+            Customer.objects.create(session="b", phone="9845022222", imei=IMEI)
+
+    def test_poster_only_upload_keeps_the_selfie_preview(self):
+        self.assertEqual(self.upload(selfie=jpeg("selfie.jpg")).status_code, 201)
+        thumb = Customer.objects.get().selfie_thumb.name
+        self.assertEqual(self.upload().status_code, 200)
+        c = Customer.objects.get()
+        self.assertEqual(c.selfie_thumb.name, thumb)
+        self.assertTrue(c.selfie_thumb.storage.exists(thumb))
+
+    def test_csv_cells_cannot_run_as_formulas(self):
+        Customer.objects.create(session="x", phone="9845011111", name="=HYPERLINK(\"http://bad\")")
+        self.client.force_login(self.staff)
+        body = self.client.get("/api/admin/customers/export/").content.decode()
+        self.assertIn("'=HYPERLINK", body)
+
+    def test_junk_filter_ids_are_client_errors(self):
+        self.client.force_login(self.staff)
+        for path in ("customers/?branch=x", "customers/?mirror=-1", "customers/?branch=1e9"):
+            self.assertEqual(self.client.get("/api/admin/" + path).status_code, 400, path)
+
+    def test_reorder_validates_ids(self):
+        self.client.force_login(self.staff)
+        for ids in ("1", [1, 1], [0], ["1"], [True]):
+            res = self.client.post("/api/admin/mirrors/reorder/", {"ids": ids}, content_type="application/json")
+            self.assertEqual(res.status_code, 400, ids)
+
+    def test_locked_login_never_checks_the_password(self):
+        for key in ("login-fail:ip:127.0.0.1", "login-fail:user:staff2@sky.in"):
+            cache.set(key, 99)
+        with patch("django.contrib.auth.forms.authenticate") as authenticate:
+            res = self.client.post("/sky/mirror/admin/login/", {"username": "staff2@sky.in", "password": "x"})
+        authenticate.assert_not_called()
+        self.assertContains(res, "Too many failed sign-ins")
