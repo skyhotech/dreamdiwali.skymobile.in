@@ -383,6 +383,18 @@ class BranchFlowTests(TestCase):
         res = self.check(ocr_text=poster)
         self.assertIn("doesn't look like a SKY invoice", res.json()["invoice_image"][0])
 
+    def test_dual_sim_phone_matches_either_imei(self):
+        from .serializers import _same_phone
+
+        # Real case: the box showed …190644, the bill listed the second IMEI …190651.
+        self.assertTrue(_same_phone("867335086190644", "867335086190651"))
+        self.assertFalse(_same_phone("867335086190644", "867335086290651"))  # other phone
+        self.assertFalse(_same_phone("356938035643809", "867335086190651"))  # other model
+
+    def test_missing_scan_asks_to_upload_again(self):
+        res = self.check(scan_override="")
+        self.assertIn("upload the invoice again", res.json()["scan"][0])
+
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)
         self.assertTrue(Branch.objects.filter(slug="thiruvannamalai-1").exists())

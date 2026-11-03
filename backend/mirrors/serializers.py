@@ -402,6 +402,16 @@ def invoice_imeis(text):
     return list(dict.fromkeys(found))
 
 
+def _same_phone(typed, printed):
+    """A dual-SIM phone has two IMEIs: same 8-digit model code (TAC), serials a
+    few apart. The box may show one while the bill lists the other."""
+    if typed == printed:
+        return True
+    if not (len(typed) == 15 and typed.isdigit() and imei_valid(typed)):
+        return False
+    return typed[:8] == printed[:8] and abs(int(typed[8:14]) - int(printed[8:14])) <= 10
+
+
 def invoice_shows(text):
     """What the bill itself says, to tell the manager what to correct."""
     number = _INVOICE_LINE.findall(text)[:1]
@@ -431,7 +441,7 @@ def invoice_missing(text, data):
     # Only phones carry a 15-digit IMEI; for other products there is nothing
     # to check, and the form hides the field.
     phone_imeis = invoice_imeis(text)
-    if phone_imeis and data.get("imei", "") not in phone_imeis:
+    if phone_imeis and not any(_same_phone(data.get("imei", ""), n) for n in phone_imeis):
         missing.append("IMEI")
     at = re.search(r"billed\s*to", text, re.I)
     phone = re.search(r"ph\w*\s*[.:;\-]*\s*((?:\+?91)?\d{10})", text[at.start():] if at else text, re.I)
@@ -480,7 +490,10 @@ class CustomerIntakeSerializer(serializers.Serializer):
     branch = serializers.CharField(max_length=60)
     # The invoice as Django itself read it (see ManagerScan): never text
     # sent from the phone.
-    scan = serializers.CharField(max_length=64)
+    scan = serializers.CharField(
+        max_length=64,
+        error_messages={"required": "Please upload the invoice again.", "blank": "Please upload the invoice again."},
+    )
     blur_score = serializers.FloatField(min_value=0)
 
     def validate_invoice_number(self, value):
