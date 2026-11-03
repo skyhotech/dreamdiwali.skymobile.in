@@ -758,7 +758,22 @@
       list.innerHTML = rows.length ? rows.map((e) => `<div class="cust"><div class="info"><b>${esc(e.phone || "No number")}</b><small>${esc(Object.values(e.detail.errors || {}).flat().join(" "))}</small><small>Branch: ${esc(e.detail.branch || "—")}</small><small>${new Date(e.created_at).toLocaleString()}</small></div></div>`).join("") : `<div class="empty-note">No failed checks.</div>`;
       return;
     }
-    const query = step === "abandoned" ? "abandoned=1" : "reached=" + encodeURIComponent(step);
+    if (step === "abandoned") {
+      const d = await api("customers/abandoned/");
+      for (const c of d.link_not_sent) list.appendChild(customerCard(c));
+      for (const e of d.check_failed) {
+        const v = e.detail, el = document.createElement("div");
+        el.className = "cust";
+        el.innerHTML = `<div class="info"><b>${esc(v.name || e.phone || "No name")}</b> <span class="pill warn">Check failed</span>
+          <small>${esc(e.phone)} · ${esc(v.branch || "No branch")}</small><small>${esc(v.product_details || "")}</small>
+          <small>IMEI ${esc(v.imei || "—")} · Invoice ${esc(v.invoice_number || "—")} · ₹${esc(v.bill_value || "—")}</small>
+          <small>${esc(Object.values(v.errors || {}).flat().join(" "))}</small><small>${new Date(e.created_at).toLocaleString()}</small></div>`;
+        list.appendChild(el);
+      }
+      if (!list.children.length) list.innerHTML = `<div class="empty-note">No abandoned customers.</div>`;
+      return;
+    }
+    const query = "reached=" + encodeURIComponent(step);
     const data = await api(`customers/?page_size=100&${query}`);
     if (!data.results.length) list.innerHTML = `<div class="empty-note">No customers at this step yet.</div>`;
     for (const c of data.results) list.appendChild(customerCard(c));
@@ -780,7 +795,6 @@
     document.body.appendChild(d);
     d.showModal();
   }
-  const STAGES = { checked: "link not sent", whatsapp_sent: "link not opened", link_opened: "not spun", spun: "no poster" };
   const rewardLabel = (id) => id.split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
   function customerCard(c) {
     const el = document.createElement("div");
@@ -792,7 +806,7 @@
       <div class="info"><b>${esc(c.name || "Guest #" + c.id)}</b>
         ${c.reward ? `<span class="pill">🎁 ${esc(rewardLabel(c.reward))}</span>` : ""}
         ${c.repeat_of_phone ? `<span class="pill warn" title="Same face as an earlier customer; no second gift">⚠ Same face as ${esc(c.repeat_of_phone)}</span>` : ""}
-        ${c.stage !== "completed" && c.imei ? `<span class="pill warn">Stopped at: ${esc(STAGES[c.stage] || c.stage)}</span>` : ""}
+        ${c.stage === "checked" ? `<span class="pill warn">Link not sent</span>` : ""}
         ${c.branch_name ? `<span class="tag">📍 ${esc(c.branch_name)}</span>` : ""}
         <small>${esc(c.mirror_name || "—")}${c.phone ? " · " + esc(c.phone) : ""}</small>
         ${c.imei ? `<small>${esc(c.product_details)} · IMEI ${esc(c.imei)}</small><small>Invoice ${esc(c.invoice_number)} · ₹${esc(c.bill_value)}</small>` : ""}

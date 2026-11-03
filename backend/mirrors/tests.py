@@ -64,13 +64,17 @@ class BranchFlowTests(TestCase):
         links = [b["link"] for b in data]
         self.assertIn("https://studio.example/?branch=anna-nagar", links)
 
-    def test_abandoned_customers_show_their_stage(self):
-        self.spin(self.token(self.check()))
-        Customer.objects.create(phone="9845022222", session="done", spin_token="t", poster="p.jpg")
+    def test_abandoned_is_a_failed_check_or_an_unsent_link(self):
         self.client.force_login(self.staff)
-        rows = self.client.get("/api/admin/customers/?abandoned=1").json()["results"]
-        self.assertEqual([(c["phone"], c["stage"]) for c in rows], [("9845011111", "spun")])
+        self.check(ocr_text="Invoice No : WRONG1")
+        data = self.client.get("/api/admin/customers/abandoned/").json()
+        self.assertEqual(data["check_failed"][0]["detail"]["name"], "Asha")
         self.assertEqual(self.client.get("/api/admin/stats/").json()["abandoned"], 1)
+        self.check()  # the retry passes: now only the link is outstanding
+        data = self.client.get("/api/admin/customers/abandoned/").json()
+        self.assertEqual((len(data["check_failed"]), len(data["link_not_sent"])), (0, 1))
+        self.client.post("/api/manager/sent/", {"phone": "9845011111"})
+        self.assertEqual(self.client.get("/api/admin/stats/").json()["abandoned"], 0)
 
     def test_serial_may_be_all_digits(self):
         res = self.check(imei="12568801", ocr_text=bill_text("9845011111", "12568801"),

@@ -65,8 +65,22 @@ INACTIVE_BRANCH = (
 )
 
 
-# Purchase recorded, but no finished poster yet.
-ABANDONED = Q(poster="") & Q(spin_token__isnull=False)
+def _link_unsent(customers):
+    """Abandoned after passing: checked, but the WhatsApp link never went out."""
+    return customers.filter(spin_token__isnull=False).exclude(events__kind="whatsapp_sent")
+
+
+def _failed_attempts():
+    """Abandoned at the check: each number's latest refusal, dropped as soon as
+    that number passes, so a successful retry clears it."""
+    passed = Customer.objects.filter(spin_token__isnull=False).values("phone")
+    rows, seen = [], set()
+    failed = CustomerEvent.objects.filter(kind="check_failed").exclude(phone__in=passed)
+    for event in failed.order_by("-created_at"):
+        if not event.phone or event.phone not in seen:
+            seen.add(event.phone)
+            rows.append(event)
+    return rows
 
 
 def _branch(slug, strict=True):
@@ -336,7 +350,11 @@ class ManagerCheck(APIView):
                 phone=str(request.data.get("phone", ""))[:20], kind="check_failed",
                 detail={
                     "errors": json.loads(json.dumps(exc.detail, default=str)),
-                    "branch": str(request.data.get("branch", ""))[:60],
+                    **{
+                        field: str(request.data.get(field, ""))[:160]
+                        for field in ("branch", "name", "email", "product_details",
+                                      "imei", "invoice_number", "bill_value")
+                    },
                 },
             )
             raise
@@ -481,7 +499,7 @@ class CustomerViewSet(
     def get_queryset(self):
         qs = Customer.objects.select_related("mirror").prefetch_related("events")
         if self.request.query_params.get("abandoned"):
-            qs = qs.filter(ABANDONED)
+            qs = _link_unsent(qs)
         reached = self.request.query_params.get("reached")
         if reached == "shared":
             qs = qs.filter(events__kind__in=CustomerEvent.SHARE_KINDS).distinct()
@@ -516,6 +534,17 @@ class CustomerViewSet(
         rows = CustomerEvent.objects.filter(kind="check_failed").order_by("-created_at")[:200]
         return Response(CustomerEventSerializer(rows, many=True).data)
 
+    @action(detail=False, methods=["get"])
+    def abandoned(self, request):
+        """Everyone who filled the form but never got a link."""
+        unsent = CustomerSerializer(
+            _link_unsent(Customer.objects.all()).order_by("-created_at")[:200], many=True
+        ).data
+        return Response({
+            "link_not_sent": unsent,
+            "check_failed": CustomerEventSerializer(_failed_attempts()[:200], many=True).data,
+        })
+
     @action(detail=False, methods=["get"], url_path="export")
     def export(self, request):
         """All customers as CSV, so staff always have an offline copy."""
@@ -536,7 +565,7 @@ class CustomerViewSet(
         if request.query_params.get("branch"):
             rows = rows.filter(branch_id=request.query_params["branch"])
         if request.query_params.get("abandoned"):
-            rows = rows.filter(ABANDONED)
+            rows = _link_unsent(rows)
         for c in rows:
             writer.writerow([
                 c.pk, c.phone, c.name, c.branch_name, c.mirror_name, c.reward,
@@ -582,7 +611,7 @@ def _customer_stats(customers):
             "poster_saved": reached("poster_saved"),
             "shared": customers.filter(events__kind__in=CustomerEvent.SHARE_KINDS).distinct().count(),
         },
-        "abandoned": customers.filter(ABANDONED).count(),
+        "abandoned": _link_unsent(customers).count(),
         "customers": customers.count(),
         "customers_today": customers.filter(created_at__gte=today).count(),
         "gifts": customers.exclude(reward="").count(),
@@ -645,6 +674,7 @@ def stats(request):
             ).filter(value__gt=0).order_by("-value")[:8]
         ],
         failed_checks=CustomerEvent.objects.filter(kind="check_failed").count(),
+        abandoned=_link_unsent(Customer.objects.all()).count() + len(_failed_attempts()),
         top_branches=list(
             Branch.objects.annotate(n=Count("customers")).order_by("-n", "name").values("id", "name", "n")
         ),
