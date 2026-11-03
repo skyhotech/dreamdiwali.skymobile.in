@@ -233,6 +233,7 @@
     dialog { width: calc(100% - 16px) !important; max-height: 90dvh; padding: 14px !important; }
     dialog table { display: block; overflow-x: auto; }
   }
+  button.busy { opacity: .6; pointer-events: none; }
   .menu-btn { display: none; align-items: center; gap: 8px; margin-bottom: 14px; min-height: 44px; padding: 0 14px;
     border: 0; border-radius: 10px; background: var(--side); color: #fff; font: inherit; }
   .menu-shade { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
@@ -523,9 +524,11 @@
   document.addEventListener("click", (e) => { pressed = e.target.closest("button"); }, true);
   async function api(path, opts = {}) {
     const method = (opts.method || "GET").toUpperCase(), button = method === "GET" ? null : pressed;
-    if (button?.disabled) throw new Error("Already working on it…");
-    if (button) button.disabled = true;
-    try { return await apiCall(path, opts); } finally { if (button) button.disabled = false; }
+    // Its own mark, so forms that disable their button first still work.
+    if (button?.dataset.busy) throw new Error("Already working on it…");
+    if (button) { button.dataset.busy = "1"; button.classList.add("busy"); }
+    try { return await apiCall(path, opts); }
+    finally { if (button) { delete button.dataset.busy; button.classList.remove("busy"); } }
   }
   // Pages open instantly from what was loaded in the last minute, then refresh;
   // any change clears it so nothing stale is shown after an edit.

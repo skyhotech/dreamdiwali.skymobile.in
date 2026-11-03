@@ -143,7 +143,14 @@ function Studio() {
           <OfflineBanner />
           <Festive banner>
             <Suspense fallback={<div className="loading">Loading…</div>}>
-              <TermsPage token={token} onDone={() => setTermsAccepted(true)} />
+              <TermsPage
+                token={token}
+                onDone={(pledged) => {
+                  // Already in the iPhone contest: no need to ask again.
+                  if (pledged) setOfferDone(true);
+                  setTermsAccepted(true);
+                }}
+              />
             </Suspense>
           </Festive>
         </main>

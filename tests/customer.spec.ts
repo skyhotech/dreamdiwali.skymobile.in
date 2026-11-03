@@ -59,6 +59,9 @@ test("the video pledge needs an Instagram ID, which is sent with the terms", asy
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("button", { name: "Tap to spin" })).toBeVisible();
   expect(posts[0]).toMatchObject({ step: "terms", accept: true, video_review: true, instagram_id: "@asha.k" });
+  // Already pledged: after the spin it goes straight to the rating.
+  await page.getByRole("button", { name: "Tap to spin" }).click();
+  await expect(page.getByRole("heading", { name: "How was your visit?" })).toBeVisible({ timeout: 15_000 });
 });
 
 test("after the spin: iPhone offer, Instagram ID, rating, then the mirror", async ({ page }) => {

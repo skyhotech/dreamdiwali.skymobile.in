@@ -49,7 +49,8 @@ export function TermsPage({
   onDone,
 }: {
   token: string;
-  onDone: () => void;
+  /** Called with whether they pledged a video review. */
+  onDone: (videoReview: boolean) => void;
 }) {
   const [lang, setLang] = useState<"en" | "ta">("en");
   const [accepted, setAccepted] = useState(false);
@@ -66,7 +67,7 @@ export function TermsPage({
     setError("");
     try {
       await acceptTerms(token, video, instagram.trim());
-      onDone();
+      onDone(video);
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
