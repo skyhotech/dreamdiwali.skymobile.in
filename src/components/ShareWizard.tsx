@@ -1,21 +1,21 @@
 import { useState } from "react";
 import { Check, Facebook, Gift, Instagram, MessageCircle, Share2, X } from "lucide-react";
 import { motion } from "motion/react";
-import { savePostLink, trackShare, unlockGift } from "../lib/backend";
+import { savePostLink, saveProfile, trackShare, unlockGift } from "../lib/backend";
 import { getReward } from "../lib/rewards";
 import { copyCaption, sharePoster } from "../lib/sharing";
 import { useStudio } from "../lib/store";
 import { shareOnWhatsapp } from "./WhatsAppShare";
-type Step = "instagram" | "whatsapp" | "more" | "gift";
-const STEPS: Step[] = ["instagram", "whatsapp", "more", "gift"];
+type Step = "id" | "instagram" | "whatsapp" | "more" | "gift";
+const STEPS: Step[] = ["id", "instagram", "whatsapp", "more", "gift"];
 const KEY = "sky-share-step";
 // Resumes where the customer left off on this link.
 function savedStep(token: string | null): Step {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Record<string, Step>;
-    return (token && s[token]) || "instagram";
+    return (token && s[token]) || "id";
   } catch {
-    return "instagram";
+    return "id";
   }
 }
 function saveStep(token: string | null, step: Step) {
@@ -45,6 +45,7 @@ export function ShareWizard({
   const [step, setStepState] = useState<Step>(() => savedStep(token));
   const [opened, setOpened] = useState(false);
   const [link, setLink] = useState("");
+  const [handle, setHandle] = useState(useStudio.getState().instagramId);
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -54,6 +55,22 @@ export function ShareWizard({
     setOpened(false);
     setError("");
   };
+  // Sharing only starts once the customer's Instagram ID is saved.
+  async function submitId(e: React.FormEvent) {
+    e.preventDefault();
+    if (!token) return;
+    setBusy(true);
+    setError("");
+    try {
+      const { handle: saved } = await saveProfile(token, "instagram", handle.trim());
+      useStudio.getState().setInstagramId(saved);
+      go("instagram");
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function shareInstagram() {
     if (token) trackShare(token, "share_opened_instagram");
     const result = await sharePoster("instagram", poster, filename, caption);
@@ -104,7 +121,8 @@ export function ShareWizard({
       setBusy(false);
     }
   }
-  const index = STEPS.indexOf(step);
+  // The step tracker starts at Instagram; the ID comes before it.
+  const index = Math.max(0, STEPS.indexOf(step) - 1);
   return (
     <div className="notice-shade" role="presentation">
       <motion.div
@@ -116,12 +134,34 @@ export function ShareWizard({
         initial={{ opacity: 0, scale: 0.9, y: 24 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
       >
+        {step === "id" && (
+          <form onSubmit={(e) => void submitId(e)}>
+            <span className="notice-icon ig-icon" aria-hidden="true"><Instagram size={28} /></span>
+            <h2 id="wizard-title">Your Instagram ID</h2>
+            <p>Enter the Instagram account you will share your poster from.</p>
+            <label htmlFor="wizard-handle">Instagram ID</label>
+            <input
+              id="wizard-handle"
+              className="manager-input"
+              autoCapitalize="none"
+              autoComplete="off"
+              maxLength={60}
+              placeholder="e.g. @yourname"
+              value={handle}
+              onChange={(e) => setHandle(e.target.value.replace(/\s/g, ""))}
+              autoFocus
+            />
+            <button className="spin-button phone-continue" disabled={busy || !handle.trim()}>
+              {busy ? "Saving…" : "Continue to sharing"}
+            </button>
+          </form>
+        )}
         {step !== "gift" && (
           <button type="button" className="share-close" aria-label="Close" onClick={onClose}>
             <X size={18} />
           </button>
         )}
-        {step !== "gift" && (
+        {step !== "gift" && step !== "id" && (
           <ol className="wizard-steps" aria-label="Steps">
             {["Instagram", "WhatsApp", "More"].map((label, i) => (
               <li key={label} className={i < index ? "done" : i === index ? "now" : ""}>

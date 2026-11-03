@@ -217,6 +217,7 @@ async function readLink(token: string) {
     items?: { id: string; label: string; image: string }[];
     poster?: string | null;
     name?: string;
+    instagram_id?: string;
     next?: string;
     video_review?: boolean;
     detail?: string;
@@ -227,6 +228,7 @@ async function readLink(token: string) {
     phone: data.phone,
     reward: data.reward ?? null,
     name: data.name ?? "",
+    instagramId: data.instagram_id ?? "",
     items: data.items ?? [],
     poster: data.poster ? MEDIA_ORIGIN + data.poster : null,
     reviewed: !["terms", "spin", "review"].includes(data.next ?? ""),

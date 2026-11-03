@@ -717,6 +717,12 @@ test("guided sharing: Instagram link, WhatsApp, then the gift", async ({ page })
   await takeSelfie(page);
   await page.getByRole("button", { name: "Capture product and post on Instagram", exact: true }).click();
   const wizard = page.getByRole("dialog");
+  // First the Instagram ID: sharing opens only once it is saved.
+  await page.route("**/api/customers/profile/", (r) => r.fulfill({ json: { handle: "asha.k" } }));
+  await expect(wizard).toContainText("Your Instagram ID");
+  await expect(wizard.getByRole("button", { name: "Continue to sharing" })).toBeDisabled();
+  await wizard.getByLabel("Instagram ID").fill("@asha.k");
+  await wizard.getByRole("button", { name: "Continue to sharing" }).click();
   await expect(wizard).toContainText("Step 1: Share on Instagram");
   await wizard.getByRole("button", { name: "Share on Instagram" }).click();
   await wizard.getByLabel("Link to your Instagram post").fill("https://example.com/not-instagram");

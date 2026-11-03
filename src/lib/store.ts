@@ -34,6 +34,9 @@ interface State {
   /** Signed-in customer's mobile number; one customer and one spin each. */
   phone: string | null;
   setPhone: (phone: string | null) => void;
+  /** Instagram ID the customer gave, asked again before sharing. */
+  instagramId: string;
+  setInstagramId: (id: string) => void;
   /** Secret from the customer's WhatsApp link; it authorises their spin. */
   token: string | null;
   setToken: (token: string | null) => void;
@@ -102,6 +105,8 @@ export const useStudio = create<State>((set, get) => ({
     writePhone(phone);
     set({ phone });
   },
+  instagramId: "",
+  setInstagramId: (instagramId) => set({ instagramId }),
   token: readToken(),
   setToken: (token) => {
     writeToken(token);

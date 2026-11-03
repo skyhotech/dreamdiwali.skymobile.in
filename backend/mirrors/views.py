@@ -304,6 +304,7 @@ class CustomerLink(APIView):
             "items": wheel_items(items),
             "next": customer.next_step,
             "video_review": customer.video_review,
+            "instagram_id": customer.instagram_id,
             "poster": customer.poster.url if customer.poster else None,
         })
 

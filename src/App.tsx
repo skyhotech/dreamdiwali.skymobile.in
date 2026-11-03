@@ -77,6 +77,7 @@ function Studio() {
         s.setPhone(c.phone);
         setPoster(c.poster);
         setCustomerName(c.name);
+        s.setInstagramId(c.instagramId);
         setReviewed(c.reviewed);
         setTermsAccepted(c.termsAccepted);
         setOfferDone(c.videoReview || c.reviewed);
