@@ -35,6 +35,7 @@ from .serializers import (
     CustomerIntakeSerializer,
     EventSerializer,
     ReviewSerializer,
+    TermsSerializer,
     SpinItemSerializer,
     wheel_items,
     CustomerSerializer,
@@ -57,6 +58,7 @@ from .throttles import (
 _IMAGE_WORK = threading.BoundedSemaphore(1)
 IMAGE_WAIT_SECONDS = 25
 
+NO_TERMS = "Please accept the terms and conditions first."
 NO_GIFTS = "Gifts aren't set up yet. Please ask the SKY team."
 _DRAW = secrets.SystemRandom()
 INVALID_LINK = "This gift link isn't valid. Please ask the SKY team for a new one."
@@ -312,6 +314,8 @@ class CustomerSpin(APIView):
             )
             if customer is None:
                 return Response({"detail": INVALID_LINK}, status=status.HTTP_404_NOT_FOUND)
+            if not customer.terms_accepted_at:
+                return Response({"detail": NO_TERMS}, status=status.HTTP_400_BAD_REQUEST)
             if not customer.reward:
                 items = SpinItem.for_bill(customer.bill_value)
                 if not items:
@@ -425,6 +429,28 @@ class ManagerSent(APIView):
             return Response({"detail": "Customer not found."}, status=404)
         _log(customer, "whatsapp_sent", version=customer.link_version)
         return Response({"ok": True})
+
+
+class CustomerTerms(APIView):
+    """Terms accepted on the link's first screen; no spin without them."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [CustomerSpinThrottle]
+
+    def post(self, request):
+        ser = TermsSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        customer = Customer.objects.filter(spin_token=ser.validated_data["token"]).first()
+        if customer is None:
+            return Response({"detail": INVALID_LINK}, status=status.HTTP_404_NOT_FOUND)
+        data = ser.validated_data
+        customer.terms_accepted_at = customer.terms_accepted_at or timezone.now()
+        customer.video_review = data["video_review"]
+        customer.instagram_id = data.get("instagram_id", "").lstrip("@") if data["video_review"] else ""
+        customer.save(update_fields=["terms_accepted_at", "video_review", "instagram_id", "updated_at"])
+        _log(customer, "terms_accepted", video_review=customer.video_review)
+        return Response({"next": customer.next_step})
 
 
 class CustomerReview(APIView):
@@ -583,7 +609,8 @@ class CustomerViewSet(
         )
         writer = csv.writer(response)
         writer.writerow(["id", "phone", "name", "branch", "mirror", "reward", "same_face_as",
-                         "consent_at", "created_at", "poster_url", "selfie_url", "stage", "rating", "review", "email",
+                         "consent_at", "created_at", "poster_url", "selfie_url", "stage", "rating", "review", "terms_accepted_at", "video_review",
+                         "instagram_id", "email",
                          "product_details", "imei", "invoice_number", "bill_value",
                          "invoice_image_url"])
         rows = Customer.objects.select_related("repeat_of").order_by("created_at")
@@ -599,7 +626,9 @@ class CustomerViewSet(
                 c.created_at.isoformat(),
                 request.build_absolute_uri(c.poster.url) if c.poster else "",
                 request.build_absolute_uri(c.selfie.url) if c.selfie else "",
-                c.stage, c.rating or "", c.review, c.email, c.product_details, c.imei, c.invoice_number, c.bill_value or "",
+                c.stage, c.rating or "", c.review,
+                c.terms_accepted_at.isoformat() if c.terms_accepted_at else "",
+                "yes" if c.video_review else "no", c.instagram_id, c.email, c.product_details, c.imei, c.invoice_number, c.bill_value or "",
                 request.build_absolute_uri(c.invoice_image.url) if c.invoice_image else "",
             ])
         return response

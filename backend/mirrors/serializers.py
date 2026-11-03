@@ -184,7 +184,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             "consent_at", "has_face", "repeat_of", "repeat_of_phone",
             "poster_thumb", "selfie_thumb", "branch", "branch_name",
             "email", "product_details", "imei", "invoice_number", "bill_value",
-            "invoice_image", "blur_score", "link_version", "stage", "rating", "review",
+            "invoice_image", "blur_score", "link_version", "stage", "rating", "review", "terms_accepted_at", "video_review", "instagram_id",
         ]
         read_only_fields = fields
 
@@ -244,6 +244,22 @@ def imei_valid(imei):
 
 class SpinSerializer(serializers.Serializer):
     token = serializers.CharField(max_length=43)
+
+
+class TermsSerializer(SpinSerializer):
+    accept = serializers.BooleanField()
+    video_review = serializers.BooleanField(default=False)
+    instagram_id = serializers.RegexField(
+        r"^@?[A-Za-z0-9._]{1,30}$", required=False, allow_blank=True,
+        error_messages={"invalid": "Enter a valid Instagram ID."},
+    )
+
+    def validate(self, data):
+        if not data["accept"]:
+            raise serializers.ValidationError({"accept": ["Please accept the terms and conditions."]})
+        if data["video_review"] and not data.get("instagram_id"):
+            raise serializers.ValidationError({"instagram_id": ["Enter your Instagram ID."]})
+        return data
 
 
 class ReviewSerializer(SpinSerializer):

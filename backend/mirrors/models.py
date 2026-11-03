@@ -204,6 +204,10 @@ class Customer(models.Model):
     invoice_number = models.CharField(max_length=40, blank=True)
     bill_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     invoice_image = models.ImageField(upload_to=customer_path, blank=True)
+    # The first screen of the link: terms, and an optional video review pledge.
+    terms_accepted_at = models.DateTimeField(null=True, blank=True)
+    video_review = models.BooleanField(default=False)
+    instagram_id = models.CharField(max_length=30, blank=True)
     # Asked straight after the spin, before the mirror selfie.
     rating = models.PositiveSmallIntegerField(null=True, blank=True)
     review = models.TextField(blank=True)
@@ -250,6 +254,8 @@ class Customer(models.Model):
         """Where this customer's link takes them."""
         if self.poster:
             return "share"
+        if not self.terms_accepted_at:
+            return "terms"
         if not self.reward:
             return "spin"
         return "mirror" if self.rating else "review"

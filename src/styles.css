@@ -3596,3 +3596,39 @@ html.no-pull-refresh body {
 .review-card textarea {
   resize: vertical;
 }
+.terms-lang {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 auto 6px;
+  padding: 6px 12px;
+  border: 1px solid #d6a447;
+  border-radius: 99px;
+  background: #fff8ea;
+  color: #7a1631;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+.terms-list {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.terms-check {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 12px;
+  font-weight: 600;
+}
+.terms-check input {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: #d22856;
+}

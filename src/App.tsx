@@ -4,6 +4,7 @@ import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Festive } from "./components/Festive";
 import { ManagerIntake } from "./components/ManagerIntake";
 import { ReviewForm } from "./components/ReviewForm";
+import { TermsPage } from "./components/TermsPage";
 import { SavedPoster } from "./components/SavedPoster";
 import { SpinWheel } from "./components/SpinWheel";
 import { OfflineBanner } from "./components/StatusNotices";
@@ -30,6 +31,7 @@ function Studio() {
   const [linkReady, setLinkReady] = useState(false);
   const [poster, setPoster] = useState<string | null>(null);
   const [reviewed, setReviewed] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   // Gift pictures and the spin sound start loading once the customer signs
   // in, so the wheel opens with everything already on the phone.
@@ -53,6 +55,7 @@ function Studio() {
         s.setPhone(c.phone);
         setPoster(c.poster);
         setReviewed(c.reviewed);
+        setTermsAccepted(c.termsAccepted);
         setLinkReady(true);
       })
       .catch((e: Error) => live && setLinkError(e.message));
@@ -99,6 +102,18 @@ function Studio() {
           <OfflineBanner />
           <Festive>
             <SavedPoster url={poster} />
+          </Festive>
+        </main>
+      </MotionConfig>
+    );
+  // The link opens on the terms; nothing else until they are accepted.
+  if (!termsAccepted)
+    return (
+      <MotionConfig reducedMotion="user">
+        <main id="main" className="mobile-studio">
+          <OfflineBanner />
+          <Festive>
+            <TermsPage token={token} onDone={() => setTermsAccepted(true)} />
           </Festive>
         </main>
       </MotionConfig>

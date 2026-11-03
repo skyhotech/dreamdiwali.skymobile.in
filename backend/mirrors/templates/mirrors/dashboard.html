@@ -193,6 +193,8 @@
   @keyframes track-ping { from { box-shadow: 0 0 0 0 #d6a447cc; } to { box-shadow: 0 0 0 12px #d6a44700; } }
   @keyframes track-ride { from { top: 0; } to { top: calc(100% - 52px); } }
   @media (prefers-reduced-motion: reduce) { .track::before, .track li, .track-train, .track li i { animation: none; opacity: 1; } .track-train { top: calc(100% - 52px); } }
+  .pro-video { font-size: 12.5px; font-weight: 600; color: #7a1631; }
+  .pro-video a { color: inherit; }
   .menu-btn { display: none; align-items: center; gap: 8px; margin-bottom: 14px; min-height: 44px; padding: 0 14px;
     border: 0; border-radius: 10px; background: var(--side); color: #fff; font: inherit; }
   .menu-shade { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
@@ -909,7 +911,7 @@
     if (!data.results.length) list.innerHTML = `<div class="empty-note">No customers at this step yet.</div>`;
     for (const c of data.results) list.appendChild(customerCard(c));
   }
-  const EVENTS = { ...FUNNEL, checked: "Purchase checked", whatsapp_sent: "WhatsApp link sent", link_opened: "Link opened", poster_saved: "Poster made", shared_instagram: "Shared: Instagram", shared_facebook: "Shared: Facebook", shared_whatsapp: "Shared: WhatsApp", shared_more: "Shared: other" };
+  const EVENTS = { ...FUNNEL, terms_accepted: "Terms accepted", reviewed: "Rated the visit", checked: "Purchase checked", whatsapp_sent: "WhatsApp link sent", link_opened: "Link opened", poster_saved: "Poster made", shared_instagram: "Shared: Instagram", shared_facebook: "Shared: Facebook", shared_whatsapp: "Shared: WhatsApp", shared_more: "Shared: other" };
   // The journey as a railway: a train runs down the line, lighting each station
   // as it arrives. Repeats of a step (two opens) share one station.
   const STATION_MS = 550;
@@ -935,7 +937,7 @@
     const d = document.createElement("dialog");
     d.style.cssText = "max-width:640px;width:calc(100% - 32px);border:0;border-radius:12px";
     d.innerHTML = `<div class="toolbar"><b>${esc(c.name || c.phone)}</b><button class="btn">Close</button></div>
-      <table>${row("Phone", c.phone)}${row("Mail", c.email)}${row("Branch", c.branch_name)}${row("Product", c.product_details)}${row("IMEI", c.imei)}${row("Invoice no.", c.invoice_number)}${row("Bill value", c.bill_value)}${row("Reward", c.reward)}${row("Rating", c.rating ? c.rating + " / 5" : "")}${row("Review", c.review)}${row("Mirror", c.mirror_name)}${row("Photo sharpness", c.blur_score)}${row("Link", c.link)}${row("Link version", c.link_version)}</table>
+      <table>${row("Phone", c.phone)}${row("Mail", c.email)}${row("Branch", c.branch_name)}${row("Product", c.product_details)}${row("IMEI", c.imei)}${row("Invoice no.", c.invoice_number)}${row("Bill value", c.bill_value)}${row("Reward", c.reward)}${row("Rating", c.rating ? c.rating + " / 5" : "")}${row("Terms accepted", c.terms_accepted_at ? new Date(c.terms_accepted_at).toLocaleString() : "Not yet")}${row("Video review", c.video_review ? "Yes, will make one" : "No")}${row("Instagram", c.instagram_id ? "@" + c.instagram_id : "")}${row("Review", c.review)}${row("Mirror", c.mirror_name)}${row("Photo sharpness", c.blur_score)}${row("Link", c.link)}${row("Link version", c.link_version)}</table>
       <div class="row" style="flex-wrap:wrap;gap:8px;margin:12px 0">${pics.map(([n, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="${n}" style="height:160px;border-radius:8px"></a>`).join("")}</div>
       <b>Journey</b>${journeyTrack(c.events)}
       <details><summary>Text read from invoice</summary><pre style="white-space:pre-wrap">${esc(c.ocr_text)}</pre></details>`;
@@ -960,6 +962,7 @@
         ${c.bill_value ? `<div class="pro-bill">${rs(c.bill_value)}</div>` : ""}
         ${c.stage === "checked" ? `<span class="pill warn">Link not sent</span>` : ""}
         ${c.rating ? `<div class="pro-stars" title="${c.rating} of 5">${"★".repeat(c.rating)}<i>${"★".repeat(5 - c.rating)}</i>${c.review ? `<q>${esc(c.review)}</q>` : ""}</div>` : ""}
+        ${c.video_review ? `<span class="pro-video">🎬 Video review${c.instagram_id ? ` · <a href="https://instagram.com/${encodeURIComponent(c.instagram_id)}" target="_blank" rel="noopener">@${esc(c.instagram_id)}</a>` : ""}</span>` : ""}
         <div class="pro-person"><b>${esc(c.name || "Guest #" + c.id)}</b>${c.phone ? `<span>${esc(c.phone)}</span>` : ""}</div>
         <dl class="pro-facts">
           ${c.branch_name ? `<dt>Branch</dt><dd>${esc(c.branch_name)}</dd>` : ""}

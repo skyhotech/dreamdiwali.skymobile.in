@@ -52,7 +52,13 @@ class BranchFlowTests(TestCase):
     def token(self, res):
         return res.json()["link"].split("spin=")[1]
 
-    def spin(self, token):
+    def accept(self, token, **body):
+        return self.client.post("/api/customers/terms/", {"token": token, "accept": True, **body},
+                                content_type="application/json")
+
+    def spin(self, token, accept=True):
+        if accept:
+            self.accept(token)
         return self.client.post(
             "/api/customers/spin/", {"token": token}, content_type="application/json"
         )
@@ -172,6 +178,17 @@ class BranchFlowTests(TestCase):
         stats = self.client.get("/api/admin/stats/").json()
         self.assertEqual((stats["rating"]["avg"], stats["reviews"][0]["review"]), (4.0, "Great"))
 
+    def test_terms_come_first_and_store_the_instagram_id(self):
+        token = self.token(self.check())
+        self.assertEqual(self.client.get(f"/api/customers/link/{token}/").json()["next"], "terms")
+        self.assertEqual(self.spin(token, accept=False).status_code, 400)
+        self.assertEqual(self.accept(token, video_review=True).status_code, 400)  # no ID
+        res = self.accept(token, video_review=True, instagram_id="@asha.k")
+        self.assertEqual(res.json(), {"next": "spin"})
+        c = Customer.objects.get()
+        self.assertEqual((c.video_review, c.instagram_id), (True, "asha.k"))
+        self.assertTrue(c.terms_accepted_at)
+
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)
         self.assertTrue(Branch.objects.filter(slug="thiruvannamalai-1").exists())
@@ -227,7 +244,7 @@ class BranchFlowTests(TestCase):
         data = self.client.get(f"/api/admin/customers/{c.pk}/").json()
         self.assertEqual(
             [e["kind"] for e in data["events"]],
-            ["checked", "whatsapp_sent", "link_opened", "spun", "shared_whatsapp"],
+            ["checked", "whatsapp_sent", "link_opened", "terms_accepted", "spun", "shared_whatsapp"],
         )
         self.assertIn("IMEI", data["ocr_text"])
         funnel = self.client.get("/api/admin/stats/").json()["funnel"]

@@ -205,7 +205,8 @@ export async function fetchLink(token: string) {
     reward: data.reward ?? null,
     items: data.items ?? [],
     poster: data.poster ? MEDIA_ORIGIN + data.poster : null,
-    reviewed: data.next !== "review" && data.next !== "spin",
+    reviewed: !["terms", "spin", "review"].includes(data.next ?? ""),
+    termsAccepted: data.next !== "terms",
   };
 }
 export type BranchOption = { slug: string; name: string };
@@ -225,6 +226,18 @@ export async function fetchManagerBranches() {
 /** Validates and saves the purchase; returns the customer's spin link. */
 export const checkPurchase = (form: FormData) =>
   postJson<{ phone: string; link: string }>("/manager/check/", form);
+/** Accepts the terms; the video pledge brings the customer's Instagram ID. */
+export const acceptTerms = (
+  token: string,
+  videoReview: boolean,
+  instagramId: string,
+) =>
+  postJson<{ next: string }>("/customers/terms/", {
+    token,
+    accept: true,
+    video_review: videoReview,
+    instagram_id: instagramId,
+  });
 /** Star rating and review, sent once after the spin. */
 export const sendReview = (token: string, rating: number, review: string) =>
   postJson<{ next: string }>("/customers/review/", { token, rating, review });
