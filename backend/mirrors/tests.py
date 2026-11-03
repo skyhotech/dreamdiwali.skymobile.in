@@ -8,6 +8,9 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from PIL import Image
 
+from unittest.mock import patch
+
+from .throttles import RepeatThrottle
 from .models import Branch, Customer, CustomerEvent, SpinItem
 
 MEDIA = tempfile.mkdtemp()
@@ -37,6 +40,10 @@ class BranchFlowTests(TestCase):
 
     def setUp(self):
         cache.clear()  # rate-limit counters
+        # Tests repeat actions instantly; the 5-second guard has its own test.
+        patcher = patch.object(RepeatThrottle, "get_rate", lambda self: None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.branch = Branch.objects.create(name="Anna Nagar")
         self.staff = User.objects.create_user("staff@sky.in", password="x", is_staff=True)
 
@@ -205,6 +212,15 @@ class BranchFlowTests(TestCase):
             self.client.post("/api/live/", {"id": visitor}, content_type="application/json")
         self.client.force_login(self.staff)
         self.assertEqual(self.client.get("/api/admin/stats/").json()["live"], 2)
+
+    def test_the_same_action_twice_within_5_seconds_is_refused(self):
+        token = self.token(self.check())
+        with patch.object(RepeatThrottle, "get_rate", lambda self: "1/5s"):
+            self.assertEqual(self.accept(token).status_code, 200)
+            self.assertEqual(self.accept(token).status_code, 429)
+            body = {"token": token, "kind": "shared_more"}
+            ok = self.client.post("/api/customers/event/", body, content_type="application/json")
+            self.assertEqual(ok.status_code, 200)  # a different action is fine
 
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)

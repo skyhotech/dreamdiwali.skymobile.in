@@ -49,6 +49,7 @@ from .throttles import (
     CustomerRegisterThrottle,
     CustomerSpinThrottle,
     ManagerThrottle,
+    RepeatThrottle,
     CustomerUploadThrottle,
     MirrorPollThrottle,
     MirrorVersionThrottle,
@@ -204,7 +205,7 @@ def mirror_stream(request):
 class CustomerUpload(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [CustomerUploadThrottle]
+    throttle_classes = [CustomerUploadThrottle, RepeatThrottle]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):
@@ -276,7 +277,7 @@ class CustomerLink(APIView):
 
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [CustomerRegisterThrottle]
+    throttle_classes = [CustomerRegisterThrottle, RepeatThrottle]
 
     def get(self, request, token):
         customer = Customer.objects.filter(spin_token=token).first()
@@ -302,7 +303,7 @@ class CustomerSpin(APIView):
 
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [CustomerSpinThrottle]
+    throttle_classes = [CustomerSpinThrottle, RepeatThrottle]
 
     def post(self, request):
         ser = SpinSerializer(data=request.data)
@@ -333,7 +334,7 @@ class CustomerSpin(APIView):
 class ManagerBranches(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [ManagerThrottle]
+    throttle_classes = [ManagerThrottle, RepeatThrottle]
 
     def get(self, request):
         branches = Branch.objects.filter(is_active=True)
@@ -347,7 +348,7 @@ class ManagerCheck(APIView):
 
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [ManagerThrottle]
+    throttle_classes = [ManagerThrottle, RepeatThrottle]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):
@@ -422,7 +423,7 @@ class ManagerSent(APIView):
 
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [ManagerThrottle]
+    throttle_classes = [ManagerThrottle, RepeatThrottle]
 
     def post(self, request):
         customer = Customer.objects.filter(phone=str(request.data.get("phone", ""))).first()
@@ -437,7 +438,7 @@ class CustomerTerms(APIView):
 
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [CustomerSpinThrottle]
+    throttle_classes = [CustomerSpinThrottle, RepeatThrottle]
 
     def post(self, request):
         ser = TermsSerializer(data=request.data)
@@ -459,7 +460,7 @@ class CustomerReview(APIView):
 
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [CustomerSpinThrottle]
+    throttle_classes = [CustomerSpinThrottle, RepeatThrottle]
 
     def post(self, request):
         ser = ReviewSerializer(data=request.data)
@@ -507,7 +508,7 @@ class CustomerEventView(APIView):
 
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [CustomerSpinThrottle]
+    throttle_classes = [CustomerSpinThrottle, RepeatThrottle]
 
     def post(self, request):
         ser = EventSerializer(data=request.data)

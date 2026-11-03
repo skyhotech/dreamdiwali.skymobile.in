@@ -486,7 +486,16 @@
   const csrf = () => (document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/) || [])[1] || "";
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+  // Any button pressed for a change stays disabled until that change finishes.
+  let pressed = null;
+  document.addEventListener("click", (e) => { pressed = e.target.closest("button"); }, true);
   async function api(path, opts = {}) {
+    const method = (opts.method || "GET").toUpperCase(), button = method === "GET" ? null : pressed;
+    if (button?.disabled) throw new Error("Already working on it…");
+    if (button) button.disabled = true;
+    try { return await apiCall(path, opts); } finally { if (button) button.disabled = false; }
+  }
+  async function apiCall(path, opts = {}) {
     const headers = { "X-CSRFToken": csrf(), ...(opts.headers || {}) };
     if (opts.json !== undefined) { headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(opts.json); }
     const res = await fetch("/api/admin/" + path, { credentials: "same-origin", ...opts, headers });

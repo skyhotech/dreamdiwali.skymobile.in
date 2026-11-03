@@ -188,7 +188,9 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAdminUser"],
-    "DEFAULT_THROTTLE_CLASSES": ["mirrors.throttles.BurstThrottle"],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "mirrors.throttles.BurstThrottle", "mirrors.throttles.RepeatThrottle",
+    ],
     "EXCEPTION_HANDLER": "mirrors.exceptions.friendly_exception_handler",
     # Behind Caddy/nginx every request comes from 127.0.0.1; trust that many
     # proxies' X-Forwarded-For so rate limits apply per visitor, not globally.
@@ -202,6 +204,8 @@ REST_FRAMEWORK = {
         "customer_upload": "120/m",
         "customer_register": "60/m",
         "manager": "60/m",
+        # One of each change per visitor every 5 seconds (double taps).
+        "repeat": "1/5s",
         # New spins per network (a busy kiosk).
         "customer_spin": "600/h",  # per network: a store shares one Wi-Fi address
         # Ceiling for every other API call per IP.

@@ -60,6 +60,25 @@ class ManagerThrottle(ScopedIPThrottle):
     scope = "manager"
 
 
+class RepeatThrottle(ScopedIPThrottle):
+    """The same change can't be sent twice within a few seconds: a double tap
+    or a resent form is refused. Reads are never limited."""
+
+    scope = "repeat"
+    KEYS = ("token", "phone", "id", "kind")
+
+    def get_cache_key(self, request, view):
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return None
+        try:
+            data = request.data
+        except Exception:
+            data = {}
+        subject = "|".join(str(data.get(k, ""))[:64] for k in self.KEYS if hasattr(data, "get"))
+        ident = f"{self.get_ident(request)}|{request.method}|{request.path}|{subject}"
+        return self.cache_format % {"scope": self.scope, "ident": ident}
+
+
 class BurstThrottle(ScopedIPThrottle):
     """Overall per-IP ceiling for every API endpoint."""
 

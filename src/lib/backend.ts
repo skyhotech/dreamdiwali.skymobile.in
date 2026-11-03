@@ -132,7 +132,24 @@ export const BRANCH: string = (() => {
     return "";
   }
 })();
-async function postJson<T>(
+// A double tap sends one request: an identical one already on its way is shared.
+const pendingPosts = new Map<string, Promise<unknown>>();
+function postJson<T>(
+  path: string,
+  body: unknown,
+  headers?: Record<string, string>,
+): Promise<T> {
+  const key = body instanceof FormData ? "" : path + JSON.stringify(body);
+  const running = key && pendingPosts.get(key);
+  if (running) return running as Promise<T>;
+  const request = sendJson<T>(path, body, headers);
+  if (key) {
+    pendingPosts.set(key, request);
+    void request.finally(() => pendingPosts.delete(key)).catch(() => {});
+  }
+  return request;
+}
+async function sendJson<T>(
   path: string,
   body: unknown,
   headers?: Record<string, string>,
