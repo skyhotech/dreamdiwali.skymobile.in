@@ -192,6 +192,11 @@
         <div class="card stat"><span>Gifts given</span><b id="s-gifts">–</b></div>
         <div class="card stat"><span>Branches</span><b id="s-branches">–</b></div>
       </div>
+      <div class="card" style="margin-bottom:14px">
+        <b>Customer journey</b>
+        <div class="j-flow" id="s-flow" style="margin-top:10px"></div>
+        <div class="j-flow" id="s-side" style="margin-top:12px"></div>
+      </div>
       <div class="grid2">
         <div class="card"><b>Selfies, last 7 days</b><div class="bars" id="s-bars"></div></div>
         <div class="card"><b>Most used mirrors</b><div id="s-top" style="margin-top:10px"></div></div>
@@ -441,6 +446,7 @@
     $("#nav-customers").textContent = s.customers;
     $("#s-bars").innerHTML = bars(s.per_day);
     $("#s-top").innerHTML = rankRows(s.top_mirrors, "No selfies yet.");
+    journeyFlow(s, $("#s-flow"), $("#s-side"));
     $("#s-branch-top").innerHTML = s.top_branches.length
       ? s.top_branches.map((b) => `<a href="#branches/${b.id}" class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);color:inherit;text-decoration:none"><span>📍 ${esc(b.name)}</span><b>${b.n}</b></a>`).join("")
       : `<p class="hint">No branches yet. <a href="#branches">Add your first branch</a>.</p>`;
@@ -673,12 +679,14 @@
 
   // ---------------- Customers ----------------
   const FUNNEL = { checked: "Purchases checked", whatsapp_sent: "WhatsApp links sent", link_opened: "Links opened", spun: "Wheel spins", poster_saved: "Posters made", shared: "Shared" };
+  function journeyFlow(s, flow, side, step = "") {
+    const node = (key, label, n, extra = "", i = 0) => `<a class="j-node ${extra} ${step === key ? "on" : ""}" href="#journey/${key}" style="animation-delay:${i * 0.1}s"><b>${n}</b><span>${label}</span></a>`;
+    flow.innerHTML = Object.keys(FUNNEL).map((k, i) => node(k, FUNNEL[k], s.funnel[k], "", i)).join(`<i class="j-arrow"></i>`);
+    side.innerHTML = node("abandoned", "Abandoned", s.abandoned, "warn", 6) + node("failed", "Failed checks", s.failed_checks, "warn", 7);
+  }
   async function loadJourney() {
     const s = await api("stats/"), step = location.hash.split("/")[1] || "";
-    const steps = Object.keys(FUNNEL);
-    const node = (key, label, n, extra = "", i = 0) => `<a class="j-node ${extra} ${step === key ? "on" : ""}" href="#journey/${key}" style="animation-delay:${i * 0.1}s"><b>${n}</b><span>${label}</span></a>`;
-    $("#j-flow").innerHTML = steps.map((k, i) => node(k, FUNNEL[k], s.funnel[k], "", i)).join(`<i class="j-arrow"></i>`);
-    $("#j-side").innerHTML = node("abandoned", "Abandoned", s.abandoned, "warn", 6) + node("failed", "Failed checks", s.failed_checks, "warn", 7);
+    journeyFlow(s, $("#j-flow"), $("#j-side"), step);
     const list = $("#j-list");
     list.innerHTML = "";
     $("#j-title").textContent = step ? (FUNNEL[step] || { abandoned: "Abandoned", failed: "Failed checks" }[step] || "") : "Tap a step to see its customers";
