@@ -4,7 +4,7 @@ describe("SKY Instagram caption", () => {
   it("generates brand mention and festive hashtags without inventing product details", () => {
     const caption = instagramCaption(1);
     expect(caption).toContain("SKY Mobile & Electronics");
-    expect(caption).toContain("@skymobileindia");
+    expect(caption).toContain("@skymobileandelectronics");
     expect(caption).toContain("#DiwaliWithSKY");
     expect(caption).toContain("my new purchase,");
     expect(caption).not.toMatch(/price|discount|iPhone/);

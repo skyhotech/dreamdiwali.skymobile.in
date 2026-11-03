@@ -57,7 +57,7 @@ The latest selfie, product photos, edits, selected frame/layout and generated po
 
 ## Instagram behavior and limitations
 
-The generated caption includes SKY Mobile & Electronics, `@skymobileindia`, and festive hashtags. Optional product labels are included only when the customer supplies them; product specifications, prices and discounts are not invented.
+The generated caption includes SKY Mobile & Electronics, `@skymobileandelectronics`, and festive hashtags. Optional product labels are included only when the customer supplies them; product specifications, prices and discounts are not invented.
 
 A website cannot force a particular installed share app, guarantee Instagram’s Post composer or caption autofill, or confirm actual publication. The customer chooses Instagram in the share sheet and completes the post. If sharing is unsupported, the poster downloads and the app attempts to open instagram.com. Use **Open Instagram** if the browser blocks the new tab, then select **+ → Post**, the saved poster, and paste the caption.
 

@@ -206,7 +206,7 @@ test("rear camera appears in the small product box, then captures and shares", a
     )
     .toMatchObject({
       files: 1,
-      text: expect.stringContaining("@skymobileindia"),
+      text: expect.stringContaining("@skymobileandelectronics"),
     });
   // After Instagram, WhatsApp Status is suggested next.
   await expect(
@@ -418,7 +418,7 @@ test("Post on Instagram shares the completed poster with generated SKY caption",
       type: "image/jpeg",
       width: 1080,
       height: 2400,
-      text: expect.stringContaining("@skymobileindia"),
+      text: expect.stringContaining("@skymobileandelectronics"),
     });
   await expect(
     page.getByRole("textbox", { name: "Your SKY Instagram caption" }),
