@@ -51,6 +51,8 @@ deployer ALL=(root) NOPASSWD: /usr/bin/systemctl restart skymirror, /usr/bin/jou
 SUDO
 chmod 440 /etc/sudoers.d/skymirror-deployer
 install -d -m 755 /var/log/caddy; chown caddy:caddy /var/log/caddy
+# Caddy serves uploads straight from disk, and the app keeps them group-only.
+usermod -aG skymirror caddy
 systemctl daemon-reload
 systemctl enable skymirror
 systemctl reload-or-restart caddy
