@@ -145,11 +145,6 @@ export function ManagerIntake() {
     setFilling(true);
     try {
       const found = extractInvoice((await readFile(file)).text);
-      // The store number printed on the bill picks its branch.
-      const store = found.storePhone
-        ? branches.find((b) => b.phone === found.storePhone)
-        : undefined;
-      if (store) setBranch((b) => b ?? store);
       // Fills gaps only: what the manager typed stays.
       setForm((f) => ({
         name: f.name || found.name || "",

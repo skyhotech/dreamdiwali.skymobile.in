@@ -32,8 +32,9 @@ test("a PDF invoice fills the form, passes the check and offers WhatsApp", async
   await expect(page.locator("#m-imei")).toHaveValue("P-12568801-D");
   await expect(page.getByLabel("Invoice number")).toHaveValue("SI2627VLR31054");
   await expect(page.getByLabel("Bill value")).toHaveValue("64000");
-  // The store number on the bill (8754740002) picks VELLORE-3 by itself.
-  await expect(page.getByLabel("Branch")).toHaveValue("VELLORE-3");
+  // The branch is always the manager's own choice.
+  await expect(page.getByLabel("Branch")).toHaveValue("");
+  await chooseBranch(page, "ARNI-1");
   await page.getByRole("button", { name: "Check" }).click();
   await expect(page.getByRole("button", { name: "Send link in WhatsApp" })).toBeVisible();
   expect(sent).toContain("SI2627VLR31054");
