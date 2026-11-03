@@ -304,8 +304,12 @@ test("permission denial offers retry without upload or flip suggestions", async 
   });
   await page.goto("/?spin=test-token");
   await expect(page.getByText(/Camera permission was denied/)).toBeVisible();
+  // Refused: the website's steps, or on iPhone (permission lives in
+  // Settings → Safari) the phone's.
   await expect(
-    page.getByRole("alert").filter({ hasText: "SKY needs your camera" }),
+    page.getByRole("alertdialog", {
+      name: /Allow the camera for this website|Turn on the camera in your phone settings/,
+    }),
   ).toBeVisible();
   // The studio keeps asking for the camera by itself.
   const asks = () =>
@@ -631,4 +635,55 @@ test("after posting, the customer sees whether the poster reached SKY", async ({
   await expect(page.locator(".upload-status")).toHaveText(
     /Poster saved with SKY/,
   );
+});
+
+const failCamera = (name: string, granted = false) => async ({ page }: { page: Page }) => {
+  await page.addInitScript(
+    ([errorName, isGranted]) => {
+      Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
+        value: async () => {
+          throw new DOMException("Camera failed", errorName as string);
+        },
+      });
+      if (isGranted)
+        Object.defineProperty(navigator, "permissions", {
+          value: { query: async () => ({ state: "granted", onchange: null }) },
+        });
+    },
+    [name, granted] as const,
+  );
+  await page.goto("/?spin=test-token");
+};
+
+test("allowed in the browser but blocked by the phone: phone settings steps", async ({ page }) => {
+  await failCamera("NotAllowedError", true)({ page });
+  const alert = page.getByRole("alertdialog", { name: "Turn on the camera in your phone settings" });
+  await expect(alert).toBeVisible();
+  await expect(alert).toContainText("Open the Settings app.");
+  await expect(alert.getByRole("button", { name: "Try again" })).toBeVisible();
+});
+
+test("a camera in use elsewhere says so", async ({ page }) => {
+  await failCamera("NotReadableError")({ page });
+  await expect(
+    page.getByRole("alertdialog", { name: "The camera is in use or switched off" }),
+  ).toContainText("Close any app using the camera");
+});
+
+test("inside Instagram's built-in browser: open in a real browser", async ({ browser }) => {
+  const context = await browser.newContext({
+    userAgent:
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 350.0.0.0",
+  });
+  const page = await context.newPage();
+  await page.route("**/api/customers/link/**", (route) =>
+    route.fulfill({
+      json: { phone: "9845012345", name: "Asha", reward: "power-bank", items: [], poster: null, next: "mirror", video_review: true },
+    }),
+  );
+  await failCamera("NotAllowedError")({ page });
+  const alert = page.getByRole("alertdialog", { name: "Open this page in your browser" });
+  await expect(alert).toContainText("Safari");
+  await expect(alert.getByRole("button", { name: "Copy link" })).toBeVisible();
+  await context.close();
 });

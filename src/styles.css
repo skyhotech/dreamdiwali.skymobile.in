@@ -3771,3 +3771,13 @@ html.no-pull-refresh body {
   background: #f1e8da;
   color: #3c2418;
 }
+.camera-help-steps {
+  margin: 6px 0 12px;
+  padding-left: 20px;
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.camera-help-steps li + li {
+  margin-top: 4px;
+}

@@ -36,6 +36,7 @@ import { Templates } from "./Templates";
 import { UploadStatus } from "./StatusNotices";
 import { ShareButtons } from "./ShareButtons";
 import { trackShare } from "../lib/backend";
+import { CameraAlert } from "./CameraAlert";
 // Hands-free capture: how strong a smile counts, and how long a cue is held.
 const SMILE_THRESHOLD = 0.6;
 const HOLD_MS = 500;
@@ -411,25 +412,7 @@ export default function CameraStudio() {
             </button>
           )}
           {flash && <div className="shutter-flash" />}
-          {camera.denied && (
-            <div className="camera-denied" role="alert">
-              <Camera size={30} aria-hidden="true" />
-              <b>SKY needs your camera</b>
-              <p>
-                Your selfie is the ticket to your Diwali gift. Tap{" "}
-                <strong>Allow</strong> when your browser asks — we&apos;ll keep
-                asking.
-              </p>
-              <p className="camera-denied-help">
-                Blocked it? Tap the 🔒 or ⓘ next to the web address →
-                Permissions → Camera → Allow. On iPhone: Settings → Safari →
-                Camera → Allow.
-              </p>
-              <button className="spin-button" onClick={camera.retry}>
-                Allow camera
-              </button>
-            </div>
-          )}
+          {camera.failure && <CameraAlert failure={camera.failure} retry={camera.retry} />}
         </motion.div>
         <div className="camera-status" role="status">
           {message ||

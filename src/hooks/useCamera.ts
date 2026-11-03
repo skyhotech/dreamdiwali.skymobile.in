@@ -18,6 +18,8 @@ export function useCamera(facing: "user" | "environment", active: boolean) {
     [fallbackNotice, setFallbackNotice] = useState(""),
     [retry, setRetry] = useState(0),
     [denied, setDenied] = useState(false),
+    // The error's name (NotAllowedError, NotReadableError…), for camera help.
+    [failure, setFailure] = useState(""),
     [torch, setTorch] = useState(false),
     [torchSupported, setTorchSupported] = useState(false);
   const stop = useCallback(() => {
@@ -30,6 +32,7 @@ export function useCamera(facing: "user" | "environment", active: boolean) {
     let cancelled = false;
     stop();
     setError("");
+    setFailure("");
     setFallbackNotice("");
     setTorchSupported(false);
     async function start() {
@@ -123,6 +126,7 @@ export function useCamera(facing: "user" | "environment", active: boolean) {
         if (!cancelled) {
           stop();
           setDenied((e as DOMException).name === "NotAllowedError");
+          setFailure((e as DOMException).name || "Error");
           setError(
             messages[(e as DOMException).name] ??
               "Could not start a camera. Check permissions and retry.",
@@ -187,6 +191,7 @@ export function useCamera(facing: "user" | "environment", active: boolean) {
     retry: () => setRetry((v) => v + 1),
     /** The customer refused the camera; the studio keeps asking. */
     denied,
+    failure,
     torch,
     torchSupported,
     toggleTorch,
