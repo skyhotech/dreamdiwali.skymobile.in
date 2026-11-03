@@ -123,6 +123,10 @@
   @keyframes j-flow { from { background-position: 100% 0; } to { background-position: 0 0; } }
   @media (prefers-reduced-motion: reduce) { .j-node { animation: none; opacity: 1; } .j-arrow { animation: none; } }
   @media (max-width: 760px) { .j-node { flex-basis: 100%; } .j-arrow { width: 3px; height: 16px; margin: 0 auto; } }
+  .sales-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 7px 0; color: inherit; text-decoration: none; }
+  .sales-row i { grid-column: 1 / -1; height: 10px; min-width: 6px; border-radius: 6px; background: linear-gradient(90deg, #d22856, #d6a447); animation: sales-grow .6s ease; transform-origin: left; }
+  .sales-row small { grid-column: 1 / -1; color: #8a7a68; }
+  @keyframes sales-grow { from { transform: scaleX(0); } to { transform: none; } }
   .menu-btn { display: none; align-items: center; gap: 8px; margin-bottom: 14px; min-height: 44px; padding: 0 14px;
     border: 0; border-radius: 10px; background: var(--side); color: #fff; font: inherit; }
   .menu-shade { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
@@ -199,7 +203,7 @@
       </div>
       <div class="grid2">
         <div class="card"><b>Selfies, last 7 days</b><div class="bars" id="s-bars"></div></div>
-        <div class="card"><b>Most used mirrors</b><div id="s-top" style="margin-top:10px"></div></div>
+        <div class="card"><b>Highest performing branches</b><div id="s-top" style="margin-top:10px"></div></div>
       </div>
       <div class="card" style="margin-top:14px"><b>Top branches</b><div id="s-branch-top" style="margin-top:10px"></div></div>
       <div class="card" style="margin-top:14px">
@@ -445,7 +449,10 @@
     $("#nav-branches").textContent = s.branches;
     $("#nav-customers").textContent = s.customers;
     $("#s-bars").innerHTML = bars(s.per_day);
-    $("#s-top").innerHTML = rankRows(s.top_mirrors, "No selfies yet.");
+    const peak = Math.max(1, ...s.branch_sales.map((b) => Number(b.value)));
+    $("#s-top").innerHTML = s.branch_sales.length
+      ? s.branch_sales.map((b) => `<a href="#branches/${b.id}" class="sales-row"><span>${esc(b.name)}</span><b>₹${Number(b.value).toLocaleString("en-IN")}</b><i style="width:${(Number(b.value) / peak) * 100}%"></i><small>${b.n} customer${b.n === 1 ? "" : "s"}</small></a>`).join("")
+      : `<p class="hint">No sales yet.</p>`;
     journeyFlow(s, $("#s-flow"), $("#s-side"));
     $("#s-branch-top").innerHTML = s.top_branches.length
       ? s.top_branches.map((b) => `<a href="#branches/${b.id}" class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);color:inherit;text-decoration:none"><span>📍 ${esc(b.name)}</span><b>${b.n}</b></a>`).join("")

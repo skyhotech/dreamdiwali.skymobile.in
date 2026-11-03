@@ -10,7 +10,7 @@ from django.contrib.auth.views import LoginView
 from django.db import IntegrityError, close_old_connections, transaction
 from django.core.cache import cache
 from django.http import JsonResponse, StreamingHttpResponse
-from django.db.models import Count, Max, Q
+from django.db.models import Count, Max, Q, Sum
 from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -638,6 +638,12 @@ def stats(request):
         mirrors=Mirror.objects.count(),
         active_mirrors=Mirror.objects.filter(is_active=True).count(),
         branches=Branch.objects.count(),
+        branch_sales=[
+            {"id": b.pk, "name": b.name, "value": b.value, "n": b.n}
+            for b in Branch.objects.annotate(
+                value=Sum("customers__bill_value"), n=Count("customers")
+            ).filter(value__gt=0).order_by("-value")[:8]
+        ],
         failed_checks=CustomerEvent.objects.filter(kind="check_failed").count(),
         top_branches=list(
             Branch.objects.annotate(n=Count("customers")).order_by("-n").values("id", "name", "n")[:5]
