@@ -1,3 +1,4 @@
+import { imeiValid } from "./backend";
 // Document scanner for invoice photos: rejects blurry shots, reads every word
 // with OCR on the device, and compares it with what the manager typed.
 export const BLURRY = "Invoice photo is blurry. Please retake it.";
@@ -25,12 +26,47 @@ function printed(text: string, labelled: string[], typed: string) {
 const AMOUNT = /\d[\d,]*\.\d{2}|\d[\d,]*/g;
 const money = (t: string) => Number(t.replace(/,/g, ""));
 /** The Amount column of the Net Total row: the last figure on that line. */
+// A well-read figure: 34,038.00 or 34038.00. Scans of table rows often lose
+// the separators (3403800), so only these are trusted.
+const CLEAN_AMOUNT = /^\d{1,3}(?:,\d{2,3})*\.\d{2}$|^\d+\.\d{2}$/;
+const UNITS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"];
+const TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+const SCALES: Record<string, number> = { hundred: 100, thousand: 1_000, lakh: 100_000, lakhs: 100_000, crore: 10_000_000 };
+/** "Sixty Four Thousand Thirty Eight" → 64038; NaN if a word is unknown. */
+export function wordsToNumber(words: string) {
+  let total = 0,
+    part = 0;
+  for (const w of words.toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter(Boolean)) {
+    if (w === "and" || w === "only" || w === "rupees") continue;
+    if (UNITS.includes(w)) part += UNITS.indexOf(w);
+    else if (TENS.includes(w)) part += TENS.indexOf(w) * 10;
+    else if (w === "hundred") part *= 100;
+    else if (SCALES[w]) {
+      total += part * SCALES[w];
+      part = 0;
+    } else return NaN;
+  }
+  return total + part;
+}
+/** The bill: the Net Total row's Amount; when a scan garbles that row, the
+ *  payment lines added up, then the amount written in words. */
 function billAmount(text: string) {
   const row =
     text.match(/net\s*total[^\n]*/i)?.[0] ??
     text.match(/^(?!.*tax).*\btotal\b[^\n]*/im)?.[0] ??
     "";
-  return row.match(AMOUNT)?.map(money).pop();
+  const last = row.match(AMOUNT)?.pop();
+  if (last && CLEAN_AMOUNT.test(last)) return money(last);
+  const paid = text.match(/payment\s*info[^\n]*/i)?.[0].match(/\d[\d,]*\.\d{2}/g);
+  if (paid?.length) return paid.map(money).reduce((a, b) => a + b, 0);
+  const words = text.match(/amount\s*in\s*words\s*[:;.\-]*\s*([a-z ]+)/i)?.[1];
+  const value = words ? wordsToNumber(words) : NaN;
+  return value > 0 ? value : last ? money(last) : undefined;
+}
+/** 15-digit runs that pass the IMEI check: on a bill these can only be a
+ *  phone's IMEI, whatever a scan made of the "IMEI NO" label. */
+export function luhnImeis(text: string) {
+  return (text.match(/(?<!\d)\d{15}(?!\d)/g) ?? []).filter(imeiValid);
 }
 export type InvoiceFields = {
   name: string;
@@ -53,7 +89,9 @@ export function invoiceMissing(
     missing.push("invoice number");
   // P-12568801-D, P_12568801_D and 12568801 are the same serial.
   const want = compact(f.imei);
-  const imeis = [...text.matchAll(IMEI_LABEL)].map((m) => compact(m[1]));
+  // The label first; only when a scan lost it, any valid 15-digit IMEI.
+  const labelled = [...text.matchAll(IMEI_LABEL)].map((m) => m[1]);
+  const imeis = (labelled.length ? labelled : luhnImeis(text)).map(compact);
   if (
     imeis.length
       ? !imeis.some((v) => v.includes(want) || want.includes(v))
@@ -84,10 +122,14 @@ export function extractInvoice(
   const phone = after
     .join("\n")
     .match(/ph\w*\s*[.:;\-]*\s*(?:\+?91)?(\d{10})/i)?.[1];
-  const header = lines.findIndex((l) => /particulars/i.test(l));
+  // The item line follows the table header; if a scan garbled that, it
+  // follows the last "Place of Supply" line of the Billed To block.
+  let header = lines.findIndex((l) => /particulars/i.test(l));
+  for (let i = lines.length - 1; header < 0 && i >= 0; i--)
+    if (/place\s*of\s*supply/i.test(lines[i])) header = i;
   const product = lines
     .slice(header + 1)
-    .find((l, i) => header >= 0 && i < 4 && /[a-z]{3}/i.test(l))
+    .find((l, i) => header >= 0 && i < 4 && /[a-z]{3}/i.test(l) && !/imei|serial/i.test(l))
     ?.replace(/^\d+\s+/, "")
     .replace(/\s+\d{6,8}\b.*$/, "")
     .trim();
@@ -100,7 +142,8 @@ export function extractInvoice(
     name: name || undefined,
     phone,
     product,
-    imei: [...text.matchAll(IMEI_LABEL)][0]?.[1].toUpperCase(),
+    imei:
+      [...text.matchAll(IMEI_LABEL)][0]?.[1].toUpperCase() ?? luhnImeis(text)[0],
     invoice: text.match(INVOICE_LABEL)?.[1],
     bill: bill ? String(bill) : undefined,
   };

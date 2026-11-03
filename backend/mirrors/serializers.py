@@ -320,7 +320,12 @@ def invoice_missing(text, data):
     if not _printed(text, _INVOICE_LABEL.findall(text)[:1], data["invoice_number"]):
         missing.append("invoice number")
     # P-12568801-D, P_12568801_D and 12568801 are the same serial.
-    want, imeis = _compact(data["imei"]), [_compact(v) for v in _IMEI_LABEL.findall(text)]
+    # A scan can garble the "IMEI NO" label; a 15-digit run that passes the
+    # IMEI check can only be a phone's IMEI.
+    found = _IMEI_LABEL.findall(text) or [
+        n for n in re.findall(r"(?<!\d)\d{15}(?!\d)", text) if imei_valid(n)
+    ]
+    want, imeis = _compact(data["imei"]), [_compact(v) for v in found]
     if not (any(want in v or v in want for v in imeis) if imeis else _printed(text, [], want)):
         missing.append("IMEI")
     at = re.search(r"billed\s*to", text, re.I)

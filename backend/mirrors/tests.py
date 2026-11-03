@@ -308,6 +308,11 @@ class BranchFlowTests(TestCase):
                          invoice_number=f"INV-{OTHER_IMEI}")
         self.assertIn("IMEI", res.json()["invoice_image"][0])
 
+    def test_imei_is_found_when_a_scan_garbles_its_label(self):
+        text = (f"Invoice No : SI2627A14813\nBilled To,\nAsha\nPh: 9845011111\n"
+                f"IEE NO: {IMEI} 85171300\n")
+        self.assertEqual(self.check(invoice_number="SI2627A14813", ocr_text=text).status_code, 200)
+
     def test_mobile_number_must_match_the_bill(self):
         res = self.check(ocr_text=bill_text("9845022222", IMEI))
         self.assertIn("mobile number", res.json()["invoice_image"][0])
