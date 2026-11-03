@@ -716,6 +716,8 @@ class CustomerViewSet(
         qs = Customer.objects.select_related("mirror", "repeat_of").prefetch_related("events")
         if self.request.query_params.get("abandoned"):
             qs = _link_unsent(qs)
+        if self.request.query_params.get("video"):
+            qs = qs.filter(video_review=True)
         reached = self.request.query_params.get("reached")
         if reached == "shared":
             qs = qs.filter(events__kind__in=CustomerEvent.SHARE_KINDS).distinct()

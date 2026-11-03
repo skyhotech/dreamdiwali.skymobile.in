@@ -269,6 +269,10 @@
   .pager button.on { background: var(--side); color: #fff; border-color: var(--side); }
   .pager button:disabled { opacity: .4; cursor: default; }
   .pager span { align-self: center; padding: 0 4px; color: var(--muted); }
+  .vr-card .info { display: grid; gap: 5px; padding: 14px 16px; }
+  .vr-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
+  .vr-ig { font-size: 18px; font-weight: 800; color: #d62976; text-decoration: none; }
+  .vr-post { font-weight: 600; color: #7a1631; overflow-wrap: anywhere; }
   .menu-btn { display: none; align-items: center; gap: 8px; margin-bottom: 14px; min-height: 44px; padding: 0 14px;
     border: 0; border-radius: 10px; background: var(--side); color: #fff; font: inherit; }
   .menu-shade { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
@@ -317,6 +321,7 @@
     <a href="#dashboard" data-view="dashboard">Dashboard</a>
     <a href="#mirrors" data-view="mirrors">Mirrors <span class="badge" id="nav-mirrors">–</span></a>
     <a href="#branches" data-view="branches">Branches <span class="badge" id="nav-branches">–</span></a>
+    <a href="#video-reviews" data-view="video-reviews">Video reviews <span class="badge" id="nav-video">–</span></a>
     <a href="#rejections" data-view="rejections">Rejections <span class="badge" id="nav-rejections">–</span></a>
     <a href="#server" data-view="server">Server status</a>
     <a href="#spin-items" data-view="spin-items">Spin wheel items</a>
@@ -498,6 +503,13 @@
       <div class="cgrid" id="j-list"></div>
     </section>
 
+    <!-- Video reviews -->
+    <section id="view-video-reviews" hidden>
+      <div class="toolbar"><h2>Video reviews</h2><a class="btn" id="vr-export" href="/api/admin/customers/export/?video=1" download>Export CSV</a></div>
+      <p class="hint">Customers who will post a product video review on Instagram for the iPhone 15 contest. Purchases of ₹10,000 or more qualify.</p>
+      <div class="cgrid" id="vr-list"></div>
+    </section>
+
     <!-- Rejections -->
     <section id="view-rejections" hidden>
       <h2>Rejections</h2>
@@ -647,7 +659,7 @@
   lightbox.addEventListener("click", () => lightbox.classList.remove("open"));
 
   // ---------------- Router ----------------
-  const views = { rejections: loadRejections, server: loadServer, journey: loadJourney, "spin-items": loadSpinItems, dashboard: loadDashboard, mirrors: loadMirrors, branches: loadBranches, customers: () => loadCustomers(true) };
+  const views = { "video-reviews": loadVideoReviews, rejections: loadRejections, server: loadServer, journey: loadJourney, "spin-items": loadSpinItems, dashboard: loadDashboard, mirrors: loadMirrors, branches: loadBranches, customers: () => loadCustomers(true) };
   function route() {
     const view = (location.hash.slice(1) || "dashboard").split("/")[0];
     const name = views[view] ? view : "dashboard";
@@ -669,6 +681,7 @@
   async function loadDashboard() {
     const [s, recent] = await Promise.all([api("stats/"), api("customers/?page_size=12")]);
     api("rejections/").then((r) => ($("#nav-rejections").textContent = r.length)).catch(() => {});
+    api("customers/?video=1&page_size=1").then((r) => ($("#nav-video").textContent = r.count)).catch(() => {});
     $("#s-today").textContent = s.customers_today;
     $("#s-customers").textContent = s.customers;
     $("#s-active").textContent = s.active_mirrors;
@@ -901,6 +914,32 @@
       pagerNav(grid, n, pages, show);
     };
     show(Math.min(Number(grid.dataset.page) || 1, pages));
+  }
+
+  // ---------------- Video reviews ----------------
+  let vrPage = 1;
+  async function loadVideoReviews() {
+    const data = await api(`customers/?video=1&page=${vrPage}&page_size=${PER_PAGE}`);
+    $("#nav-video").textContent = data.count;
+    const list = $("#vr-list");
+    list.innerHTML = data.results.length ? "" : `<div class="empty-note">No video review sign-ups yet.</div>`;
+    for (const c of data.results) {
+      const el = document.createElement("div"), ig = c.instagram_id;
+      const eligible = Number(c.bill_value) >= 10000;
+      el.className = "cust vr-card";
+      el.innerHTML = `<div class="info">
+          <div class="vr-head">${ig ? `<a class="vr-ig" href="https://instagram.com/${encodeURIComponent(ig)}" target="_blank" rel="noopener">@${esc(ig)}</a>` : `<b>No Instagram ID</b>`}
+            <span class="pill ${eligible ? "" : "warn"}">${eligible ? "✓ Qualifies for iPhone 15" : "Below ₹10,000"}</span></div>
+          <b>${esc(c.name || c.phone)}</b><small>${esc(c.phone)} · ${esc(c.branch_name || "No branch")}</small>
+          <small>${esc(c.product_details || "")}${c.bill_value ? " · ₹" + Number(c.bill_value).toLocaleString("en-IN") : ""}</small>
+          ${(c.posts || []).length ? c.posts.map((p) => `<a class="vr-post" href="${esc(p.url)}" target="_blank" rel="noopener">▶ ${esc(p.platform)} post</a>`).join("") : `<small class="hint">No post link yet</small>`}
+          <small>Signed up ${c.terms_accepted_at ? new Date(c.terms_accepted_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "—"}</small>
+        </div>
+        <div class="acts"><button class="details primary">Details</button>${ig ? `<a class="btn" href="https://instagram.com/${encodeURIComponent(ig)}" target="_blank" rel="noopener">Open profile</a>` : ""}</div>`;
+      $("button.details", el).addEventListener("click", () => customerDetail(c.id).catch((e) => toast(e.message, true)));
+      list.appendChild(el);
+    }
+    pagerNav(list, vrPage, Math.ceil(data.count / PER_PAGE), (n) => { vrPage = n; loadVideoReviews().catch((e) => toast(e.message, true)); });
   }
 
   // ---------------- Rejections ----------------

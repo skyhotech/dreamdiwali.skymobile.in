@@ -405,6 +405,14 @@ class BranchFlowTests(TestCase):
         self.assertEqual(post({"kind": "posted_whatsapp"}).status_code, 200)
         self.assertEqual(post({"kind": "gift_unlocked"}).status_code, 200)
 
+    def test_admin_lists_video_review_customers(self):
+        token = self.token(self.check())
+        self.accept(token, video_review=True, instagram_id="asha.k")
+        Customer.objects.create(session="no-video", phone="9845022222")
+        self.client.force_login(self.staff)
+        rows = self.client.get("/api/admin/customers/?video=1").json()["results"]
+        self.assertEqual([(r["phone"], r["instagram_id"]) for r in rows], [("9845011111", "asha.k")])
+
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)
         self.assertTrue(Branch.objects.filter(slug="thiruvannamalai-1").exists())
