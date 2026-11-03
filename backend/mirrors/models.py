@@ -243,6 +243,13 @@ class Customer(models.Model):
         return self.name or self.phone or f"Customer #{self.pk}"
 
     @property
+    def next_step(self):
+        """Where this customer's link takes them."""
+        if self.poster:
+            return "share"
+        return "mirror" if self.reward else "spin"
+
+    @property
     def stage(self):
         """How far this customer got; anything but "completed" is abandoned."""
         if self.poster:

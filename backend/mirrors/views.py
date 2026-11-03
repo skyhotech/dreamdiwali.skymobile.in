@@ -287,6 +287,8 @@ class CustomerLink(APIView):
         return Response({
             "phone": customer.phone, "reward": customer.reward or None,
             "items": wheel_items(items),
+            "next": customer.next_step,
+            "poster": customer.poster.url if customer.poster else None,
         })
 
 

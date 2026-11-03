@@ -145,6 +145,17 @@ class BranchFlowTests(TestCase):
         self.assertEqual(len(rows), 6)
         self.assertTrue(all(r["image"].startswith("/static/mirrors/rewards/") for r in rows))
 
+    def test_second_spin_stops_at_the_middleware(self):
+        token = self.token(self.check())
+        first = self.spin(token).json()["reward"]
+        again = self.spin(token).json()
+        self.assertEqual(again, {"reward": first, "next": "mirror"})
+        link = self.client.get(f"/api/customers/link/{token}/").json()
+        self.assertEqual((link["next"], link["poster"]), ("mirror", None))
+        Customer.objects.update(poster="customers/p.jpg")
+        link = self.client.get(f"/api/customers/link/{token}/").json()
+        self.assertEqual((link["next"], link["poster"]), ("share", "/media/customers/p.jpg"))
+
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)
         self.assertTrue(Branch.objects.filter(slug="thiruvannamalai-1").exists())

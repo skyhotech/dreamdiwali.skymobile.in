@@ -194,6 +194,7 @@ export async function fetchLink(token: string) {
     phone?: string;
     reward?: string | null;
     items?: { id: string; label: string; image: string }[];
+    poster?: string | null;
     detail?: string;
   };
   if (!res.ok || !data.phone)
@@ -202,6 +203,7 @@ export async function fetchLink(token: string) {
     phone: data.phone,
     reward: data.reward ?? null,
     items: data.items ?? [],
+    poster: data.poster ? MEDIA_ORIGIN + data.poster : null,
   };
 }
 export type BranchOption = { slug: string; name: string };

@@ -3,6 +3,7 @@ import { MotionConfig } from "motion/react";
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Festive } from "./components/Festive";
 import { ManagerIntake } from "./components/ManagerIntake";
+import { SavedPoster } from "./components/SavedPoster";
 import { SpinWheel } from "./components/SpinWheel";
 import { OfflineBanner } from "./components/StatusNotices";
 import { SPIN_TOKEN, fetchLink, spinPrize } from "./lib/backend";
@@ -26,6 +27,7 @@ function Studio() {
   const reward = useStudio((s) => s.reward);
   const [linkError, setLinkError] = useState("");
   const [linkReady, setLinkReady] = useState(false);
+  const [poster, setPoster] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
   // Gift pictures and the spin sound start loading once the customer signs
   // in, so the wheel opens with everything already on the phone.
@@ -47,6 +49,7 @@ function Studio() {
         s.setReward(c.reward);
         s.setToken(SPIN_TOKEN);
         s.setPhone(c.phone);
+        setPoster(c.poster);
         setLinkReady(true);
       })
       .catch((e: Error) => live && setLinkError(e.message));
@@ -82,6 +85,18 @@ function Studio() {
           ) : (
             <ManagerIntake />
           )}
+        </main>
+      </MotionConfig>
+    );
+  // Finished before: back to their poster, ready to share again.
+  if (poster)
+    return (
+      <MotionConfig reducedMotion="user">
+        <main id="main" className="mobile-studio">
+          <OfflineBanner />
+          <Festive>
+            <SavedPoster url={poster} />
+          </Festive>
         </main>
       </MotionConfig>
     );

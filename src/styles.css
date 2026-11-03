@@ -3570,3 +3570,9 @@ html.no-pull-refresh body {
   display: block;
   margin-inline: auto;
 }
+.saved-poster {
+  display: block;
+  width: 100%;
+  margin: 12px 0;
+  border-radius: 14px;
+}
