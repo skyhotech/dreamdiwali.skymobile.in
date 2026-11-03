@@ -148,6 +148,14 @@
   .b-box span { font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
   .b-box i { grid-column: 1 / -1; height: 8px; border-radius: 6px; background: #f1e8da; overflow: hidden; }
   .b-box u { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, #d22856, #d6a447); transition: width .6s ease; }
+  .si-layout { display: grid; grid-template-columns: minmax(280px, 400px) 1fr; gap: 16px; align-items: start; }
+  .si-stage { position: relative; display: grid; gap: 12px; text-align: center; }
+  .si-wheel svg { display: block; width: 100%; filter: drop-shadow(0 12px 22px rgba(122,86,30,.35)); }
+  .si-pointer { position: absolute; z-index: 1; top: 8px; left: 50%; margin-left: -13px; border: 13px solid transparent; border-top: 24px solid #fff4dc; filter: drop-shadow(0 2px 2px rgba(0,0,0,.4)); }
+  .si-slice { cursor: pointer; transition: opacity .15s; }
+  .si-slice:hover { opacity: .82; }
+  .si-card img { width: 100%; height: 130px; object-fit: contain; background: #fff9ef; }
+  @media (max-width: 860px) { .si-layout { grid-template-columns: 1fr; } }
   .menu-btn { display: none; align-items: center; gap: 8px; margin-bottom: 14px; min-height: 44px; padding: 0 14px;
     border: 0; border-radius: 10px; background: var(--side); color: #fff; font: inherit; }
   .menu-shade { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
@@ -367,8 +375,15 @@
 
     <!-- Spin wheel items -->
     <section id="view-spin-items" hidden>
-      <h2>Spin wheel items</h2>
-      <p class="hint">The customer's bill value decides which gifts their wheel shows. Leave "Bill up to" empty for no upper limit. A higher chance makes a gift more likely within its range.</p>
+      <div class="toolbar"><h2>Spin wheel items</h2><button class="primary" id="si-new">+ Add gift</button></div>
+      <div class="si-layout">
+        <div class="card si-stage">
+          <div class="si-pointer"></div>
+          <div class="si-wheel" id="si-wheel"></div>
+          <label class="f">Preview a bill value (₹)<input id="si-bill" type="number" min="0" step="1" placeholder="All gifts"></label>
+          <p class="hint" id="si-note">Click a slice to edit that gift.</p>
+        </div>
+        <div>
       <form class="card fields" id="si-form" style="margin-bottom:14px">
         <input type="hidden" name="id">
         <label class="f">Gift name<input name="name" maxlength="40" required></label>
@@ -383,7 +398,9 @@
         <label class="row"><input name="is_active" type="checkbox" checked style="width:auto"> Show on the wheel</label>
         <div class="row" style="margin-top:10px"><button class="btn" id="si-save">Add gift</button><button class="btn" type="button" id="si-cancel" hidden>Cancel</button></div>
       </form>
-      <div class="cgrid" id="si-list"></div>
+        </div>
+      </div>
+      <div class="cgrid" id="si-list" style="margin-top:14px"></div>
     </section>
 
     <!-- Customers -->
@@ -659,31 +676,72 @@
     $("#si-save").textContent = "Add gift";
     $("#si-cancel").hidden = true;
   }
+  let siItems = [];
+  const SI_COLORS = ["#d22856", "#d6a447", "#7a1631", "#f3cf7a"];
+  function siEdit(i) {
+    siForm.id.value = i.id;
+    siForm.name.value = i.name;
+    siForm.min_bill.value = Number(i.min_bill);
+    siForm.max_bill.value = i.max_bill ? Number(i.max_bill) : "";
+    siForm.weight.value = i.weight;
+    siForm.is_active.checked = i.is_active;
+    $("#si-save").textContent = "Save gift";
+    $("#si-cancel").hidden = false;
+    siForm.name.focus();
+  }
+  // Same choice as SpinItem.for_bill on the server.
+  function siForBill(bill) {
+    const live = siItems.filter((i) => i.is_active);
+    if (bill === null) return live;
+    const hit = live.filter((i) => Number(i.min_bill) <= bill && (!i.max_bill || bill <= Number(i.max_bill)));
+    if (hit.length) return hit;
+    const below = live.filter((i) => Number(i.min_bill) <= bill);
+    if (!below.length) return live;
+    const top = Math.max(...below.map((i) => Number(i.min_bill)));
+    return below.filter((i) => Number(i.min_bill) === top);
+  }
+  // The customer's wheel, drawn the same way: colours, bulbs, hub and pictures.
+  function siDraw() {
+    const raw = $("#si-bill").value, items = siForBill(raw === "" ? null : Number(raw));
+    const S = 320, R = S / 2, n = items.length ? Math.max(6, items.length) : 0;
+    const slices = Array.from({ length: n }, (_, i) => items[i % items.length]);
+    const step = n ? 360 / n : 0;
+    const pt = (deg, r) => { const a = ((deg - 90) * Math.PI) / 180; return [R + r * Math.cos(a), R + r * Math.sin(a)]; };
+    const parts = slices.map((it, i) => {
+      const [x1, y1] = pt(i * step, R - 14), [x2, y2] = pt((i + 1) * step, R - 14);
+      const mid = i * step + step / 2, [cx, cy] = pt(mid, R * .58), [tx, ty] = pt(mid, R * .83);
+      return `<g class="si-slice" data-id="${it.id}"><path d="M${R},${R} L${x1},${y1} A${R - 14},${R - 14} 0 0 1 ${x2},${y2} Z" fill="${SI_COLORS[i % 4]}" stroke="#fff4dc" stroke-width="2"/>
+        <clipPath id="si-clip-${i}"><circle cx="${cx}" cy="${cy}" r="28"/></clipPath><circle cx="${cx}" cy="${cy}" r="30" fill="#fff4dc"/>
+        ${it.image ? `<image href="${esc(it.image)}" x="${cx - 28}" y="${cy - 28}" width="56" height="56" clip-path="url(#si-clip-${i})" preserveAspectRatio="xMidYMid slice"/>` : ""}
+        <text x="${tx}" y="${ty}" transform="rotate(${mid} ${tx} ${ty})" text-anchor="middle" dominant-baseline="middle" fill="${i % 2 ? "#3c2418" : "#fff4dc"}" font-size="12" font-weight="700">${esc(it.name)}</text></g>`;
+    }).join("");
+    const bulbs = Array.from({ length: 16 }, (_, i) => { const [x, y] = pt(i * 22.5, R - 7); return `<circle cx="${x}" cy="${y}" r="4" fill="#f3cf7a"/>`; }).join("");
+    $("#si-wheel").innerHTML = `<svg viewBox="0 0 ${S} ${S}" role="img" aria-label="Spin wheel preview"><circle cx="${R}" cy="${R}" r="${R - 1}" fill="#5a1426"/>${parts}${bulbs}<circle cx="${R}" cy="${R}" r="24" fill="#d6a447" stroke="#fff4dc" stroke-width="4"/></svg>`;
+    $("#si-note").textContent = !n ? "No gifts on the wheel. Add one." : raw === "" ? "Click a slice to edit that gift." : `This bill's wheel: ${items.map((i) => i.name).join(", ")}`;
+  }
+  $("#si-bill").addEventListener("input", siDraw);
+  $("#si-wheel").addEventListener("click", (e) => {
+    const g = e.target.closest(".si-slice");
+    const item = g && siItems.find((i) => String(i.id) === g.dataset.id);
+    if (item) siEdit(item);
+  });
+  $("#si-new").addEventListener("click", () => { siReset(); siForm.name.focus(); });
   async function loadSpinItems() {
-    const items = await api("spin-items/");
+    siItems = await api("spin-items/");
+    siDraw();
     const list = $("#si-list");
-    list.innerHTML = items.length ? "" : `<div class="empty-note">No gifts yet. Add the first one above.</div>`;
-    for (const i of items) {
+    list.innerHTML = siItems.length ? "" : `<div class="empty-note">No gifts yet. Add the first one above.</div>`;
+    for (const i of siItems) {
       const el = document.createElement("div");
-      el.className = "cust";
-      el.innerHTML = `${i.image ? `<img src="${esc(i.image)}" alt="" style="width:100%;height:120px;object-fit:contain" loading="eager">` : ""}
+      el.className = "cust si-card";
+      el.innerHTML = `${i.image ? `<img src="${esc(i.image)}" alt="${esc(i.name)}" loading="eager">` : ""}
         <div class="info"><b>${esc(i.name)}</b>${i.is_active ? "" : ` <span class="pill warn">Hidden</span>`}
           <small>${money(i.min_bill)} ${i.max_bill ? "to " + money(i.max_bill) : "and above"}</small><small>Chance ${i.weight}</small></div>
         <div class="acts"><button class="edit">Edit</button><button class="danger">Delete</button></div>`;
-      $("button.edit", el).addEventListener("click", () => {
-        siForm.id.value = i.id;
-        siForm.name.value = i.name;
-        siForm.min_bill.value = Number(i.min_bill);
-        siForm.max_bill.value = i.max_bill ? Number(i.max_bill) : "";
-        siForm.weight.value = i.weight;
-        siForm.is_active.checked = i.is_active;
-        $("#si-save").textContent = "Save gift";
-        $("#si-cancel").hidden = false;
-        window.scrollTo(0, 0);
-      });
+      $("button.edit", el).addEventListener("click", () => siEdit(i));
       $("button.danger", el).addEventListener("click", async () => {
         if (!confirm(`Delete “${i.name}”? Customers who already won it keep it.`)) return;
-        try { await api(`spin-items/${i.id}/`, { method: "DELETE" }); toast("Deleted"); loadSpinItems(); }
+        try { await api(`spin-items/${i.id}/`, { method: "DELETE" }); toast("Deleted"); siReset(); loadSpinItems(); }
         catch (err) { toast(err.message, true); }
       });
       list.appendChild(el);

@@ -127,6 +127,11 @@ def _local_images(data):
     }
 
 
+BUILT_IN_GIFTS = {
+    "neckband", "mini-speaker", "smart-watch", "wired-headphone", "mobile-stand", "power-bank",
+}
+
+
 class SpinItemSerializer(serializers.ModelSerializer):
     def validate(self, data):
         low = data.get("min_bill", getattr(self.instance, "min_bill", 0))
@@ -139,7 +144,11 @@ class SpinItemSerializer(serializers.ModelSerializer):
         return _limit_size(image) if image else image
 
     def to_representation(self, obj):
-        return _local_images(super().to_representation(obj))
+        data = _local_images(super().to_representation(obj))
+        # The starting gifts use the pictures that ship with the code.
+        if not data["image"] and obj.slug in BUILT_IN_GIFTS:
+            data["image"] = f"/static/mirrors/rewards/{obj.slug}.webp"
+        return data
 
     class Meta:
         model = SpinItem

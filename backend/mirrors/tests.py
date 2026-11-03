@@ -139,6 +139,12 @@ class BranchFlowTests(TestCase):
         self.assertEqual((top["name"], top["customer_count"], top["journey"]["spun"]), ("Anna Nagar", 1, 1))
         self.assertEqual(float(top["sales"]), 24999.0)
 
+    def test_starting_gifts_have_pictures(self):
+        self.client.force_login(self.staff)
+        rows = self.client.get("/api/admin/spin-items/").json()
+        self.assertEqual(len(rows), 6)
+        self.assertTrue(all(r["image"].startswith("/static/mirrors/rewards/") for r in rows))
+
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)
         self.assertTrue(Branch.objects.filter(slug="thiruvannamalai-1").exists())
