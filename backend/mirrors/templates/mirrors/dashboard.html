@@ -207,7 +207,8 @@
   main input, main select, main textarea { box-sizing: border-box; }
   .fields label.f > input { width: 100%; }
   .b-hero { padding-left: 64px; }
-  html, body { overflow-x: hidden; }
+  /* clip, not hidden: hidden makes body a scroller and breaks the sticky sidebar. */
+  html, body { overflow-x: clip; }
   @media (max-width: 760px) {
     .toolbar { flex-wrap: wrap; gap: 10px; }
     .toolbar h2 { margin-right: auto; }
