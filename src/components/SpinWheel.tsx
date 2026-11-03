@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { preloadRewards, sounds, wheelItems, type Reward } from "../lib/rewards";
 // Few gifts repeat around the wheel, which still needs to look like one.
 const MIN_SLICES = 6;
+const NARROW = 10;
 // Length of process spin.mp3; replaced by the real duration once it loads.
 const FALLBACK_SPIN_MS = 2424;
 // Full turns per spin.
@@ -46,6 +47,11 @@ export function SpinWheel({
     return Array.from({ length: repeats }, () => items).flat();
   });
   const SLICE = 360 / slices.length;
+  // More gifts make thinner slices: the picture fits its slice, the text
+  // shrinks, and past NARROW slices labels run along the slice instead.
+  const picture = Math.min(28, Math.max(9, R * 0.58 * Math.sin(Math.PI / slices.length) - 3));
+  const labelSize = Math.max(7, 12 - Math.max(0, slices.length - 8) * 0.5);
+  const radial = slices.length > NARROW;
   const [rotation, setRotation] = useState(0);
   const [spinMs, setSpinMs] = useState(FALLBACK_SPIN_MS);
   const [ease, setEase] = useState(LANDING_EASE);
@@ -256,7 +262,7 @@ export function SpinWheel({
                     const [cx, cy] = point(i * SLICE + SLICE / 2, R * 0.58);
                     return (
                       <clipPath key={i} id={`spin-clip-${i}`}>
-                        <circle cx={cx} cy={cy} r={28} />
+                        <circle cx={cx} cy={cy} r={picture} />
                       </clipPath>
                     );
                   })}
@@ -286,24 +292,24 @@ export function SpinWheel({
                         stroke="#fff4dc"
                         strokeWidth={2}
                       />
-                      <circle cx={cx} cy={cy} r={30} fill="#fff4dc" />
+                      <circle cx={cx} cy={cy} r={picture + 2} fill="#fff4dc" />
                       <image
                         href={r.image}
-                        x={cx - 28}
-                        y={cy - 28}
-                        width={56}
-                        height={56}
+                        x={cx - picture}
+                        y={cy - picture}
+                        width={picture * 2}
+                        height={picture * 2}
                         clipPath={`url(#spin-clip-${i})`}
                         preserveAspectRatio="xMidYMid slice"
                       />
                       <text
                         x={tx}
                         y={ty}
-                        transform={`rotate(${mid} ${tx} ${ty})`}
+                        transform={`rotate(${radial ? mid - 90 : mid} ${tx} ${ty})`}
                         textAnchor="middle"
                         dominantBaseline="middle"
                         fill={light ? "#3c2418" : "#fff4dc"}
-                        fontSize={12}
+                        fontSize={labelSize}
                         fontWeight={700}
                       >
                         {r.label}
