@@ -54,3 +54,21 @@ test("a chosen branch can be changed", async ({ page }) => {
   await chooseBranch(page, "ARNI-1");
   await expect(page.getByLabel("Branch")).toHaveValue("ARNI-1");
 });
+
+test("a bill below ₹10,000 gets no link and an explanation window", async ({ page }) => {
+  let checked = false;
+  await page.route("**/api/manager/check/", (r) => ((checked = true), r.fulfill({ json: {} })));
+  await openForm(page);
+  await page.locator("#m-image").setInputFiles(INVOICE);
+  await expect(page.getByLabel("Bill value")).toHaveValue("64000", { timeout: 20_000 });
+  await page.getByLabel("Bill value").fill("9999");
+  await chooseBranch(page, "ARCOT");
+  await page.getByRole("button", { name: "Check" }).click();
+  const notice = page.getByRole("alertdialog", { name: "Not eligible for the spin wheel" });
+  await expect(notice).toContainText("below ₹10,000");
+  await expect(notice).toContainText("₹9,999");
+  await notice.getByRole("button", { name: "OK" }).click();
+  await expect(notice).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Send link in WhatsApp" })).toHaveCount(0);
+  expect(checked).toBe(false);
+});

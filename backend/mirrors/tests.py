@@ -232,6 +232,13 @@ class BranchFlowTests(TestCase):
         self.assertGreater(data["cpu"]["cores"], 0)
         self.assertEqual([(v["role"], v["screen"]) for v in data["live"]], [("customer", "terms")])
 
+    def test_bills_below_10000_get_no_link(self):
+        res = self.check(bill_value="9999.99")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("below ₹10,000", res.json()["bill_value"][0])
+        self.assertFalse(Customer.objects.exists())
+        self.assertEqual(self.check(bill_value="10000").status_code, 200)
+
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)
         self.assertTrue(Branch.objects.filter(slug="thiruvannamalai-1").exists())

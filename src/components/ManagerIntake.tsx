@@ -34,6 +34,9 @@ const ImeiScanner = lazy(() => import("./ImeiScanner"));
 const errorAudio = typeof Audio === "undefined" ? null : new Audio(errorSound);
 // Text inside a PDF can't be blurry; recorded as a clearly sharp score.
 const PDF_SHARPNESS = 9999;
+// Only purchases of at least this much get a spin link. Kept in sync with
+// MIN_BILL in backend/mirrors/serializers.py.
+const MIN_BILL = 10_000;
 const MISMATCH = "Data mismatch";
 const EMPTY = {
   name: "",
@@ -61,6 +64,7 @@ export function ManagerIntake() {
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState("Checking…");
   const [filling, setFilling] = useState(false);
+  const [belowMinimum, setBelowMinimum] = useState(false);
   const [link, setLink] = useState("");
   const [sent, setSent] = useState(false);
   const shake = useAnimationControls();
@@ -176,6 +180,10 @@ export function ManagerIntake() {
     if (busy) return;
     const wrong = problem();
     if (wrong) return fail(`${MISMATCH}: ${wrong}`);
+    if (Number(form.bill) < MIN_BILL) {
+      fail("");
+      return setBelowMinimum(true);
+    }
     setBusy(true);
     setError("");
     try {
@@ -250,6 +258,38 @@ export function ManagerIntake() {
   );
   return (
     <Festive>
+      {belowMinimum && (
+        <div className="notice-shade" role="presentation">
+          <motion.div
+            className="notice-window"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="below-min-title"
+            aria-describedby="below-min-text"
+            initial={{ opacity: 0, scale: 0.85, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+          >
+            <span className="notice-icon" aria-hidden="true">₹</span>
+            <h2 id="below-min-title">Not eligible for the spin wheel</h2>
+            <p id="below-min-text">
+              This bill is below ₹10,000. Only purchases of ₹10,000 or more
+              qualify for the spin wheel, so a gift link cannot be sent to
+              this customer.
+            </p>
+            <p className="notice-amount">
+              Bill value: ₹{Number(form.bill).toLocaleString("en-IN")}
+            </p>
+            <button
+              type="button"
+              className="spin-button phone-continue"
+              onClick={() => setBelowMinimum(false)}
+              autoFocus
+            >
+              OK
+            </button>
+          </motion.div>
+        </div>
+      )}
       <motion.div animate={shake} className="phone-shake">
         <motion.form
           className="phone-card manager-card"

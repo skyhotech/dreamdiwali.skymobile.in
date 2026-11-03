@@ -3708,3 +3708,46 @@ html.no-pull-refresh body {
 .phone-gate > .iphone-banner {
   max-width: 440px;
 }
+.notice-shade {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(23, 18, 13, 0.6);
+}
+.notice-window {
+  width: min(380px, 100%);
+  padding: 26px 22px 20px;
+  border: 2px solid #d6a447;
+  border-radius: 22px;
+  background: #fffaf0;
+  color: #3c2418;
+  text-align: center;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.4);
+}
+.notice-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 10px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7a1631, #d22856);
+  color: #fff4dc;
+  font-size: 26px;
+  font-weight: 800;
+}
+.notice-window h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  color: #7a1631;
+}
+.notice-window p {
+  margin: 0 0 10px;
+  line-height: 1.5;
+}
+.notice-amount {
+  font-weight: 700;
+}

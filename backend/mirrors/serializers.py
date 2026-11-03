@@ -318,6 +318,15 @@ def invoice_missing(text, data):
     return [] if _printed(text, number, data["invoice_number"]) else ["invoice number"]
 
 
+# Only purchases of at least this much get a spin link. Kept in sync with
+# MIN_BILL in src/components/ManagerIntake.tsx.
+MIN_BILL = 10000
+BELOW_MIN_BILL = (
+    "This bill is below ₹10,000. Only purchases of ₹10,000 or more qualify "
+    "for the spin wheel, so a gift link cannot be sent to this customer."
+)
+
+
 class CustomerIntakeSerializer(serializers.Serializer):
     """What the store manager submits; fields are refused with a plain reason."""
 
@@ -329,7 +338,10 @@ class CustomerIntakeSerializer(serializers.Serializer):
     product_details = serializers.CharField(max_length=160)
     imei = serializers.CharField(max_length=30)
     invoice_number = serializers.CharField(max_length=40)
-    bill_value = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=1)
+    bill_value = serializers.DecimalField(
+        max_digits=10, decimal_places=2, min_value=MIN_BILL,
+        error_messages={"min_value": BELOW_MIN_BILL},
+    )
     branch = serializers.CharField(max_length=60)
     # What the document scanner read; the server repeats the comparison.
     ocr_text = serializers.CharField(max_length=20000, trim_whitespace=False)
