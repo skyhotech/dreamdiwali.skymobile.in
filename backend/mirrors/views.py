@@ -666,6 +666,12 @@ def _customer_stats(customers):
             "shared": customers.filter(events__kind__in=CustomerEvent.SHARE_KINDS).distinct().count(),
         },
         "abandoned": _link_unsent(customers).count(),
+        "shares": {
+            row["kind"].removeprefix("shared_"): row["n"]
+            for row in CustomerEvent.objects.filter(
+                customer__in=customers, kind__in=CustomerEvent.SHARE_KINDS
+            ).values("kind").annotate(n=Count("id"))
+        },
         "rating": customers.aggregate(avg=Avg("rating"), n=Count("rating")),
         "reviews": list(
             customers.exclude(rating=None).order_by("-updated_at")

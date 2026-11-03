@@ -193,6 +193,7 @@
   @keyframes track-ping { from { box-shadow: 0 0 0 0 #d6a447cc; } to { box-shadow: 0 0 0 12px #d6a44700; } }
   @keyframes track-ride { from { top: 0; } to { top: calc(100% - 52px); } }
   @media (prefers-reduced-motion: reduce) { .track::before, .track li, .track-train, .track li i { animation: none; opacity: 1; } .track-train { top: calc(100% - 52px); } }
+  .pro-shared { font-size: 12.5px; font-weight: 600; color: #2b6a4a; }
   .pro-video { font-size: 12.5px; font-weight: 600; color: #7a1631; }
   .pro-video a { color: inherit; }
   .menu-btn { display: none; align-items: center; gap: 8px; margin-bottom: 14px; min-height: 44px; padding: 0 14px;
@@ -262,6 +263,10 @@
         <div class="card stat"><span>Active mirrors</span><b id="s-active">–</b></div>
         <div class="card stat"><span>Gifts given</span><b id="s-gifts">–</b></div>
         <div class="card stat"><span>Branches</span><b id="s-branches">–</b></div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="toolbar"><b>Shares by platform</b><span class="hint" id="s-share-top"></span></div>
+        <div id="s-shares" style="margin-top:10px"></div>
       </div>
       <div class="card" style="margin-bottom:14px">
         <div class="toolbar"><b>Customer ratings</b><span class="pro-stars" id="s-rating"></span></div>
@@ -538,6 +543,11 @@
       ? s.branch_sales.map((b) => `<a href="#branches/${b.id}" class="sales-row"><span>${esc(b.name)}</span><b>₹${Number(b.value).toLocaleString("en-IN")}</b><i style="width:${(Number(b.value) / peak) * 100}%"></i><small>${b.n} customer${b.n === 1 ? "" : "s"}</small></a>`).join("")
       : `<p class="hint">No sales yet.</p>`;
     journeyFlow(s, $("#s-flow"), $("#s-side"));
+    const PLATFORMS = [["instagram", "Instagram", "#d62976"], ["facebook", "Facebook", "#1877f2"], ["whatsapp", "WhatsApp", "#25d366"], ["more", "Other apps", "#8a7a68"]];
+    const shares = PLATFORMS.map(([k, label, color]) => ({ label, color, n: s.shares[k] || 0 })).sort((a, b) => b.n - a.n);
+    const most = Math.max(1, shares[0].n);
+    $("#s-share-top").textContent = shares[0].n ? `Most shared: ${shares[0].label}` : "No shares yet";
+    $("#s-shares").innerHTML = shares.map((p) => `<div class="sales-row"><span>${p.label}</span><b>${p.n}</b><i style="width:${(p.n / most) * 100}%;background:${p.color}"></i></div>`).join("");
     const avg = s.rating.avg;
     $("#s-rating").innerHTML = avg ? `${"★".repeat(Math.round(avg))}<i>${"★".repeat(5 - Math.round(avg))}</i> <b>${avg.toFixed(1)}</b> from ${s.rating.n} review${s.rating.n === 1 ? "" : "s"}` : "No ratings yet";
     $("#s-reviews").innerHTML = s.reviews.map((r) => `<div class="cust"><div class="info"><span class="pro-stars">${"★".repeat(r.rating)}<i>${"★".repeat(5 - r.rating)}</i></span>${r.review ? `<q>${esc(r.review)}</q>` : ""}<small>${esc(r.name)} · ${esc(r.branch_name || "")}</small></div></div>`).join("");
@@ -962,6 +972,7 @@
         ${c.bill_value ? `<div class="pro-bill">${rs(c.bill_value)}</div>` : ""}
         ${c.stage === "checked" ? `<span class="pill warn">Link not sent</span>` : ""}
         ${c.rating ? `<div class="pro-stars" title="${c.rating} of 5">${"★".repeat(c.rating)}<i>${"★".repeat(5 - c.rating)}</i>${c.review ? `<q>${esc(c.review)}</q>` : ""}</div>` : ""}
+        ${Object.keys(c.shared_on || {}).length ? `<span class="pro-shared">📤 ${Object.entries(c.shared_on).map(([k, n]) => `${esc({ more: "Other" }[k] || k[0].toUpperCase() + k.slice(1))}${n > 1 ? " ×" + n : ""}`).join(" · ")}</span>` : ""}
         ${c.video_review ? `<span class="pro-video">🎬 Video review${c.instagram_id ? ` · <a href="https://instagram.com/${encodeURIComponent(c.instagram_id)}" target="_blank" rel="noopener">@${esc(c.instagram_id)}</a>` : ""}</span>` : ""}
         <div class="pro-person"><b>${esc(c.name || "Guest #" + c.id)}</b>${c.phone ? `<span>${esc(c.phone)}</span>` : ""}</div>
         <dl class="pro-facts">

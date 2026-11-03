@@ -189,6 +189,17 @@ class BranchFlowTests(TestCase):
         self.assertEqual((c.video_review, c.instagram_id), (True, "asha.k"))
         self.assertTrue(c.terms_accepted_at)
 
+    def test_shares_are_counted_per_platform(self):
+        token = self.token(self.check())
+        for kind in ("shared_whatsapp", "shared_whatsapp", "shared_instagram"):
+            self.client.post("/api/customers/event/", {"token": token, "kind": kind},
+                             content_type="application/json")
+        self.client.force_login(self.staff)
+        self.assertEqual(self.client.get("/api/admin/stats/").json()["shares"],
+                         {"whatsapp": 2, "instagram": 1})
+        row = self.client.get("/api/admin/customers/").json()["results"][0]
+        self.assertEqual(row["shared_on"], {"whatsapp": 2, "instagram": 1})
+
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)
         self.assertTrue(Branch.objects.filter(slug="thiruvannamalai-1").exists())

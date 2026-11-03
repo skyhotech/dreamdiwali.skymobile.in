@@ -169,6 +169,16 @@ class CustomerSerializer(serializers.ModelSerializer):
     has_face = serializers.SerializerMethodField()
     repeat_of_phone = serializers.CharField(source="repeat_of.phone", read_only=True, default=None)
     stage = serializers.CharField(read_only=True)
+    shared_on = serializers.SerializerMethodField()
+
+    def get_shared_on(self, obj):
+        """Platforms whose share button this customer pressed, with counts."""
+        counts = {}
+        for e in obj.events.all():
+            if e.kind in CustomerEvent.SHARE_KINDS:
+                platform = e.kind.removeprefix("shared_")
+                counts[platform] = counts.get(platform, 0) + 1
+        return counts
 
     def get_has_face(self, obj):
         return bool(obj.face)
@@ -184,7 +194,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             "consent_at", "has_face", "repeat_of", "repeat_of_phone",
             "poster_thumb", "selfie_thumb", "branch", "branch_name",
             "email", "product_details", "imei", "invoice_number", "bill_value",
-            "invoice_image", "blur_score", "link_version", "stage", "rating", "review", "terms_accepted_at", "video_review", "instagram_id",
+            "invoice_image", "blur_score", "link_version", "stage", "shared_on", "rating", "review", "terms_accepted_at", "video_review", "instagram_id",
         ]
         read_only_fields = fields
 
