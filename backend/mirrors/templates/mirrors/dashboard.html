@@ -157,6 +157,18 @@
   .si-slice:hover { opacity: .82; }
   .si-card img { width: 100%; height: 130px; object-fit: contain; background: #fff9ef; }
   @media (max-width: 860px) { .si-layout { grid-template-columns: 1fr; } }
+  .cust.pro { border-radius: 16px; box-shadow: 0 6px 18px rgba(122,86,30,.1); transition: transform .2s, box-shadow .2s; }
+  .cust.pro:hover { transform: translateY(-4px); box-shadow: 0 16px 34px rgba(122,86,30,.2); }
+  .cust.pro .imgs { position: relative; }
+  .pro-gift { position: absolute; left: 10px; bottom: 10px; padding: 5px 10px; border-radius: 99px; background: rgba(23,18,13,.78); color: #f3cf7a; font-size: 12px; font-weight: 700; backdrop-filter: blur(4px); }
+  .cust.pro .info { display: grid; gap: 6px; padding: 12px 14px; }
+  .pro-product { margin: 0; font-size: 16px; line-height: 1.3; }
+  .pro-bill { font-size: 22px; font-weight: 800; background: linear-gradient(90deg, #7a1631, #d22856, #b8862b); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .pro-person { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding-top: 6px; border-top: 1px solid var(--line); }
+  .pro-person span { color: var(--muted); font-size: 13px; }
+  .pro-facts { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; font-size: 12.5px; }
+  .pro-facts dt { color: var(--muted); }
+  .pro-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
   .menu-btn { display: none; align-items: center; gap: 8px; margin-bottom: 14px; min-height: 44px; padding: 0 14px;
     border: 0; border-radius: 10px; background: var(--side); color: #fff; font: inherit; }
   .menu-shade { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
@@ -887,19 +899,27 @@
   function customerCard(c) {
     const el = document.createElement("div");
     el.className = "cust";
+    el.className = "cust pro";
+    const rs = (v) => "₹" + Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 });
     el.innerHTML = `<div class="imgs" ${c.selfie && c.poster ? "" : 'style="grid-template-columns:1fr"'}>
         ${c.selfie ? `<img src="${esc(c.selfie_thumb || c.selfie)}" data-full="${esc(c.selfie)}" alt="Selfie" loading="eager" decoding="sync">` : ""}
         ${c.poster ? `<img src="${esc(c.poster_thumb || c.poster)}" data-full="${esc(c.poster)}" alt="Poster" loading="eager" decoding="sync">` : ""}
+        ${c.reward ? `<span class="pro-gift">🎁 ${esc(rewardLabel(c.reward))}</span>` : ""}
       </div>
-      <div class="info"><b>${esc(c.name || "Guest #" + c.id)}</b>
-        ${c.reward ? `<span class="pill">🎁 ${esc(rewardLabel(c.reward))}</span>` : ""}
-        ${c.repeat_of_phone ? `<span class="pill warn" title="Same face as an earlier customer; no second gift">⚠ Same face as ${esc(c.repeat_of_phone)}</span>` : ""}
+      <div class="info">
+        <h4 class="pro-product">${esc(c.product_details || c.mirror_name || "Purchase")}</h4>
+        ${c.bill_value ? `<div class="pro-bill">${rs(c.bill_value)}</div>` : ""}
         ${c.stage === "checked" ? `<span class="pill warn">Link not sent</span>` : ""}
-        ${c.branch_name ? `<span class="tag">📍 ${esc(c.branch_name)}</span>` : ""}
-        <small>${esc(c.mirror_name || "—")}${c.phone ? " · " + esc(c.phone) : ""}</small>
-        ${c.imei ? `<small>${esc(c.product_details)} · IMEI ${esc(c.imei)}</small><small>Invoice ${esc(c.invoice_number)} · ₹${esc(c.bill_value)}</small>` : ""}
-        <small>${new Date(c.created_at).toLocaleString()}</small></div>
-      <div class="acts"><button class="details">Details</button>${c.poster ? `<a class="btn" href="${esc(c.poster)}" download>Poster</a>` : ""}
+        <div class="pro-person"><b>${esc(c.name || "Guest #" + c.id)}</b>${c.phone ? `<span>${esc(c.phone)}</span>` : ""}</div>
+        <dl class="pro-facts">
+          ${c.branch_name ? `<dt>Branch</dt><dd>${esc(c.branch_name)}</dd>` : ""}
+          ${c.imei ? `<dt>IMEI</dt><dd>${esc(c.imei)}</dd>` : ""}
+          ${c.invoice_number ? `<dt>Invoice</dt><dd>${esc(c.invoice_number)}</dd>` : ""}
+          ${c.mirror_name ? `<dt>Mirror</dt><dd>${esc(c.mirror_name)}</dd>` : ""}
+          <dt>Date</dt><dd>${new Date(c.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</dd>
+        </dl>
+      </div>
+      <div class="acts"><button class="details primary">Details</button>${c.poster ? `<a class="btn" href="${esc(c.poster)}" download>Poster</a>` : ""}
         ${c.selfie ? `<a class="btn" href="${esc(c.selfie)}" download>Selfie</a>` : ""}
         <button class="danger">Delete</button></div>`;
     $("button.details", el).addEventListener("click", () => customerDetail(c.id).catch((e) => toast(e.message, true)));
