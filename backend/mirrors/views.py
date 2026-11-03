@@ -481,9 +481,20 @@ LIVE_KEY = "live-visitors"
 LIVE_SECONDS = 70  # visitors ping every 30 s; two misses and they're gone
 
 
-def live_count():
+def live_visitors():
+    """Open pages right now, newest first: who (customer or manager) and where."""
     now = time.time()
-    return sum(1 for seen in (cache.get(LIVE_KEY) or {}).values() if now - seen < LIVE_SECONDS)
+    rows = []
+    for visitor, seen in (cache.get(LIVE_KEY) or {}).items():
+        seen = seen if isinstance(seen, dict) else {"t": seen}
+        if now - seen["t"] < LIVE_SECONDS:
+            rows.append({"id": visitor, "seconds_ago": round(now - seen["t"]),
+                         "role": seen.get("role", ""), "screen": seen.get("screen", "")})
+    return sorted(rows, key=lambda r: r["seconds_ago"])
+
+
+def live_count():
+    return len(live_visitors())
 
 
 class LivePing(APIView):
@@ -497,8 +508,15 @@ class LivePing(APIView):
         visitor = str(request.data.get("id", ""))[:40]
         if visitor:
             now = time.time()
-            seen = {k: t for k, t in (cache.get(LIVE_KEY) or {}).items() if now - t < LIVE_SECONDS}
-            seen[visitor] = now
+            seen = {
+                k: v for k, v in (cache.get(LIVE_KEY) or {}).items()
+                if now - (v["t"] if isinstance(v, dict) else v) < LIVE_SECONDS
+            }
+            seen[visitor] = {
+                "t": now,
+                "role": str(request.data.get("role", ""))[:20],
+                "screen": str(request.data.get("screen", ""))[:40],
+            }
             cache.set(LIVE_KEY, seen, LIVE_SECONDS * 2)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -713,6 +731,15 @@ def _customer_stats(customers):
         "rewards": [{"id": r["reward"], "n": r["n"]} for r in rewards],
         "top_mirrors": [{"name": m["mirror_name"], "n": m["n"]} for m in top],
     }
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def server_status(request):
+    """The VPS's CPU, memory, storage and network, and who is online now."""
+    from .server import snapshot
+
+    return Response({**snapshot(), "live": live_visitors()})
 
 
 @api_view(["GET"])

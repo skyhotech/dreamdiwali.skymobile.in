@@ -264,14 +264,22 @@ export const sendReview = (token: string, rating: number, review: string) =>
   postJson<{ next: string }>("/customers/review/", { token, rating, review });
 // One id per open tab, so the admin can count who is on the site right now.
 const LIVE_MS = 30_000;
+// The screen is read when each ping goes out, so the admin sees where they are.
 export function startLivePing() {
   const id = Math.random().toString(36).slice(2);
   const ping = () => {
     if (document.visibilityState !== "visible") return;
+    const screen =
+      document.querySelector("main h1")?.textContent?.slice(0, 40) ??
+      (document.querySelector(".camera-stage") ? "Mirror camera" : "");
     void fetch(`${API}/live/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+      body: JSON.stringify({
+        id,
+        role: SPIN_TOKEN ? "customer" : "manager",
+        screen,
+      }),
       keepalive: true,
     }).catch(() => {});
   };

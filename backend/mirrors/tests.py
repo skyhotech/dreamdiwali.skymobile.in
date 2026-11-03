@@ -222,6 +222,16 @@ class BranchFlowTests(TestCase):
             ok = self.client.post("/api/customers/event/", body, content_type="application/json")
             self.assertEqual(ok.status_code, 200)  # a different action is fine
 
+    def test_server_status_is_staff_only_and_lists_live_users(self):
+        self.client.post("/api/live/", {"id": "v1", "role": "customer", "screen": "terms"},
+                         content_type="application/json")
+        self.assertEqual(self.client.get("/api/admin/server/").status_code, 403)
+        self.client.force_login(self.staff)
+        data = self.client.get("/api/admin/server/").json()
+        self.assertGreater(data["disk"]["total"], 0)
+        self.assertGreater(data["cpu"]["cores"], 0)
+        self.assertEqual([(v["role"], v["screen"]) for v in data["live"]], [("customer", "terms")])
+
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)
         self.assertTrue(Branch.objects.filter(slug="thiruvannamalai-1").exists())

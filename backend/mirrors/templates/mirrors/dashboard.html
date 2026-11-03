@@ -234,6 +234,20 @@
     dialog table { display: block; overflow-x: auto; }
   }
   button.busy { opacity: .6; pointer-events: none; }
+  .sv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: 14px; }
+  .sv-card { display: grid; gap: 8px; align-content: start; }
+  .sv-card > span { color: var(--muted); font-size: 13px; }
+  .sv-big { font-size: 28px; }
+  .sv-card small { color: var(--muted); font-size: 12.5px; }
+  .sv-bar { height: 12px; border-radius: 8px; background: #f1e8da; overflow: hidden; }
+  .sv-bar i { display: block; height: 100%; width: 0; border-radius: 8px; transition: width .8s ease, background .8s; }
+  .sv-ring { --p: 0; --c: #2b9f6b; width: 120px; aspect-ratio: 1; margin: 4px auto; border-radius: 50%; display: grid; place-items: center;
+    background: radial-gradient(closest-side, #fff 76%, transparent 77%), conic-gradient(var(--c) calc(var(--p) * 1%), #f1e8da 0); transition: --p .8s; }
+  .sv-ring b { font-size: 24px; }
+  @property --p { syntax: "<number>"; inherits: false; initial-value: 0; }
+  .sv-user { display: grid; grid-template-columns: 130px 1fr auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .sv-user span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sv-user small { color: var(--muted); }
   .menu-btn { display: none; align-items: center; gap: 8px; margin-bottom: 14px; min-height: 44px; padding: 0 14px;
     border: 0; border-radius: 10px; background: var(--side); color: #fff; font: inherit; }
   .menu-shade { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
@@ -282,6 +296,7 @@
     <a href="#dashboard" data-view="dashboard">Dashboard</a>
     <a href="#mirrors" data-view="mirrors">Mirrors <span class="badge" id="nav-mirrors">–</span></a>
     <a href="#branches" data-view="branches">Branches <span class="badge" id="nav-branches">–</span></a>
+    <a href="#server" data-view="server">Server status</a>
     <a href="#spin-items" data-view="spin-items">Spin wheel items</a>
     <a href="#customers" data-view="customers">Customers <span class="badge" id="nav-customers">–</span></a>
     <div class="spacer"></div>
@@ -460,6 +475,20 @@
       <div class="cgrid" id="j-list"></div>
     </section>
 
+    <!-- Server status -->
+    <section id="view-server" hidden>
+      <div class="toolbar"><h2>Server status</h2><span class="hint"><i class="live-dot"></i>Updates every 5 seconds · <span id="sv-at">–</span></span></div>
+      <div class="sv-grid">
+        <div class="card sv-card"><span>CPU</span><div class="sv-ring" id="sv-cpu-ring"><b id="sv-cpu">–</b></div><small id="sv-cpu-info">–</small></div>
+        <div class="card sv-card"><span>Memory (RAM)</span><b class="sv-big" id="sv-mem">–</b><div class="sv-bar"><i id="sv-mem-bar"></i></div><small id="sv-mem-info">–</small></div>
+        <div class="card sv-card"><span>Storage</span><b class="sv-big" id="sv-disk">–</b><div class="sv-bar"><i id="sv-disk-bar"></i></div><small id="sv-disk-info">–</small></div>
+        <div class="card sv-card"><span>Network since start</span><b class="sv-big" id="sv-net">–</b><small id="sv-net-info">–</small></div>
+        <div class="card sv-card"><span>Uptime</span><b class="sv-big" id="sv-up">–</b><small>Load: <span id="sv-load">–</span></small></div>
+        <div class="card sv-card"><span><i class="live-dot"></i>Live users</span><b class="sv-big" id="sv-live">–</b><small id="sv-live-info">–</small></div>
+      </div>
+      <div class="card" style="margin-top:14px"><b>Who is online</b><div id="sv-users" style="margin-top:8px"></div></div>
+    </section>
+
     <!-- Spin wheel items -->
     <section id="view-spin-items" hidden>
       <div class="toolbar"><h2>Spin wheel items</h2><button class="primary" id="si-new">+ Add gift</button></div>
@@ -572,7 +601,7 @@
   lightbox.addEventListener("click", () => lightbox.classList.remove("open"));
 
   // ---------------- Router ----------------
-  const views = { journey: loadJourney, "spin-items": loadSpinItems, dashboard: loadDashboard, mirrors: loadMirrors, branches: loadBranches, customers: () => loadCustomers(true) };
+  const views = { server: loadServer, journey: loadJourney, "spin-items": loadSpinItems, dashboard: loadDashboard, mirrors: loadMirrors, branches: loadBranches, customers: () => loadCustomers(true) };
   function route() {
     const view = (location.hash.slice(1) || "dashboard").split("/")[0];
     const name = views[view] ? view : "dashboard";
@@ -788,6 +817,45 @@
     try { await api(`mirrors/${current.id}/`, { method: "DELETE" }); toast("Mirror deleted"); closeEditor(); await loadMirrors(); }
     catch (err) { toast(err.message, true); }
   });
+
+  // ---------------- Server status ----------------
+  const bytes = (n) => { const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0; while (n >= 1024 && i < 4) { n /= 1024; i++; } return `${n.toFixed(i > 1 ? 1 : 0)} ${u[i]}`; };
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
+  const shade = (p) => (p >= 90 ? "#b3261e" : p >= 70 ? "#d6a447" : "#2b9f6b");
+  function duration(s) { const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60); return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`; }
+  async function loadServer() {
+    const s = await api("server/", { fresh: true });
+    const cpu = s.cpu.percent ?? 0;
+    $("#sv-cpu").textContent = s.cpu.percent === null ? "n/a" : cpu + "%";
+    $("#sv-cpu-ring").style.setProperty("--p", cpu);
+    $("#sv-cpu-ring").style.setProperty("--c", shade(cpu));
+    $("#sv-cpu-info").textContent = `${s.cpu.cores} cores`;
+    const m = s.memory;
+    if (m) {
+      const p = pct(m.used, m.total);
+      $("#sv-mem").textContent = p + "%";
+      Object.assign($("#sv-mem-bar").style, { width: p + "%", background: shade(p) });
+      $("#sv-mem-info").textContent = `${bytes(m.used)} used · ${bytes(m.available)} available of ${bytes(m.total)}`;
+    }
+    const d = s.disk, dp = pct(d.used, d.total);
+    $("#sv-disk").textContent = dp + "%";
+    Object.assign($("#sv-disk-bar").style, { width: dp + "%", background: shade(dp) });
+    $("#sv-disk-info").textContent = `${bytes(d.used)} used · ${bytes(d.free)} free of ${bytes(d.total)}`;
+    $("#sv-net").textContent = bytes(s.network.received + s.network.sent);
+    $("#sv-net-info").textContent = `↓ ${bytes(s.network.received)} in · ↑ ${bytes(s.network.sent)} out`;
+    $("#sv-up").textContent = s.uptime ? duration(s.uptime) : "n/a";
+    $("#sv-load").textContent = s.cpu.load.join(" · ");
+    const customers = s.live.filter((v) => v.role === "customer").length;
+    $("#sv-live").textContent = s.live.length;
+    $("#sv-live-info").textContent = `${customers} customer${customers === 1 ? "" : "s"} · ${s.live.length - customers} manager${s.live.length - customers === 1 ? "" : "s"}`;
+    $("#sv-users").innerHTML = s.live.length
+      ? s.live.map((v) => `<div class="sv-user"><b>${v.role === "manager" ? "🧑‍💼 Manager" : "🛍️ Customer"}</b><span>${esc(v.screen || "Opening…")}</span><small>${v.seconds_ago}s ago</small></div>`).join("")
+      : `<p class="hint">Nobody is online right now.</p>`;
+    $("#sv-at").textContent = new Date(s.time * 1000).toLocaleTimeString();
+  }
+  setInterval(() => {
+    if (!$("#view-server").hidden && !document.hidden) loadServer().catch(() => {});
+  }, 5000);
 
   // ---------------- Spin wheel items ----------------
   const siForm = $("#si-form");

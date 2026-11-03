@@ -26,6 +26,7 @@ api_urlpatterns = [
     path("manager/check/", views.ManagerCheck.as_view(), name="manager-check"),
     path("branches/<slug:slug>/", views.PublicBranch.as_view(), name="public-branch"),
     path("admin/stats/", views.stats, name="admin-stats"),
+    path("admin/server/", views.server_status, name="admin-server"),
     path("admin/backup.sql", views.database_backup, name="admin-backup"),
     path("admin/", include(router.urls)),
 ]
