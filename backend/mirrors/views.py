@@ -646,7 +646,7 @@ def stats(request):
         ],
         failed_checks=CustomerEvent.objects.filter(kind="check_failed").count(),
         top_branches=list(
-            Branch.objects.annotate(n=Count("customers")).order_by("-n").values("id", "name", "n")[:5]
+            Branch.objects.annotate(n=Count("customers")).order_by("-n", "name").values("id", "name", "n")
         ),
     )
     return Response(data)

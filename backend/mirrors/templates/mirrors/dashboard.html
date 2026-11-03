@@ -127,6 +127,11 @@
   .sales-row i { grid-column: 1 / -1; height: 10px; min-width: 6px; border-radius: 6px; background: linear-gradient(90deg, #d22856, #d6a447); animation: sales-grow .6s ease; transform-origin: left; }
   .sales-row small { grid-column: 1 / -1; color: #8a7a68; }
   @keyframes sales-grow { from { transform: scaleX(0); } to { transform: none; } }
+  .b-boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin-top: 12px; }
+  .b-box { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; color: inherit; text-decoration: none; }
+  .b-box span { font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
+  .b-box i { grid-column: 1 / -1; height: 8px; border-radius: 6px; background: #f1e8da; overflow: hidden; }
+  .b-box u { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, #d22856, #d6a447); transition: width .6s ease; }
   .menu-btn { display: none; align-items: center; gap: 8px; margin-bottom: 14px; min-height: 44px; padding: 0 14px;
     border: 0; border-radius: 10px; background: var(--side); color: #fff; font: inherit; }
   .menu-shade { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
@@ -173,7 +178,6 @@
   <aside id="side-menu">
     <h1>✦ SKY Mirror</h1>
     <a href="#dashboard" data-view="dashboard">Dashboard</a>
-    <a href="#journey" data-view="journey">Customer journey</a>
     <a href="#mirrors" data-view="mirrors">Mirrors <span class="badge" id="nav-mirrors">–</span></a>
     <a href="#branches" data-view="branches">Branches <span class="badge" id="nav-branches">–</span></a>
     <a href="#spin-items" data-view="spin-items">Spin wheel items</a>
@@ -205,7 +209,7 @@
         <div class="card"><b>Selfies, last 7 days</b><div class="bars" id="s-bars"></div></div>
         <div class="card"><b>Highest performing branches</b><div id="s-top" style="margin-top:10px"></div></div>
       </div>
-      <div class="card" style="margin-top:14px"><b>Top branches</b><div id="s-branch-top" style="margin-top:10px"></div></div>
+      <div class="card" style="margin-top:14px"><b>All branches by customers</b><div class="b-boxes" id="s-branch-top"></div></div>
       <div class="card" style="margin-top:14px">
         <div class="toolbar" style="margin-bottom:10px"><b>Latest selfies</b><a class="btn" href="#customers">View all</a></div>
         <div class="recent" id="s-recent"></div>
@@ -454,9 +458,7 @@
       ? s.branch_sales.map((b) => `<a href="#branches/${b.id}" class="sales-row"><span>${esc(b.name)}</span><b>₹${Number(b.value).toLocaleString("en-IN")}</b><i style="width:${(Number(b.value) / peak) * 100}%"></i><small>${b.n} customer${b.n === 1 ? "" : "s"}</small></a>`).join("")
       : `<p class="hint">No sales yet.</p>`;
     journeyFlow(s, $("#s-flow"), $("#s-side"));
-    $("#s-branch-top").innerHTML = s.top_branches.length
-      ? s.top_branches.map((b) => `<a href="#branches/${b.id}" class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);color:inherit;text-decoration:none"><span>📍 ${esc(b.name)}</span><b>${b.n}</b></a>`).join("")
-      : `<p class="hint">No branches yet. <a href="#branches">Add your first branch</a>.</p>`;
+    branchBoxes(s.top_branches);
     $("#s-recent").innerHTML = recent.results.length
       ? recent.results.filter((c) => c.poster).map((c) => `<img src="${esc(c.poster_thumb || c.poster)}" data-full="${esc(c.poster)}" alt="${esc(c.name || "Customer")}" loading="eager" decoding="sync">`).join("")
       : `<p class="hint">No selfies yet.</p>`;
@@ -686,6 +688,40 @@
 
   // ---------------- Customers ----------------
   const FUNNEL = { checked: "Purchases checked", whatsapp_sent: "WhatsApp links sent", link_opened: "Links opened", spun: "Wheel spins", poster_saved: "Posters made", shared: "Shared" };
+  // Boxes are kept and moved, not rebuilt, so a branch visibly glides to its new
+  // rank: each is drawn at its old spot, then animated to the new one.
+  function branchBoxes(list) {
+    const wrap = $("#s-branch-top"), before = new Map();
+    for (const el of wrap.children) before.set(el.dataset.id, el.getBoundingClientRect());
+    const peak = Math.max(1, ...list.map((b) => b.n));
+    if (!list.length) wrap.innerHTML = `<p class="hint">No branches yet. <a href="#branches">Add your first branch</a>.</p>`;
+    for (const b of list) {
+      let el = [...wrap.children].find((x) => x.dataset.id === String(b.id));
+      if (!el) {
+        el = document.createElement("a");
+        el.className = "b-box";
+        el.dataset.id = b.id;
+        el.innerHTML = `<span></span><b></b><i><u></u></i>`;
+      }
+      el.href = `#branches/${b.id}`;
+      el.children[0].textContent = b.name;
+      el.children[1].textContent = b.n;
+      el.querySelector("u").style.width = `${(b.n / peak) * 100}%`;
+      wrap.appendChild(el);
+    }
+    for (const el of wrap.children) {
+      const old = before.get(el.dataset.id);
+      if (!old || !el.animate) continue;
+      const now = el.getBoundingClientRect();
+      const x = old.left - now.left, y = old.top - now.top;
+      if (x || y) el.animate([{ transform: `translate(${x}px,${y}px)` }, { transform: "none" }], { duration: 600, easing: "cubic-bezier(.2,.8,.2,1)" });
+    }
+  }
+  // New customers reorder the boxes without a refresh.
+  setInterval(async () => {
+    if ($("#view-dashboard").hidden || document.hidden) return;
+    try { branchBoxes((await api("stats/")).top_branches); } catch { /* next tick retries */ }
+  }, 30000);
   function journeyFlow(s, flow, side, step = "") {
     const node = (key, label, n, extra = "", i = 0) => `<a class="j-node ${extra} ${step === key ? "on" : ""}" href="#journey/${key}" style="animation-delay:${i * 0.1}s"><b>${n}</b><span>${label}</span></a>`;
     flow.innerHTML = Object.keys(FUNNEL).map((k, i) => node(k, FUNNEL[k], s.funnel[k], "", i)).join(`<i class="j-arrow"></i>`);
