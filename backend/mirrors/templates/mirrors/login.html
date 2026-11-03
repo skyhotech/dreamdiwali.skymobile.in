@@ -65,7 +65,7 @@
         <image href="/static/mirrors/rewards/${g}.webp" x="${cx - 28}" y="${cy - 28}" width="56" height="56" clip-path="url(#c${i})" preserveAspectRatio="xMidYMid slice"/>`;
     });
     for (let i = 0; i < 16; i++) { const [x, y] = pt(i * 22.5, 153); svg += `<circle cx="${x}" cy="${y}" r="4" fill="#f3cf7a"/>`; }
-    document.getElementById("wheel").innerHTML = svg + `<circle cx="160" cy="160" r="24" fill="#d6a447" stroke="#fff4dc" stroke-width="4"/>`;
+    document.getElementById("wheel").innerHTML = svg + `<circle cx="160" cy="160" r="33" fill="#fff4dc"/><circle cx="160" cy="160" r="30" fill="#ff0209"/><circle cx="160.0" cy="144.03" r="7.38" fill="#fff"/><circle cx="173.83" cy="167.98" r="7.38" fill="#fff"/><circle cx="146.17" cy="167.98" r="7.38" fill="#fff"/>`;
     for (let i = 0; i < 18; i++) {
       const s = document.createElement("i");
       s.className = "spark";

@@ -13,6 +13,14 @@ const BULBS = 16;
 const CONFETTI = 36;
 const COLORS = ["#d22856", "#d6a447", "#7a1631", "#f3cf7a"];
 const CONFETTI_COLORS = ["#d22856", "#d6a447", "#f3cf7a", "#fff4dc", "#2b9f6b"];
+// The SKY emblem at the hub, in proportion to the supplied artwork: holes of
+// 80/325 of the disc, 173/325 from its centre, at the top and 120° apart.
+const HUB = 30;
+const HOLE_R = 80 / 325;
+const EMBLEM_HOLES = [-90, 30, 150].map((deg) => {
+  const a = (deg * Math.PI) / 180;
+  return [(173 / 325) * Math.cos(a), (173 / 325) * Math.sin(a)];
+});
 const SIZE = 320,
   R = SIZE / 2;
 function point(angle: number, radius: number) {
@@ -366,14 +374,18 @@ export function SpinWheel({
                     />
                   );
                 })}
-                <circle
-                  cx={R}
-                  cy={R}
-                  r={24}
-                  fill="url(#spin-hub)"
-                  stroke="#fff4dc"
-                  strokeWidth={4}
-                />
+                {/* SKY emblem: red disc with three circles, 120° apart. */}
+                <circle cx={R} cy={R} r={HUB + 3} fill="#fff4dc" />
+                <circle cx={R} cy={R} r={HUB} fill="#ff0209" />
+                {EMBLEM_HOLES.map(([dx, dy]) => (
+                  <circle
+                    key={dx + "," + dy}
+                    cx={R + dx * HUB}
+                    cy={R + dy * HUB}
+                    r={HUB * HOLE_R}
+                    fill="#fff"
+                  />
+                ))}
               </svg>
             </div>
           </div>

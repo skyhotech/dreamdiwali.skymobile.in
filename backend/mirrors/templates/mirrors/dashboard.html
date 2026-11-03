@@ -941,7 +941,7 @@
         <text x="${tx}" y="${ty}" transform="rotate(${radial ? mid - 90 : mid} ${tx} ${ty})" text-anchor="middle" dominant-baseline="middle" fill="${i % 2 ? "#3c2418" : "#fff4dc"}" font-size="${label}" font-weight="700">${esc(it.name)}</text></g>`;
     }).join("");
     const bulbs = Array.from({ length: 16 }, (_, i) => { const [x, y] = pt(i * 22.5, R - 7); return `<circle cx="${x}" cy="${y}" r="4" fill="#f3cf7a"/>`; }).join("");
-    $("#si-wheel").innerHTML = `<svg viewBox="0 0 ${S} ${S}" role="img" aria-label="Spin wheel preview"><circle cx="${R}" cy="${R}" r="${R - 1}" fill="#5a1426"/>${parts}${bulbs}<circle cx="${R}" cy="${R}" r="24" fill="#d6a447" stroke="#fff4dc" stroke-width="4"/></svg>`;
+    $("#si-wheel").innerHTML = `<svg viewBox="0 0 ${S} ${S}" role="img" aria-label="Spin wheel preview"><circle cx="${R}" cy="${R}" r="${R - 1}" fill="#5a1426"/>${parts}${bulbs}<circle cx="160" cy="160" r="33" fill="#fff4dc"/><circle cx="160" cy="160" r="30" fill="#ff0209"/><circle cx="160.0" cy="144.03" r="7.38" fill="#fff"/><circle cx="173.83" cy="167.98" r="7.38" fill="#fff"/><circle cx="146.17" cy="167.98" r="7.38" fill="#fff"/></svg>`;
     $("#si-note").textContent = !n ? "No gifts on the wheel. Add one." : raw === "" ? "Click a slice to edit that gift." : `This bill's wheel: ${items.map((i) => i.name).join(", ")}`;
   }
   $("#si-bill").addEventListener("input", siDraw);
