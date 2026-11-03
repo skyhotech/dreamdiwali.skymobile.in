@@ -248,6 +248,12 @@
   .sv-user { display: grid; grid-template-columns: 130px 1fr auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
   .sv-user span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sv-user small { color: var(--muted); }
+  /* The sidebar stays in view while the page scrolls (desktop); on phones
+     it is the slide-out menu instead. */
+  @media (min-width: 761px) {
+    aside { position: sticky; top: 0; height: 100vh; height: 100dvh; overflow-y: auto; align-self: start; }
+  }
+  .menu-btn { position: sticky; top: 8px; z-index: 40; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
   .menu-btn { display: none; align-items: center; gap: 8px; margin-bottom: 14px; min-height: 44px; padding: 0 14px;
     border: 0; border-radius: 10px; background: var(--side); color: #fff; font: inherit; }
   .menu-shade { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
