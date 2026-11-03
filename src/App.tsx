@@ -2,17 +2,35 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { MotionConfig } from "motion/react";
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Festive } from "./components/Festive";
-import { ManagerIntake } from "./components/ManagerIntake";
-import { IphoneOffer } from "./components/IphoneOffer";
-import { ReviewForm } from "./components/ReviewForm";
-import { TermsPage } from "./components/TermsPage";
-import { SavedPoster } from "./components/SavedPoster";
-import { SpinWheel } from "./components/SpinWheel";
 import { OfflineBanner } from "./components/StatusNotices";
 import { SPIN_TOKEN, fetchLink, spinPrize } from "./lib/backend";
 import { preloadRewards, setWheel } from "./lib/rewards";
 import { useStudio } from "./lib/store";
 import { initializePhotoStorage } from "./lib/persistence";
+// Managers and customers each download only their own screens.
+const ManagerIntake = lazy(() =>
+  import("./components/ManagerIntake").then((m) => ({ default: m.ManagerIntake })),
+);
+// Managers and customers each download only their own screens.
+const SpinWheel = lazy(() =>
+  import("./components/SpinWheel").then((m) => ({ default: m.SpinWheel })),
+);
+// Managers and customers each download only their own screens.
+const SavedPoster = lazy(() =>
+  import("./components/SavedPoster").then((m) => ({ default: m.SavedPoster })),
+);
+// Managers and customers each download only their own screens.
+const ReviewForm = lazy(() =>
+  import("./components/ReviewForm").then((m) => ({ default: m.ReviewForm })),
+);
+// Managers and customers each download only their own screens.
+const TermsPage = lazy(() =>
+  import("./components/TermsPage").then((m) => ({ default: m.TermsPage })),
+);
+// Managers and customers each download only their own screens.
+const IphoneOffer = lazy(() =>
+  import("./components/IphoneOffer").then((m) => ({ default: m.IphoneOffer })),
+);
 const CameraStudio = lazy(() => import("./components/CameraStudio"));
 const Editor = lazy(() => import("./components/Editor"));
 export default function App() {
@@ -89,12 +107,16 @@ function Studio() {
           <OfflineBanner />
           {SPIN_TOKEN ? (
             <Festive banner>
-              <div className="phone-card manager-note" role="status">
-                {linkError || "Opening your Diwali gift…"}
-              </div>
+              <Suspense fallback={<div className="loading">Loading…</div>}>
+                <div className="phone-card manager-note" role="status">
+                  {linkError || "Opening your Diwali gift…"}
+                </div>
+              </Suspense>
             </Festive>
           ) : (
-            <ManagerIntake />
+            <Suspense fallback={<div className="loading">Loading…</div>}>
+              <ManagerIntake />
+            </Suspense>
           )}
         </main>
       </MotionConfig>
@@ -106,7 +128,9 @@ function Studio() {
         <main id="main" className="mobile-studio">
           <OfflineBanner />
           <Festive banner>
-            <SavedPoster url={poster} />
+            <Suspense fallback={<div className="loading">Loading…</div>}>
+              <SavedPoster url={poster} />
+            </Suspense>
           </Festive>
         </main>
       </MotionConfig>
@@ -118,7 +142,9 @@ function Studio() {
         <main id="main" className="mobile-studio">
           <OfflineBanner />
           <Festive banner>
-            <TermsPage token={token} onDone={() => setTermsAccepted(true)} />
+            <Suspense fallback={<div className="loading">Loading…</div>}>
+              <TermsPage token={token} onDone={() => setTermsAccepted(true)} />
+            </Suspense>
           </Festive>
         </main>
       </MotionConfig>
@@ -130,11 +156,13 @@ function Studio() {
         <main id="main" className="mobile-studio">
           <OfflineBanner />
           <Festive banner>
-            <SpinWheel
-              getPrize={({ onQueue }) => spinPrize(token, onQueue)}
-              customerName={customerName}
-              onClaim={(r) => useStudio.getState().setReward(r.id)}
-            />
+            <Suspense fallback={<div className="loading">Loading…</div>}>
+              <SpinWheel
+                getPrize={({ onQueue }) => spinPrize(token, onQueue)}
+                customerName={customerName}
+                onClaim={(r) => useStudio.getState().setReward(r.id)}
+              />
+            </Suspense>
           </Festive>
         </main>
       </MotionConfig>
@@ -146,7 +174,9 @@ function Studio() {
         <main id="main" className="mobile-studio">
           <OfflineBanner />
           <Festive banner>
-            <IphoneOffer token={token} onDone={() => setOfferDone(true)} />
+            <Suspense fallback={<div className="loading">Loading…</div>}>
+              <IphoneOffer token={token} onDone={() => setOfferDone(true)} />
+            </Suspense>
           </Festive>
         </main>
       </MotionConfig>
@@ -158,7 +188,9 @@ function Studio() {
         <main id="main" className="mobile-studio">
           <OfflineBanner />
           <Festive banner>
-            <ReviewForm token={token} onDone={() => setReviewed(true)} />
+            <Suspense fallback={<div className="loading">Loading…</div>}>
+              <ReviewForm token={token} onDone={() => setReviewed(true)} />
+            </Suspense>
           </Festive>
         </main>
       </MotionConfig>

@@ -665,15 +665,28 @@ class CustomerViewSet(
 def _customer_stats(customers):
     """Counts the dashboard shows, for all customers or one branch."""
     today = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
-    per_day = []
-    for offset in range(6, -1, -1):
-        start = today - timedelta(days=offset)
-        per_day.append({
-            "date": start.date().isoformat(),
-            "count": customers.filter(
-                created_at__gte=start, created_at__lt=start + timedelta(days=1)
-            ).count(),
-        })
+    days = [today - timedelta(days=offset) for offset in range(6, -1, -1)]
+    # Counts that used to take a query each now come back together.
+    totals = customers.aggregate(
+        customers=Count("id"),
+        customers_today=Count("id", filter=Q(created_at__gte=today)),
+        gifts=Count("id", filter=~Q(reward="")),
+        repeat_faces=Count("id", filter=Q(repeat_of__isnull=False)),
+        **{
+            f"day{i}": Count("id", filter=Q(created_at__gte=d, created_at__lt=d + timedelta(days=1)))
+            for i, d in enumerate(days)
+        },
+    )
+    per_day = [{"date": d.date().isoformat(), "count": totals.pop(f"day{i}")} for i, d in enumerate(days)]
+    steps = {
+        "checked": Q(events__kind="checked"),
+        "whatsapp_sent": Q(events__kind="whatsapp_sent"),
+        "link_opened": Q(events__kind="link_opened"),
+        "spun": Q(events__kind="spun"),
+        "poster_saved": Q(events__kind="poster_saved"),
+        "shared": Q(events__kind__in=CustomerEvent.SHARE_KINDS),
+    }
+    funnel = customers.aggregate(**{k: Count("id", filter=q, distinct=True) for k, q in steps.items()})
     rewards = (
         customers.exclude(reward="").values("reward").annotate(n=Count("id")).order_by("-n")
     )
@@ -681,18 +694,8 @@ def _customer_stats(customers):
         customers.exclude(mirror_name="").values("mirror_name")
         .annotate(n=Count("id")).order_by("-n")[:5]
     )
-    def reached(kind):
-        return customers.filter(events__kind=kind).distinct().count()
-
     return {
-        "funnel": {
-            "checked": reached("checked"),
-            "whatsapp_sent": reached("whatsapp_sent"),
-            "link_opened": reached("link_opened"),
-            "spun": reached("spun"),
-            "poster_saved": reached("poster_saved"),
-            "shared": customers.filter(events__kind__in=CustomerEvent.SHARE_KINDS).distinct().count(),
-        },
+        "funnel": funnel,
         "abandoned": _link_unsent(customers).count(),
         "shares": {
             row["kind"].removeprefix("shared_"): row["n"]
@@ -705,10 +708,7 @@ def _customer_stats(customers):
             customers.exclude(rating=None).order_by("-updated_at")
             .values("id", "name", "branch_name", "rating", "review")[:6]
         ),
-        "customers": customers.count(),
-        "customers_today": customers.filter(created_at__gte=today).count(),
-        "gifts": customers.exclude(reward="").count(),
-        "repeat_faces": customers.filter(repeat_of__isnull=False).count(),
+        **totals,
         "per_day": per_day,
         "rewards": [{"id": r["reward"], "n": r["n"]} for r in rewards],
         "top_mirrors": [{"name": m["mirror_name"], "n": m["n"]} for m in top],
