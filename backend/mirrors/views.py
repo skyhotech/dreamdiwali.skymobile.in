@@ -668,8 +668,26 @@ class BranchViewSet(viewsets.ModelViewSet):
     serializer_class = BranchSerializer
     permission_classes = [IsAdminUser]
 
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
     def get_queryset(self):
-        return Branch.objects.annotate(customer_count=Count("customers"))
+        return Branch.objects.annotate(
+            customer_count=Count("customers"), sales=Sum("customers__bill_value")
+        ).order_by("-customer_count", "name")
+
+    def get_serializer_context(self):
+        """How far each branch's customers have got, for the cards' bars."""
+        steps = {"sent": ["whatsapp_sent"], "opened": ["link_opened"], "spun": ["spun"],
+                 "posters": ["poster_saved"], "shared": CustomerEvent.SHARE_KINDS}
+        journey = {}
+        for step, kinds in steps.items():
+            rows = (
+                CustomerEvent.objects.filter(kind__in=kinds, customer__branch__isnull=False)
+                .values("customer__branch").annotate(n=Count("customer", distinct=True))
+            )
+            for row in rows:
+                journey.setdefault(row["customer__branch"], {})[step] = row["n"]
+        return {**super().get_serializer_context(), "journey": journey}
 
     @action(detail=True, methods=["get"])
     def stats(self, request, pk=None):

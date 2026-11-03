@@ -94,6 +94,7 @@ class Branch(models.Model):
     name = models.CharField(max_length=80)
     address = models.CharField(max_length=200, blank=True)
     phone = models.CharField(max_length=20, blank=True)
+    image = models.ImageField(upload_to=customer_path, blank=True)
     # An inactive branch's link and QR code stop working.
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -91,8 +91,15 @@
   .toast.err { background: var(--accent); }
   .empty-note { color: var(--muted); padding: 30px; text-align: center; }
   /* Branches */
-  .branches { display: grid; grid-template-columns: 320px 1fr; gap: 18px; align-items: start; }
-  .blist { display: flex; flex-direction: column; gap: 10px; }
+  .branches { display: grid; grid-template-columns: 1fr; gap: 18px; }
+  .branches > .bdetail { order: -1; }
+  .bshop { width: 100%; height: 150px; object-fit: cover; border-radius: 10px; }
+  .bshop.none { display: grid; place-items: center; background: #f7efe1; color: var(--muted); }
+  .bline { position: relative; height: 12px; border-radius: 8px; background: #f1e8da; overflow: hidden; }
+  .bline i { position: absolute; inset: 0 auto 0 0; border-radius: 8px; transform-origin: left; animation: sales-grow .7s ease; }
+  .blegend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--muted); }
+  .blegend u { display: inline-block; width: 9px; height: 9px; margin-right: 4px; border-radius: 50%; }
+  .blist { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
   .bitem { padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: #fff; cursor: pointer; display: grid; gap: 8px; transition: border-color .15s, box-shadow .15s; }
   .bitem:hover { border-color: #e3c88f; }
   .bitem.sel { border-color: var(--gold); box-shadow: 0 0 0 3px #f0d9a8; }
@@ -300,6 +307,7 @@
                 <label class="f">Address<input name="address" maxlength="200"></label>
                 <label class="f">Phone<input name="phone" maxlength="20" inputmode="tel"></label>
               </div>
+              <label class="f">Shop image<input name="image" type="file" accept="image/png,image/jpeg,image/webp"></label>
               <label class="row"><input type="checkbox" name="is_active"> Link active (switch off to stop this QR code working)</label>
               <div class="row">
                 <button class="primary" type="submit" id="b-save">Save</button>
@@ -833,20 +841,44 @@
     else if (branch) closeBranch();
   }
 
+  const BRANCH_STEPS = [["sent", "Links sent", "#7a1631"], ["opened", "Opened", "#d22856"], ["spun", "Spins", "#d6a447"], ["posters", "Posters", "#2b9f6b"], ["shared", "Shared", "#2a6fdb"]];
   function renderBranches() {
-    const list = $("#b-list");
+    const list = $("#b-list"), before = new Map();
+    for (const el of list.children) if (el.dataset.id) before.set(el.dataset.id, el.getBoundingClientRect());
+    const peak = Math.max(1, ...branches.map((b) => b.customer_count));
     list.innerHTML = branches.length ? "" : `<div class="empty-note">No branches yet. Click “New branch”.</div>`;
     for (const b of branches) {
       const el = document.createElement("div");
       el.className = "bitem" + (branch && branch.id === b.id ? " sel" : "");
-      el.innerHTML = `<div class="top"><b>📍 ${esc(b.name)}</b><span class="pill ${b.is_active ? "" : "off"}">${b.is_active ? "Live" : "Off"}</span></div>
-        <small>/${esc(b.slug)} · ${b.customer_count} customer${b.customer_count === 1 ? "" : "s"}</small>
+      el.dataset.id = b.id;
+      const j = b.journey || {};
+      // One line: each later step sits inside the one before, on the customer total.
+      const layers = [["n", b.customer_count, "#f0d9a8"], ...BRANCH_STEPS.map(([k, , c]) => [k, j[k] || 0, c])];
+      el.innerHTML = `${b.image ? `<img class="bshop" src="${esc(b.image)}" alt="${esc(b.name)} shop" loading="eager">` : `<div class="bshop none">🏬 Add shop image</div>`}
+        <div class="top"><b>📍 ${esc(b.name)}</b><span class="pill ${b.is_active ? "" : "off"}">${b.is_active ? "Live" : "Off"}</span></div>
+        <small>/${esc(b.slug)} · ${b.customer_count} customer${b.customer_count === 1 ? "" : "s"} · ₹${Number(b.sales || 0).toLocaleString("en-IN")}</small>
+        <div class="bline">${layers.map(([, n, c]) => `<i style="width:${(n / peak) * 100}%;background:${c}"></i>`).join("")}</div>
+        <div class="blegend">${BRANCH_STEPS.map(([k, label, c]) => `<span><u style="background:${c}"></u>${label} ${j[k] || 0}</span>`).join("")}</div>
         <button class="gen" type="button">🔗 Generate link & QR</button>`;
-      el.addEventListener("click", () => openBranch(b, false));
+      el.addEventListener("click", () => { openBranch(b, false); window.scrollTo({ top: 0, behavior: "smooth" }); });
       $(".gen", el).addEventListener("click", (e) => { e.stopPropagation(); openBranch(b, true); });
       list.appendChild(el);
     }
+    for (const el of list.children) {
+      const old = before.get(el.dataset.id);
+      if (!old || !el.animate) continue;
+      const now = el.getBoundingClientRect(), x = old.left - now.left, y = old.top - now.top;
+      if (x || y) el.animate([{ transform: `translate(${x}px,${y}px)` }, { transform: "none" }], { duration: 600, easing: "cubic-bezier(.2,.8,.2,1)" });
+    }
   }
+  // Ranks and bars follow new customers without a refresh.
+  setInterval(async () => {
+    if ($("#view-branches").hidden || document.hidden) return;
+    try {
+      const fresh = await api("branches/");
+      if (JSON.stringify(fresh) !== JSON.stringify(branches)) { branches = fresh; renderBranches(); }
+    } catch { /* next tick retries */ }
+  }, 30000);
 
   function openBranch(b, focusShare) {
     branch = b;
@@ -921,14 +953,17 @@
 
   bform.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const body = {
-      name: bform.name.value.trim(), slug: bform.slug.value.trim().toLowerCase(),
-      address: bform.address.value.trim(), phone: bform.phone.value.trim(),
-      is_active: bform.is_active.checked,
-    };
+    const body = new FormData();
+    body.append("name", bform.name.value.trim());
+    body.append("slug", bform.slug.value.trim().toLowerCase());
+    body.append("address", bform.address.value.trim());
+    body.append("phone", bform.phone.value.trim());
+    body.append("is_active", bform.is_active.checked);
+    if (bform.image.files[0]) body.append("image", bform.image.files[0]);
     $("#b-save").disabled = true;
     try {
-      const saved = await api(branch ? `branches/${branch.id}/` : "branches/", { method: branch ? "PATCH" : "POST", json: body });
+      const saved = await api(branch ? `branches/${branch.id}/` : "branches/", { method: branch ? "PATCH" : "POST", body });
+      bform.image.value = "";
       toast(branch ? "Branch saved" : "Branch created — link and QR code are ready");
       branch = saved;
       await loadBranches();

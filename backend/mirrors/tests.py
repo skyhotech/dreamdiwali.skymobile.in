@@ -128,6 +128,13 @@ class BranchFlowTests(TestCase):
         top = self.client.get("/api/admin/stats/").json()["branch_sales"][0]
         self.assertEqual((top["name"], float(top["value"]), top["n"]), ("Anna Nagar", 24999.0, 1))
 
+    def test_branch_cards_rank_and_show_the_journey(self):
+        self.spin(self.token(self.check()))
+        self.client.force_login(self.staff)
+        top = self.client.get("/api/admin/branches/").json()[0]
+        self.assertEqual((top["name"], top["customer_count"], top["journey"]["spun"]), ("Anna Nagar", 1, 1))
+        self.assertEqual(float(top["sales"]), 24999.0)
+
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)
         self.assertTrue(Branch.objects.filter(slug="thiruvannamalai-1").exists())

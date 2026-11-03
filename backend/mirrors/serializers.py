@@ -82,10 +82,21 @@ def branch_link(branch):
 class BranchSerializer(serializers.ModelSerializer):
     slug = serializers.SlugField(max_length=60, required=False, allow_blank=True)
     customer_count = serializers.IntegerField(read_only=True, default=0)
+    sales = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True, default=0)
     link = serializers.SerializerMethodField()
+    journey = serializers.SerializerMethodField()
 
     def get_link(self, obj):
         return branch_link(obj)
+
+    def get_journey(self, obj):
+        return self.context.get("journey", {}).get(obj.pk, {})
+
+    def validate_image(self, image):
+        return _limit_size(image) if image else image
+
+    def to_representation(self, obj):
+        return _local_images(super().to_representation(obj))
 
     def validate_slug(self, value):
         if value and Branch.objects.filter(slug=value).exclude(pk=getattr(self.instance, "pk", None)).exists():
@@ -95,8 +106,8 @@ class BranchSerializer(serializers.ModelSerializer):
     class Meta:
         model = Branch
         fields = [
-            "id", "slug", "name", "address", "phone", "is_active",
-            "customer_count", "link", "created_at", "updated_at",
+            "id", "slug", "name", "address", "phone", "image", "is_active",
+            "customer_count", "sales", "journey", "link", "created_at", "updated_at",
         ]
         read_only_fields = ["created_at", "updated_at"]
 
