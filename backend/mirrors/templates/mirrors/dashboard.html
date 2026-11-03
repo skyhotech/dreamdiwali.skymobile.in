@@ -180,6 +180,19 @@
   .pro-stars { color: #f3b51b; font-size: 16px; letter-spacing: 1px; }
   .pro-stars i { color: #e3d6c1; font-style: normal; }
   .pro-stars q, .cust q { display: block; margin-top: 4px; color: var(--ink, #3c2418); font-size: 13px; font-style: italic; letter-spacing: 0; }
+  .track { position: relative; list-style: none; margin: 12px 0 16px; padding: 0 0 0 44px; }
+  .track::before { content: ""; position: absolute; left: 15px; top: 10px; bottom: 10px; width: 6px; border-radius: 3px;
+    background: repeating-linear-gradient(#7a1631 0 10px, #d6a447 10px 20px); transform-origin: top; animation: track-lay var(--ride) linear both; }
+  .track li { position: relative; display: flex; gap: 10px; min-height: 52px; opacity: .25; animation: track-stop .35s ease forwards; }
+  .track li i { position: absolute; left: -36px; top: 4px; width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 4px solid #d6a447; box-shadow: 0 0 0 0 #d6a44799; animation: track-ping 1s ease-out; animation-delay: inherit; }
+  .track li b { display: block; font-size: 14px; }
+  .track li span { color: var(--muted); font-size: 12.5px; }
+  .track-train { position: absolute; z-index: 1; left: 4px; top: 0; font-size: 26px; line-height: 1; animation: track-ride var(--ride) linear both; }
+  @keyframes track-lay { from { transform: scaleY(0); } to { transform: none; } }
+  @keyframes track-stop { to { opacity: 1; } }
+  @keyframes track-ping { from { box-shadow: 0 0 0 0 #d6a447cc; } to { box-shadow: 0 0 0 12px #d6a44700; } }
+  @keyframes track-ride { from { top: 0; } to { top: calc(100% - 52px); } }
+  @media (prefers-reduced-motion: reduce) { .track::before, .track li, .track-train, .track li i { animation: none; opacity: 1; } .track-train { top: calc(100% - 52px); } }
   .menu-btn { display: none; align-items: center; gap: 8px; margin-bottom: 14px; min-height: 44px; padding: 0 14px;
     border: 0; border-radius: 10px; background: var(--side); color: #fff; font: inherit; }
   .menu-shade { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
@@ -897,6 +910,24 @@
     for (const c of data.results) list.appendChild(customerCard(c));
   }
   const EVENTS = { ...FUNNEL, checked: "Purchase checked", whatsapp_sent: "WhatsApp link sent", link_opened: "Link opened", poster_saved: "Poster made", shared_instagram: "Shared: Instagram", shared_facebook: "Shared: Facebook", shared_whatsapp: "Shared: WhatsApp", shared_more: "Shared: other" };
+  // The journey as a railway: a train runs down the line, lighting each station
+  // as it arrives. Repeats of a step (two opens) share one station.
+  const STATION_MS = 550;
+  function journeyTrack(events) {
+    const stops = [];
+    for (const e of events) {
+      const last = stops[stops.length - 1];
+      if (last && last.kind === e.kind) last.times++;
+      else stops.push({ kind: e.kind, at: e.created_at, times: 1 });
+    }
+    if (!stops.length) return `<p class="hint">No steps yet.</p>`;
+    const ride = stops.length * STATION_MS;
+    return `<ol class="track" style="--ride:${ride}ms;--stops:${stops.length}">
+      <span class="track-train" aria-hidden="true">🚆</span>
+      ${stops.map((st, i) => `<li style="animation-delay:${i * STATION_MS}ms"><i></i><div><b>${esc(EVENTS[st.kind] || st.kind)}${st.times > 1 ? ` <small>×${st.times}</small>` : ""}</b>
+        <span>${new Date(st.at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</span></div></li>`).join("")}
+    </ol>`;
+  }
   async function customerDetail(id) {
     const c = await api(`customers/${id}/`);
     const row = (k, v) => `<tr><th style="text-align:left;padding:4px 12px 4px 0">${k}</th><td>${esc(v ?? "—")}</td></tr>`;
@@ -906,7 +937,7 @@
     d.innerHTML = `<div class="toolbar"><b>${esc(c.name || c.phone)}</b><button class="btn">Close</button></div>
       <table>${row("Phone", c.phone)}${row("Mail", c.email)}${row("Branch", c.branch_name)}${row("Product", c.product_details)}${row("IMEI", c.imei)}${row("Invoice no.", c.invoice_number)}${row("Bill value", c.bill_value)}${row("Reward", c.reward)}${row("Rating", c.rating ? c.rating + " / 5" : "")}${row("Review", c.review)}${row("Mirror", c.mirror_name)}${row("Photo sharpness", c.blur_score)}${row("Link", c.link)}${row("Link version", c.link_version)}</table>
       <div class="row" style="flex-wrap:wrap;gap:8px;margin:12px 0">${pics.map(([n, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="${n}" style="height:160px;border-radius:8px"></a>`).join("")}</div>
-      <b>Journey</b><ol>${c.events.map((e) => `<li>${esc(EVENTS[e.kind] || e.kind)} · ${new Date(e.created_at).toLocaleString()}</li>`).join("")}</ol>
+      <b>Journey</b>${journeyTrack(c.events)}
       <details><summary>Text read from invoice</summary><pre style="white-space:pre-wrap">${esc(c.ocr_text)}</pre></details>`;
     $("button", d).addEventListener("click", () => d.close());
     d.addEventListener("close", () => d.remove());
