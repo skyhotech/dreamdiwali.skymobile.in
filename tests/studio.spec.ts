@@ -51,7 +51,14 @@ async function mockCamera(
   withAi = false,
   blank = false,
 ) {
-  if (!withAi) await page.route("**/ai/**", (r) => r.abort());
+  if (!withAi) {
+    await page.route("**/ai/**", (r) => r.abort());
+    // Where the face model loads anyway (CI downloads it), the fake camera
+    // shows no face: skip the face check, and keep auto capture idle.
+    await page.addInitScript(() => {
+      (window as { skyFakeCue?: unknown }).skyFakeCue = { smile: 0, gesture: "" };
+    });
+  }
   await page.addInitScript(
     ({ rearUnavailable }) => {
       const calls: string[] = [],
