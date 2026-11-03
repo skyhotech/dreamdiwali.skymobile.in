@@ -291,6 +291,7 @@ class CustomerLink(APIView):
             "phone": customer.phone, "reward": customer.reward or None,
             "items": wheel_items(items),
             "next": customer.next_step,
+            "video_review": customer.video_review,
             "poster": customer.poster.url if customer.poster else None,
         })
 
@@ -473,6 +474,32 @@ class CustomerReview(APIView):
         customer.save(update_fields=["rating", "review", "updated_at"])
         _log(customer, "reviewed", rating=customer.rating)
         return Response({"next": customer.next_step})
+
+
+LIVE_KEY = "live-visitors"
+LIVE_SECONDS = 70  # visitors ping every 30 s; two misses and they're gone
+
+
+def live_count():
+    now = time.time()
+    return sum(1 for seen in (cache.get(LIVE_KEY) or {}).values() if now - seen < LIVE_SECONDS)
+
+
+class LivePing(APIView):
+    """A customer page saying it is still open, for the admin's live count."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [MirrorPollThrottle]
+
+    def post(self, request):
+        visitor = str(request.data.get("id", ""))[:40]
+        if visitor:
+            now = time.time()
+            seen = {k: t for k, t in (cache.get(LIVE_KEY) or {}).items() if now - t < LIVE_SECONDS}
+            seen[visitor] = now
+            cache.set(LIVE_KEY, seen, LIVE_SECONDS * 2)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class CustomerEventView(APIView):
@@ -738,6 +765,7 @@ def stats(request):
                 value=Sum("customers__bill_value"), n=Count("customers")
             ).filter(value__gt=0).order_by("-value")[:8]
         ],
+        live=live_count(),
         failed_checks=CustomerEvent.objects.filter(kind="check_failed").count(),
         abandoned=_link_unsent(Customer.objects.all()).count() + len(_failed_attempts()),
         top_branches=list(

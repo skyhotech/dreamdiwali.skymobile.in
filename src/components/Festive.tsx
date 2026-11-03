@@ -1,8 +1,16 @@
 import { useMemo, type ReactNode } from "react";
 import { Fireworks } from "./Fireworks";
+import { IphoneBanner } from "./IphoneBanner";
 const PARTICLES = 18;
 // The Diwali backdrop: crackers, floating diyas and sparkles.
-export function Festive({ children }: { children: ReactNode }) {
+export function Festive({
+  children,
+  banner = false,
+}: {
+  children: ReactNode;
+  /** The iPhone 15 contest strip, shown on customer screens. */
+  banner?: boolean;
+}) {
   // Positions fixed per mount.
   const particles = useMemo(
     () =>
@@ -37,6 +45,7 @@ export function Festive({ children }: { children: ReactNode }) {
           />
         ))}
       </div>
+      {banner && <IphoneBanner />}
       {children}
     </div>
   );

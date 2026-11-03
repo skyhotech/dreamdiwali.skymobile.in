@@ -196,6 +196,7 @@ export async function fetchLink(token: string) {
     items?: { id: string; label: string; image: string }[];
     poster?: string | null;
     next?: string;
+    video_review?: boolean;
     detail?: string;
   };
   if (!res.ok || !data.phone)
@@ -207,6 +208,7 @@ export async function fetchLink(token: string) {
     poster: data.poster ? MEDIA_ORIGIN + data.poster : null,
     reviewed: !["terms", "spin", "review"].includes(data.next ?? ""),
     termsAccepted: data.next !== "terms",
+    videoReview: Boolean(data.video_review),
   };
 }
 export type BranchOption = { slug: string; name: string };
@@ -241,6 +243,23 @@ export const acceptTerms = (
 /** Star rating and review, sent once after the spin. */
 export const sendReview = (token: string, rating: number, review: string) =>
   postJson<{ next: string }>("/customers/review/", { token, rating, review });
+// One id per open tab, so the admin can count who is on the site right now.
+const LIVE_MS = 30_000;
+export function startLivePing() {
+  const id = Math.random().toString(36).slice(2);
+  const ping = () => {
+    if (document.visibilityState !== "visible") return;
+    void fetch(`${API}/live/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+      keepalive: true,
+    }).catch(() => {});
+  };
+  ping();
+  setInterval(ping, LIVE_MS);
+  document.addEventListener("visibilitychange", ping);
+}
 /** Timeline entries; a lost one must never interrupt the customer. */
 export function trackSent(phone: string) {
   void fetch(`${API}/manager/sent/`, {

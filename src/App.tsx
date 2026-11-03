@@ -3,6 +3,7 @@ import { MotionConfig } from "motion/react";
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Festive } from "./components/Festive";
 import { ManagerIntake } from "./components/ManagerIntake";
+import { IphoneOffer } from "./components/IphoneOffer";
 import { ReviewForm } from "./components/ReviewForm";
 import { TermsPage } from "./components/TermsPage";
 import { SavedPoster } from "./components/SavedPoster";
@@ -32,6 +33,7 @@ function Studio() {
   const [poster, setPoster] = useState<string | null>(null);
   const [reviewed, setReviewed] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [offerDone, setOfferDone] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   // Gift pictures and the spin sound start loading once the customer signs
   // in, so the wheel opens with everything already on the phone.
@@ -56,6 +58,7 @@ function Studio() {
         setPoster(c.poster);
         setReviewed(c.reviewed);
         setTermsAccepted(c.termsAccepted);
+        setOfferDone(c.videoReview || c.reviewed);
         setLinkReady(true);
       })
       .catch((e: Error) => live && setLinkError(e.message));
@@ -83,7 +86,7 @@ function Studio() {
         <main id="main" className="mobile-studio">
           <OfflineBanner />
           {SPIN_TOKEN ? (
-            <Festive>
+            <Festive banner>
               <div className="phone-card manager-note" role="status">
                 {linkError || "Opening your Diwali gift…"}
               </div>
@@ -100,7 +103,7 @@ function Studio() {
       <MotionConfig reducedMotion="user">
         <main id="main" className="mobile-studio">
           <OfflineBanner />
-          <Festive>
+          <Festive banner>
             <SavedPoster url={poster} />
           </Festive>
         </main>
@@ -112,7 +115,7 @@ function Studio() {
       <MotionConfig reducedMotion="user">
         <main id="main" className="mobile-studio">
           <OfflineBanner />
-          <Festive>
+          <Festive banner>
             <TermsPage token={token} onDone={() => setTermsAccepted(true)} />
           </Festive>
         </main>
@@ -124,11 +127,23 @@ function Studio() {
       <MotionConfig reducedMotion="user">
         <main id="main" className="mobile-studio">
           <OfflineBanner />
-          <Festive>
+          <Festive banner>
             <SpinWheel
               getPrize={({ onQueue }) => spinPrize(token, onQueue)}
               onClaim={(r) => useStudio.getState().setReward(r.id)}
             />
+          </Festive>
+        </main>
+      </MotionConfig>
+    );
+  // Straight after the spin: one more invitation to the iPhone 15 contest.
+  if (!offerDone)
+    return (
+      <MotionConfig reducedMotion="user">
+        <main id="main" className="mobile-studio">
+          <OfflineBanner />
+          <Festive banner>
+            <IphoneOffer token={token} onDone={() => setOfferDone(true)} />
           </Festive>
         </main>
       </MotionConfig>
@@ -139,7 +154,7 @@ function Studio() {
       <MotionConfig reducedMotion="user">
         <main id="main" className="mobile-studio">
           <OfflineBanner />
-          <Festive>
+          <Festive banner>
             <ReviewForm token={token} onDone={() => setReviewed(true)} />
           </Festive>
         </main>

@@ -20,6 +20,7 @@ api_urlpatterns = [
     path("manager/branches/", views.ManagerBranches.as_view(), name="manager-branches"),
     path("customers/terms/", views.CustomerTerms.as_view(), name="customer-terms"),
     path("customers/review/", views.CustomerReview.as_view(), name="customer-review"),
+    path("live/", views.LivePing.as_view(), name="live-ping"),
     path("customers/event/", views.CustomerEventView.as_view(), name="customer-event"),
     path("manager/sent/", views.ManagerSent.as_view(), name="manager-sent"),
     path("manager/check/", views.ManagerCheck.as_view(), name="manager-check"),

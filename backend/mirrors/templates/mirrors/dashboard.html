@@ -196,6 +196,11 @@
   .pro-shared { font-size: 12.5px; font-weight: 600; color: #2b6a4a; }
   .pro-video { font-size: 12.5px; font-weight: 600; color: #7a1631; }
   .pro-video a { color: inherit; }
+  .live-stat b { transition: color .4s; }
+  .live-stat b.up { color: #2b9f6b; }
+  .live-stat b.down { color: #b3261e; }
+  .live-dot { display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%; background: #2b9f6b; box-shadow: 0 0 0 0 #2b9f6b99; animation: live-pulse 1.6s infinite; }
+  @keyframes live-pulse { to { box-shadow: 0 0 0 9px #2b9f6b00; } }
   .menu-btn { display: none; align-items: center; gap: 8px; margin-bottom: 14px; min-height: 44px; padding: 0 14px;
     border: 0; border-radius: 10px; background: var(--side); color: #fff; font: inherit; }
   .menu-shade { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
@@ -258,6 +263,7 @@
     <section id="view-dashboard" hidden>
       <div class="toolbar"><h2>Dashboard</h2><a class="btn" href="/api/admin/backup.sql" download>⬇ Download database (.sql)</a></div>
       <div class="stats">
+        <div class="card stat live-stat"><span><i class="live-dot"></i>Live users now</span><b id="s-live">–</b></div>
         <div class="card stat"><span>Customers today</span><b id="s-today">–</b></div>
         <div class="card stat"><span>Total customers</span><b id="s-customers">–</b></div>
         <div class="card stat"><span>Active mirrors</span><b id="s-active">–</b></div>
@@ -543,6 +549,7 @@
       ? s.branch_sales.map((b) => `<a href="#branches/${b.id}" class="sales-row"><span>${esc(b.name)}</span><b>₹${Number(b.value).toLocaleString("en-IN")}</b><i style="width:${(Number(b.value) / peak) * 100}%"></i><small>${b.n} customer${b.n === 1 ? "" : "s"}</small></a>`).join("")
       : `<p class="hint">No sales yet.</p>`;
     journeyFlow(s, $("#s-flow"), $("#s-side"));
+    showLive(s.live);
     const PLATFORMS = [["instagram", "Instagram", "#d62976"], ["facebook", "Facebook", "#1877f2"], ["whatsapp", "WhatsApp", "#25d366"], ["more", "Other apps", "#8a7a68"]];
     const shares = PLATFORMS.map(([k, label, color]) => ({ label, color, n: s.shares[k] || 0 })).sort((a, b) => b.n - a.n);
     const most = Math.max(1, shares[0].n);
@@ -879,11 +886,29 @@
       if (x || y) el.animate([{ transform: `translate(${x}px,${y}px)` }, { transform: "none" }], { duration: 600, easing: "cubic-bezier(.2,.8,.2,1)" });
     }
   }
-  // New customers reorder the boxes without a refresh.
+  // The live count rolls from the old number to the new one.
+  let liveShown = 0;
+  function showLive(n) {
+    const el = $("#s-live"), from = liveShown, start = performance.now();
+    liveShown = n;
+    el.classList.toggle("up", n > from);
+    el.classList.toggle("down", n < from);
+    const tick = (t) => {
+      const k = Math.min(1, (t - start) / 600);
+      el.textContent = Math.round(from + (n - from) * k);
+      if (k < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+  // Live users every 15 s; new customers reorder the boxes too.
   setInterval(async () => {
     if ($("#view-dashboard").hidden || document.hidden) return;
-    try { branchBoxes((await api("stats/")).top_branches); } catch { /* next tick retries */ }
-  }, 30000);
+    try {
+      const s = await api("stats/");
+      showLive(s.live);
+      branchBoxes(s.top_branches);
+    } catch { /* next tick retries */ }
+  }, 15000);
   function journeyFlow(s, flow, side, step = "") {
     const node = (key, label, n, extra = "", i = 0) => `<a class="j-node ${extra} ${step === key ? "on" : ""}" href="#journey/${key}" style="animation-delay:${i * 0.1}s"><b>${n}</b><span>${label}</span></a>`;
     flow.innerHTML = Object.keys(FUNNEL).map((k, i) => node(k, FUNNEL[k], s.funnel[k], "", i)).join(`<i class="j-arrow"></i>`);

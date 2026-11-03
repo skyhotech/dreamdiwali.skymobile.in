@@ -200,6 +200,12 @@ class BranchFlowTests(TestCase):
         row = self.client.get("/api/admin/customers/").json()["results"][0]
         self.assertEqual(row["shared_on"], {"whatsapp": 2, "instagram": 1})
 
+    def test_live_visitors_are_counted(self):
+        for visitor in ("a", "b", "a"):
+            self.client.post("/api/live/", {"id": visitor}, content_type="application/json")
+        self.client.force_login(self.staff)
+        self.assertEqual(self.client.get("/api/admin/stats/").json()["live"], 2)
+
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)
         self.assertTrue(Branch.objects.filter(slug="thiruvannamalai-1").exists())

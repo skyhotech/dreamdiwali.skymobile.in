@@ -2,7 +2,12 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./styles.css";
-import { SPIN_TOKEN, startMirrorSync, startUploadSync } from "./lib/backend";
+import {
+  SPIN_TOKEN,
+  startLivePing,
+  startMirrorSync,
+  startUploadSync,
+} from "./lib/backend";
 import { preloadFrames } from "./lib/frameAssets";
 import { useStudio } from "./lib/store";
 import { subscribeTemplates, templates } from "./templates";
@@ -36,6 +41,7 @@ addEventListener("vite:preloadError", (e) => {
   location.reload();
 });
 startUploadSync();
+startLivePing();
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />
