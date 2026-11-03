@@ -263,6 +263,12 @@
   .sky-loader[hidden] { display: none !important; }
   .sky-loader img { width: 90px; height: 90px; border-radius: 50%; background: #fff; box-shadow: 0 10px 30px rgba(122,22,49,.3); animation: sky-spin 1s linear infinite; }
   @keyframes sky-spin { to { transform: rotate(360deg); } }
+  .pager { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 18px 0 6px; }
+  .pager:empty { display: none; }
+  .pager button { min-width: 42px; min-height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  .pager button.on { background: var(--side); color: #fff; border-color: var(--side); }
+  .pager button:disabled { opacity: .4; cursor: default; }
+  .pager span { align-self: center; padding: 0 4px; color: var(--muted); }
   .menu-btn { display: none; align-items: center; gap: 8px; margin-bottom: 14px; min-height: 44px; padding: 0 14px;
     border: 0; border-radius: 10px; background: var(--side); color: #fff; font: inherit; }
   .menu-shade { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
@@ -476,7 +482,7 @@
             <div class="card" style="margin-top:14px">
               <div class="toolbar" style="margin-bottom:10px"><b>Customers in this branch</b><a class="btn" id="b-export" download>Export CSV</a></div>
               <div class="cgrid" id="b-grid"></div>
-              <div style="text-align:center;margin-top:14px"><button id="b-more" hidden>Load more</button></div>
+
             </div>
           </div>
         </div>
@@ -557,7 +563,7 @@
         </div>
       </div>
       <div class="cgrid" id="c-grid"></div>
-      <div style="text-align:center;margin-top:18px"><button id="c-more" hidden>Load more</button></div>
+
     </section>
   </main>
 </div>
@@ -859,6 +865,44 @@
     catch (err) { toast(err.message, true); }
   });
 
+  // ---------------- Pages of 15 cards ----------------
+  const PER_PAGE = 15;
+  // Numbered page buttons under a list: ‹ 1 2 3 … ›
+  function pagerNav(grid, page, pages, go) {
+    let nav = grid.nextElementSibling;
+    if (!nav || !nav.classList.contains("pager")) {
+      nav = document.createElement("nav");
+      nav.className = "pager";
+      nav.setAttribute("aria-label", "Pages");
+      grid.after(nav);
+    }
+    if (pages <= 1) { nav.innerHTML = ""; return; }
+    const nums = [];
+    for (let i = 1; i <= pages; i++)
+      if (i === 1 || i === pages || Math.abs(i - page) <= 1) nums.push(i);
+      else if (nums[nums.length - 1] !== "…") nums.push("…");
+    nav.innerHTML = `<button data-go="${page - 1}" ${page === 1 ? "disabled" : ""} aria-label="Previous page">‹</button>`
+      + nums.map((n) => n === "…" ? `<span>…</span>` : `<button data-go="${n}" ${n === page ? 'aria-current="page" class="on"' : ""}>${n}</button>`).join("")
+      + `<button data-go="${page + 1}" ${page === pages ? "disabled" : ""} aria-label="Next page">›</button>`;
+    nav.onclick = (e) => {
+      const b = e.target.closest("button[data-go]");
+      if (!b || b.disabled) return;
+      go(Number(b.dataset.go));
+      grid.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+  }
+  // For lists already on the page: shows 15 cards at a time.
+  function paginate(grid) {
+    const cards = [...grid.children].filter((c) => !c.classList.contains("empty-note"));
+    const pages = Math.max(1, Math.ceil(cards.length / PER_PAGE));
+    const show = (n) => {
+      grid.dataset.page = n;
+      cards.forEach((c, i) => (c.hidden = Math.floor(i / PER_PAGE) + 1 !== n));
+      pagerNav(grid, n, pages, show);
+    };
+    show(Math.min(Number(grid.dataset.page) || 1, pages));
+  }
+
   // ---------------- Rejections ----------------
   const RJ_FIELDS = [["name", "Customer name"], ["phone", "Mobile number"], ["email", "Mail ID"], ["product_details", "Product"], ["imei", "IMEI (phones only)"], ["invoice_number", "Invoice number"], ["bill_value", "Bill value (₹)"]];
   async function loadRejections() {
@@ -894,6 +938,7 @@
       });
       list.appendChild(el);
     }
+    paginate(list);
   }
 
   // ---------------- Server status ----------------
@@ -1044,6 +1089,7 @@
       });
       list.appendChild(el);
     }
+    paginate(list);
   }
   $("#si-cancel").addEventListener("click", siReset);
   siForm.addEventListener("submit", async (e) => {
@@ -1145,12 +1191,14 @@
         list.appendChild(el);
       }
       if (!list.children.length) list.innerHTML = `<div class="empty-note">No abandoned customers.</div>`;
+      paginate(list);
       return;
     }
     const query = "reached=" + encodeURIComponent(step);
     const data = await api(`customers/?page_size=100&${query}`);
     if (!data.results.length) list.innerHTML = `<div class="empty-note">No customers at this step yet.</div>`;
     for (const c of data.results) list.appendChild(customerCard(c));
+    paginate(list);
   }
   const EVENTS = { ...FUNNEL, share_opened_instagram: "Opened Instagram", share_opened_facebook: "Opened Facebook", share_opened_whatsapp: "Opened WhatsApp", share_opened_more: "Opened share sheet", posted_instagram: "Posted on Instagram (link)", posted_facebook: "Posted on Facebook (link)", profile_instagram: "Gave Instagram ID", profile_facebook: "Gave Facebook profile", terms_accepted: "Terms accepted", reviewed: "Rated the visit", checked: "Purchase checked", whatsapp_sent: "WhatsApp link sent", link_opened: "Link opened", poster_saved: "Poster made", shared_instagram: "Shared: Instagram", shared_facebook: "Shared: Facebook", shared_whatsapp: "Shared: WhatsApp", shared_more: "Shared: other" };
   // The journey as a railway: a train runs down the line, lighting each station
@@ -1238,7 +1286,7 @@
       bsel.innerHTML = `<option value="">All branches</option><option value="none">No branch</option>` + bs.map((b) => `<option value="${b.id}">${esc(b.name)}</option>`).join("");
       bsel.value = bkeep;
     }
-    const params = new URLSearchParams({ page: cPage });
+    const params = new URLSearchParams({ page: cPage, page_size: PER_PAGE });
     if ($("#c-q").value.trim()) params.set("q", $("#c-q").value.trim());
     if ($("#c-mirror").value) params.set("mirror", $("#c-mirror").value);
     if ($("#c-branch").value) params.set("branch", $("#c-branch").value);
@@ -1246,11 +1294,14 @@
     const data = await api("customers/?" + params);
     $("#nav-customers").textContent = data.count;
     const grid = $("#c-grid");
-    if (reset && !data.results.length) grid.innerHTML = `<div class="empty-note">No customers yet. Selfies appear here when someone exports a poster in the studio.</div>`;
+    grid.innerHTML = data.results.length ? "" : `<div class="empty-note">No customers yet. Selfies appear here when someone exports a poster in the studio.</div>`;
     for (const c of data.results) grid.appendChild(customerCard(c));
-    $("#c-more").hidden = !data.next;
+    pagerNav(grid, cPage, Math.ceil(data.count / PER_PAGE), (n) => {
+      cPage = n;
+      loadCustomers(false).catch((e) => toast(e.message, true));
+    });
   }
-  $("#c-more").addEventListener("click", () => { cPage++; loadCustomers(false).catch((e) => toast(e.message, true)); });
+
   $("#c-status").addEventListener("change", () => loadCustomers(true).catch((e) => toast(e.message, true)));
   $("#c-mirror").addEventListener("change", () => loadCustomers(true).catch((e) => toast(e.message, true)));
   $("#c-branch").addEventListener("change", () => loadCustomers(true).catch((e) => toast(e.message, true)));
@@ -1293,6 +1344,7 @@
       $(".gen", el).addEventListener("click", (e) => { e.stopPropagation(); openBranch(b, true); });
       list.appendChild(el);
     }
+    paginate(list);
     for (const el of list.children) {
       const old = before.get(el.dataset.id);
       if (!old || !el.animate) continue;
@@ -1358,14 +1410,16 @@
 
   async function loadBranchCustomers() {
     const b = branch;
-    const data = await api(`customers/?branch=${b.id}&page=${bPage}`);
+    const data = await api(`customers/?branch=${b.id}&page=${bPage}&page_size=${PER_PAGE}`);
     if (branch !== b) return;
     const grid = $("#b-grid");
-    if (bPage === 1 && !data.results.length) grid.innerHTML = `<div class="empty-note">No customers yet. Share the link or QR code above.</div>`;
+    grid.innerHTML = data.results.length ? "" : `<div class="empty-note">No customers yet. Share the link or QR code above.</div>`;
     for (const c of data.results) grid.appendChild(customerCard(c));
-    $("#b-more").hidden = !data.next;
+    pagerNav(grid, bPage, Math.ceil(data.count / PER_PAGE), (n) => {
+      bPage = n;
+      loadBranchCustomers().catch((e) => toast(e.message, true));
+    });
   }
-  $("#b-more").addEventListener("click", () => { bPage++; loadBranchCustomers().catch((e) => toast(e.message, true)); });
 
   $("#b-new").addEventListener("click", () => {
     branch = null;
