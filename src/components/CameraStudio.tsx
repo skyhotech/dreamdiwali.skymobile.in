@@ -35,6 +35,7 @@ import { Poster } from "./Poster";
 import { Templates } from "./Templates";
 import { UploadStatus } from "./StatusNotices";
 import { ShareButtons } from "./ShareButtons";
+import { trackShare } from "../lib/backend";
 // Hands-free capture: how strong a smile counts, and how long a cue is held.
 const SMILE_THRESHOLD = 0.6;
 const HOLD_MS = 500;
@@ -139,6 +140,9 @@ export default function CameraStudio() {
       ),
     );
     try {
+      // The poster's big button: counted like the Instagram share button.
+      const { token } = useStudio.getState();
+      if (token) trackShare(token, "share_opened_instagram");
       if (navigator.canShare?.({ files: [file] }) && navigator.share) {
         setMessage(
           "Choose Instagram → Post/Feed. Your poster and SKY caption are ready.",
@@ -148,6 +152,7 @@ export default function CameraStudio() {
           title: "My SKY Diwali moment",
           text,
         });
+        if (token) trackShare(token, "shared_instagram");
       } else {
         download(blob, name);
         window.open(

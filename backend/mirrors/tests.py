@@ -307,6 +307,24 @@ class BranchFlowTests(TestCase):
         text = extract_text(out.getvalue(), "bill.jpg")
         self.assertIn(IMEI, text.replace(" ", ""))
 
+    def test_share_journey_profile_open_shared_and_post_link(self):
+        token = self.token(self.check())
+        post = lambda path, body: self.client.post(path, {"token": token, **body}, content_type="application/json")
+        self.assertEqual(post("/api/customers/profile/", {"platform": "instagram", "handle": "https://instagram.com/asha.k/"}).json(), {"handle": "asha.k"})
+        self.assertEqual(post("/api/customers/profile/", {"platform": "facebook", "handle": "bad"}).status_code, 400)
+        post("/api/customers/profile/", {"platform": "facebook", "handle": "https://facebook.com/asha.k"})
+        post("/api/customers/event/", {"kind": "share_opened_instagram"})
+        post("/api/customers/event/", {"kind": "shared_instagram"})
+        self.assertEqual(post("/api/customers/event/", {"kind": "posted_instagram"}).status_code, 400)
+        post("/api/customers/event/", {"kind": "posted_instagram", "url": "https://www.instagram.com/p/abc123/"})
+        self.client.force_login(self.staff)
+        stats = self.client.get("/api/admin/stats/").json()
+        self.assertEqual((stats["share_opened"], stats["shares"], stats["posted"]),
+                         ({"instagram": 1}, {"instagram": 1}, {"instagram": 1}))
+        row = self.client.get("/api/admin/customers/").json()["results"][0]
+        self.assertEqual(row["posts"], [{"platform": "instagram", "url": "https://www.instagram.com/p/abc123/"}])
+        self.assertEqual((row["instagram_id"], row["facebook_profile"]), ("asha.k", "https://facebook.com/asha.k"))
+
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)
         self.assertTrue(Branch.objects.filter(slug="thiruvannamalai-1").exists())

@@ -208,6 +208,8 @@ class Customer(models.Model):
     terms_accepted_at = models.DateTimeField(null=True, blank=True)
     video_review = models.BooleanField(default=False)
     instagram_id = models.CharField(max_length=30, blank=True)
+    # Asked when the customer shares on Facebook.
+    facebook_profile = models.CharField(max_length=200, blank=True)
     # Asked straight after the spin, before the mirror selfie.
     rating = models.PositiveSmallIntegerField(null=True, blank=True)
     review = models.TextField(blank=True)
@@ -277,9 +279,11 @@ class CustomerEvent(models.Model):
     """One step of a purchase's journey, for the admin timeline. Failed checks
     have no customer yet, so they keep the number that was typed."""
 
-    SHARE_KINDS = [
-        "shared_instagram", "shared_facebook", "shared_whatsapp", "shared_more",
-    ]
+    PLATFORMS = ["instagram", "facebook", "whatsapp", "more"]
+    # Opened the platform; came back from sharing; pasted their post's link.
+    OPEN_KINDS = [f"share_opened_{p}" for p in PLATFORMS]
+    SHARE_KINDS = [f"shared_{p}" for p in PLATFORMS]
+    POSTED_KINDS = [f"posted_{p}" for p in PLATFORMS]
 
     customer = models.ForeignKey(
         Customer, null=True, blank=True, on_delete=models.CASCADE, related_name="events"

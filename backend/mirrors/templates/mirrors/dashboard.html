@@ -645,10 +645,10 @@
     journeyFlow(s, $("#s-flow"), $("#s-side"));
     showLive(s.live);
     const PLATFORMS = [["instagram", "Instagram", "#d62976"], ["facebook", "Facebook", "#1877f2"], ["whatsapp", "WhatsApp", "#25d366"], ["more", "Other apps", "#8a7a68"]];
-    const shares = PLATFORMS.map(([k, label, color]) => ({ label, color, n: s.shares[k] || 0 })).sort((a, b) => b.n - a.n);
-    const most = Math.max(1, shares[0].n);
+    const shares = PLATFORMS.map(([k, label, color]) => ({ label, color, opened: s.share_opened[k] || 0, n: s.shares[k] || 0, posted: s.posted[k] || 0 })).sort((a, b) => b.n - a.n);
+    const most = Math.max(1, ...shares.map((p) => p.opened));
     $("#s-share-top").textContent = shares[0].n ? `Most shared: ${shares[0].label}` : "No shares yet";
-    $("#s-shares").innerHTML = shares.map((p) => `<div class="sales-row"><span>${p.label}</span><b>${p.n}</b><i style="width:${(p.n / most) * 100}%;background:${p.color}"></i></div>`).join("");
+    $("#s-shares").innerHTML = shares.map((p) => `<div class="sales-row"><span>${p.label}</span><b>${p.n}</b><i style="width:${(p.opened / most) * 100}%;background:${p.color}"></i><small>${p.opened} opened · ${p.n} shared · ${p.posted} post link${p.posted === 1 ? "" : "s"} submitted</small></div>`).join("");
     const avg = s.rating.avg;
     $("#s-rating").innerHTML = avg ? `${"★".repeat(Math.round(avg))}<i>${"★".repeat(5 - Math.round(avg))}</i> <b>${avg.toFixed(1)}</b> from ${s.rating.n} review${s.rating.n === 1 ? "" : "s"}` : "No ratings yet";
     $("#s-reviews").innerHTML = s.reviews.map((r) => `<div class="cust"><div class="info"><span class="pro-stars">${"★".repeat(r.rating)}<i>${"★".repeat(5 - r.rating)}</i></span>${r.review ? `<q>${esc(r.review)}</q>` : ""}<small>${esc(r.name)} · ${esc(r.branch_name || "")}</small></div></div>`).join("");
@@ -1081,7 +1081,7 @@
     if (!data.results.length) list.innerHTML = `<div class="empty-note">No customers at this step yet.</div>`;
     for (const c of data.results) list.appendChild(customerCard(c));
   }
-  const EVENTS = { ...FUNNEL, terms_accepted: "Terms accepted", reviewed: "Rated the visit", checked: "Purchase checked", whatsapp_sent: "WhatsApp link sent", link_opened: "Link opened", poster_saved: "Poster made", shared_instagram: "Shared: Instagram", shared_facebook: "Shared: Facebook", shared_whatsapp: "Shared: WhatsApp", shared_more: "Shared: other" };
+  const EVENTS = { ...FUNNEL, share_opened_instagram: "Opened Instagram", share_opened_facebook: "Opened Facebook", share_opened_whatsapp: "Opened WhatsApp", share_opened_more: "Opened share sheet", posted_instagram: "Posted on Instagram (link)", posted_facebook: "Posted on Facebook (link)", profile_instagram: "Gave Instagram ID", profile_facebook: "Gave Facebook profile", terms_accepted: "Terms accepted", reviewed: "Rated the visit", checked: "Purchase checked", whatsapp_sent: "WhatsApp link sent", link_opened: "Link opened", poster_saved: "Poster made", shared_instagram: "Shared: Instagram", shared_facebook: "Shared: Facebook", shared_whatsapp: "Shared: WhatsApp", shared_more: "Shared: other" };
   // The journey as a railway: a train runs down the line, lighting each station
   // as it arrives. Repeats of a step (two opens) share one station.
   const STATION_MS = 550;
@@ -1107,8 +1107,9 @@
     const d = document.createElement("dialog");
     d.style.cssText = "max-width:640px;width:calc(100% - 32px);border:0;border-radius:12px";
     d.innerHTML = `<div class="toolbar"><b>${esc(c.name || c.phone)}</b><button class="btn">Close</button></div>
-      <table>${row("Phone", c.phone)}${row("Mail", c.email)}${row("Branch", c.branch_name)}${row("Product", c.product_details)}${row("IMEI", c.imei)}${row("Invoice no.", c.invoice_number)}${row("Bill value", c.bill_value)}${row("Reward", c.reward)}${row("Rating", c.rating ? c.rating + " / 5" : "")}${row("Terms accepted", c.terms_accepted_at ? new Date(c.terms_accepted_at).toLocaleString() : "Not yet")}${row("Video review", c.video_review ? "Yes, will make one" : "No")}${row("Instagram", c.instagram_id ? "@" + c.instagram_id : "")}${row("Review", c.review)}${row("Mirror", c.mirror_name)}${row("Photo sharpness", c.blur_score)}${row("Link", c.link)}${row("Link version", c.link_version)}</table>
+      <table>${row("Phone", c.phone)}${row("Mail", c.email)}${row("Branch", c.branch_name)}${row("Product", c.product_details)}${row("IMEI", c.imei)}${row("Invoice no.", c.invoice_number)}${row("Bill value", c.bill_value)}${row("Reward", c.reward)}${row("Rating", c.rating ? c.rating + " / 5" : "")}${row("Terms accepted", c.terms_accepted_at ? new Date(c.terms_accepted_at).toLocaleString() : "Not yet")}${row("Video review", c.video_review ? "Yes, will make one" : "No")}${row("Instagram", c.instagram_id ? "@" + c.instagram_id : "")}${row("Facebook", c.facebook_profile)}${row("Review", c.review)}${row("Mirror", c.mirror_name)}${row("Photo sharpness", c.blur_score)}${row("Link", c.link)}${row("Link version", c.link_version)}</table>
       <div class="row" style="flex-wrap:wrap;gap:8px;margin:12px 0">${pics.map(([n, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="${n}" style="height:160px;border-radius:8px"></a>`).join("")}</div>
+      ${c.posts && c.posts.length ? `<b>Posts (proof submitted)</b><ul>${c.posts.map((p) => `<li>${esc(p.platform)}: <a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.url)}</a></li>`).join("")}</ul>` : ""}
       <b>Journey</b>${journeyTrack(c.events)}
       <details><summary>Text read from invoice</summary><pre style="white-space:pre-wrap">${esc(c.ocr_text)}</pre></details>`;
     $("button", d).addEventListener("click", () => d.close());

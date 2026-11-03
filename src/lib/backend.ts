@@ -331,14 +331,34 @@ export function trackSent(phone: string) {
     keepalive: true,
   }).catch(() => {});
 }
-export function trackShare(token: string, target: string) {
+/** kind: share_opened_<platform>, shared_<platform> or posted_<platform>. */
+export function trackShare(token: string, kind: string, url?: string) {
   void fetch(`${API}/customers/event/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token, kind: `shared_${target}` }),
+    body: JSON.stringify({ token, kind, ...(url && { url }) }),
     keepalive: true,
   }).catch(() => {});
 }
+/** The Instagram ID or Facebook profile the customer shares from. */
+export const saveProfile = (
+  token: string,
+  platform: "instagram" | "facebook",
+  handle: string,
+) =>
+  postJson<{ handle: string }>("/customers/profile/", { token, platform, handle });
+/** Records the link to the customer's own post, as proof they posted. */
+export const savePostLink = (token: string, platform: string, url: string) =>
+  postJson<{ ok: boolean }>("/customers/event/", {
+    token,
+    kind: `posted_${platform}`,
+    url,
+  });
+// The uploaded poster's public address, once the server has it.
+let posterUrl = "";
+export const getPosterUrl = () => posterUrl;
+const absolute = (url: string) =>
+  url.startsWith("http") ? url : new URL(url, location.href).href;
 // A phone's IMEI is 15 digits passing the Luhn check. Kept in sync with
 // imei_valid in backend/mirrors/serializers.py.
 export function imeiValid(imei: string) {
@@ -481,6 +501,10 @@ export async function flushUploads() {
         res.status < 500 &&
         res.status !== 408 &&
         res.status !== 429;
+      if (res.ok) {
+        const saved = (await res.json().catch(() => ({}))) as { poster?: string };
+        if (saved.poster) posterUrl = absolute(MEDIA_ORIGIN + saved.poster);
+      }
       if (res.ok || permanent) await settle(item);
       else {
         setUploadState("retrying");

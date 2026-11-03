@@ -34,6 +34,7 @@ from .serializers import (
     CustomerEventSerializer,
     CustomerIntakeSerializer,
     EventSerializer,
+    ProfileSerializer,
     ReviewSerializer,
     TermsSerializer,
     SpinItemSerializer,
@@ -267,7 +268,8 @@ class CustomerUpload(APIView):
                 customer.poster.storage.delete(name)
         _log(customer, "poster_saved", mirror=customer.mirror_name)
         return Response(
-            {"id": customer.pk},
+            # Public poster address, for sharing it as a link.
+            {"id": customer.pk, "poster": customer.poster.url if customer.poster else None},
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
@@ -574,8 +576,30 @@ class CustomerEventView(APIView):
         customer = Customer.objects.filter(spin_token=ser.validated_data["token"]).first()
         if customer is None:
             return Response({"detail": INVALID_LINK}, status=status.HTTP_404_NOT_FOUND)
-        _log(customer, ser.validated_data["kind"])
+        url = ser.validated_data.get("url", "")
+        _log(customer, ser.validated_data["kind"], **({"url": url} if url else {}))
         return Response({"ok": True})
+
+
+class CustomerProfile(APIView):
+    """The Instagram ID or Facebook profile a customer shares from."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [CustomerSpinThrottle]
+
+    def post(self, request):
+        ser = ProfileSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        customer = Customer.objects.filter(spin_token=ser.validated_data["token"]).first()
+        if customer is None:
+            return Response({"detail": INVALID_LINK}, status=status.HTTP_404_NOT_FOUND)
+        platform, handle = ser.validated_data["platform"], ser.validated_data["handle"]
+        field = "instagram_id" if platform == "instagram" else "facebook_profile"
+        setattr(customer, field, handle)
+        customer.save(update_fields=[field, "updated_at"])
+        _log(customer, f"profile_{platform}", handle=handle)
+        return Response({"handle": handle})
 
 
 # --- Staff API used by /sky/mirror/admin/ -----------------------------------
@@ -720,6 +744,15 @@ class CustomerViewSet(
         return response
 
 
+def _platform_counts(customers, kinds):
+    """{"whatsapp": 3, ...}: how many such events per platform."""
+    rows = (
+        CustomerEvent.objects.filter(customer__in=customers, kind__in=kinds)
+        .values("kind").annotate(n=Count("id"))
+    )
+    return {r["kind"].rsplit("_", 1)[1]: r["n"] for r in rows}
+
+
 def _customer_stats(customers):
     """Counts the dashboard shows, for all customers or one branch."""
     today = timezone.localtime().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -755,12 +788,9 @@ def _customer_stats(customers):
     return {
         "funnel": funnel,
         "abandoned": _link_unsent(customers).count(),
-        "shares": {
-            row["kind"].removeprefix("shared_"): row["n"]
-            for row in CustomerEvent.objects.filter(
-                customer__in=customers, kind__in=CustomerEvent.SHARE_KINDS
-            ).values("kind").annotate(n=Count("id"))
-        },
+        "shares": _platform_counts(customers, CustomerEvent.SHARE_KINDS),
+        "share_opened": _platform_counts(customers, CustomerEvent.OPEN_KINDS),
+        "posted": _platform_counts(customers, CustomerEvent.POSTED_KINDS),
         "rating": customers.aggregate(avg=Avg("rating"), n=Count("rating")),
         "reviews": list(
             customers.exclude(rating=None).order_by("-updated_at")

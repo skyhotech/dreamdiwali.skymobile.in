@@ -114,3 +114,28 @@ test("an unknown link explains itself", async ({ page }) => {
   await page.goto("/?spin=nope");
   await expect(page.getByText("This gift link isn't valid.")).toBeVisible();
 });
+
+test("sharing asks for the profile, opens the app and records the post link", async ({ page, context }) => {
+  const events: Record<string, unknown>[] = [];
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.route("**/api/customers/event/", (r) => (events.push(r.request().postDataJSON()), r.fulfill({ json: { ok: true } })));
+  await page.route("**/api/customers/profile/", (r) => (events.push({ profile: r.request().postDataJSON() }), r.fulfill({ json: { handle: "asha.k" } })));
+  await page.route("**/media/e2e-poster.jpg", (r) => r.fulfill({ contentType: "image/jpeg", body: Buffer.from("ffd8ffd9", "hex") }));
+  await page.addInitScript(() => {
+    (navigator as { share?: unknown }).share = async () => {};
+    (navigator as { canShare?: unknown }).canShare = () => true;
+    window.open = () => null;
+  });
+  await openLink(page, { next: "share", reward: "power-bank", poster: "/media/e2e-poster.jpg" });
+  await page.getByRole("button", { name: "Facebook" }).click();
+  await page.getByLabel("Your Facebook profile link").fill("facebook.com/asha.k");
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Link to your post").fill("https://www.facebook.com/asha.k/posts/1");
+  await page.getByRole("button", { name: "Submit post link" }).click();
+  await expect(page.getByText("Your post is recorded")).toBeVisible();
+  await page.getByRole("button", { name: "WhatsApp" }).click();
+  expect(events.map((e) => (e.kind as string) ?? "profile")).toEqual([
+    "profile", "share_opened_facebook", "shared_facebook", "posted_facebook",
+    "share_opened_whatsapp", "shared_whatsapp",
+  ]);
+});

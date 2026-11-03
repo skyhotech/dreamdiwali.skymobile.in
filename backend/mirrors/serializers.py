@@ -171,6 +171,7 @@ class CustomerSerializer(serializers.ModelSerializer):
     repeat_of_phone = serializers.CharField(source="repeat_of.phone", read_only=True, default=None)
     stage = serializers.CharField(read_only=True)
     shared_on = serializers.SerializerMethodField()
+    posts = serializers.SerializerMethodField()
 
     def get_shared_on(self, obj):
         """Platforms whose share button this customer pressed, with counts."""
@@ -180,6 +181,13 @@ class CustomerSerializer(serializers.ModelSerializer):
                 platform = e.kind.removeprefix("shared_")
                 counts[platform] = counts.get(platform, 0) + 1
         return counts
+
+    def get_posts(self, obj):
+        """Links customers pasted as proof that they posted."""
+        return [
+            {"platform": e.kind.removeprefix("posted_"), "url": e.detail.get("url", "")}
+            for e in obj.events.all() if e.kind in CustomerEvent.POSTED_KINDS
+        ]
 
     def get_has_face(self, obj):
         return bool(obj.face)
@@ -195,7 +203,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             "consent_at", "has_face", "repeat_of", "repeat_of_phone",
             "poster_thumb", "selfie_thumb", "branch", "branch_name",
             "email", "product_details", "imei", "invoice_number", "bill_value",
-            "invoice_image", "blur_score", "link_version", "stage", "shared_on", "rating", "review", "terms_accepted_at", "video_review", "instagram_id",
+            "invoice_image", "blur_score", "link_version", "stage", "shared_on", "posts", "facebook_profile", "rating", "review", "terms_accepted_at", "video_review", "instagram_id",
         ]
         read_only_fields = fields
 
@@ -281,7 +289,32 @@ class ReviewSerializer(SpinSerializer):
 
 
 class EventSerializer(SpinSerializer):
-    kind = serializers.ChoiceField(choices=CustomerEvent.SHARE_KINDS)
+    kind = serializers.ChoiceField(
+        choices=CustomerEvent.OPEN_KINDS + CustomerEvent.SHARE_KINDS + CustomerEvent.POSTED_KINDS
+    )
+    # The customer's own post, pasted as proof (posted_* only).
+    url = serializers.URLField(max_length=300, required=False, allow_blank=True)
+
+    def validate(self, data):
+        if data["kind"].startswith("posted_") and not data.get("url"):
+            raise serializers.ValidationError({"url": ["Paste the link to your post."]})
+        return data
+
+
+class ProfileSerializer(SpinSerializer):
+    platform = serializers.ChoiceField(choices=["instagram", "facebook"])
+    handle = serializers.CharField(max_length=200)
+
+    def validate(self, data):
+        handle = data["handle"].strip()
+        if data["platform"] == "instagram":
+            handle = re.sub(r"^(?:https?://)?(?:www\.)?instagram\.com/", "", handle).strip("/@ ")
+            if not re.fullmatch(r"[A-Za-z0-9._]{1,30}", handle):
+                raise serializers.ValidationError({"handle": ["Enter a valid Instagram ID."]})
+        elif not re.search(r"facebook\.com/|fb\.com/|^[A-Za-z0-9.]{5,}$", handle):
+            raise serializers.ValidationError({"handle": ["Enter your Facebook profile link."]})
+        data["handle"] = handle
+        return data
 
 
 # Letters a scanner confuses with digits count as the same character.

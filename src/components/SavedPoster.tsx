@@ -23,6 +23,7 @@ export function SavedPoster({ url }: { url: string }) {
           poster={blob}
           caption={instagramCaption(1)}
           filename="SKY-Diwali.jpg"
+          posterLink={new URL(url, location.href).href}
         />
       ) : (
         <p className="phone-help">Preparing sharing…</p>
