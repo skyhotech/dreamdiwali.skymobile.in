@@ -208,6 +208,11 @@ test("rear camera appears in the small product box, then captures and shares", a
       files: 1,
       text: expect.stringContaining("@skymobileindia"),
     });
+  // After Instagram, WhatsApp Status is suggested next.
+  await expect(
+    page.getByRole("dialog", { name: "One more step for your iPhone 15 chance!" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Later" }).click();
   await page.getByRole("button", { name: "Edit poster", exact: true }).click();
   await page
     .getByRole("button", { name: "Festive Celebration", exact: true })
