@@ -110,7 +110,8 @@ class BranchFlowTests(TestCase):
         self.price_bands()
         token = self.token(self.check())  # bill 24,999
         link = self.client.get(f"/api/customers/link/{token}/").json()
-        self.assertEqual([i["label"] for i in link["items"]], ["Watch"])
+        # Every gift is on the wheel; the bill still decides the prize.
+        self.assertEqual([i["label"] for i in link["items"]], ["Stand", "Speaker", "Watch"])
         self.assertEqual(self.spin(token).json()["reward"], "watch")
 
     def test_bill_in_a_gap_gets_the_range_below(self):

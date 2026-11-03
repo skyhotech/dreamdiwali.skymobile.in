@@ -284,7 +284,9 @@ class CustomerLink(APIView):
         if customer is None:
             return Response({"detail": INVALID_LINK}, status=status.HTTP_404_NOT_FOUND)
         _log(customer, "link_opened", version=customer.link_version)
-        items = SpinItem.for_bill(customer.bill_value)
+        # The wheel shows every gift; the bill decides only which one is won
+        # (CustomerSpin), so a range with a single gift still spins a full wheel.
+        items = list(SpinItem.objects.filter(is_active=True))
         won = SpinItem.objects.filter(slug=customer.reward).first()
         if won and won not in items:
             items.append(won)

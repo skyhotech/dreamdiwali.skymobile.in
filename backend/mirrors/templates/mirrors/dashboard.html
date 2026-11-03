@@ -924,7 +924,9 @@
     const shown = siPicture || siItems.find((i) => String(i.id) === siForm.id.value)?.image || "";
     $("#si-thumb").hidden = !shown;
     if (shown) $("#si-thumb").src = shown;
-    const raw = $("#si-bill").value, items = siForBill(raw === "" ? null : Number(raw));
+    // Customers see every gift on the wheel; the bill only decides the prize.
+    const raw = $("#si-bill").value, items = siForBill(null);
+    const winnable = raw === "" ? items : siForBill(Number(raw));
     const S = 320, R = S / 2, n = items.length ? Math.max(6, items.length) : 0;
     const slices = Array.from({ length: n }, (_, i) => items[i % items.length]);
     const step = n ? 360 / n : 0;
@@ -942,7 +944,7 @@
     }).join("");
     const bulbs = Array.from({ length: 16 }, (_, i) => { const [x, y] = pt(i * 22.5, R - 7); return `<circle cx="${x}" cy="${y}" r="4" fill="#f3cf7a"/>`; }).join("");
     $("#si-wheel").innerHTML = `<svg viewBox="0 0 ${S} ${S}" role="img" aria-label="Spin wheel preview"><circle cx="${R}" cy="${R}" r="${R - 1}" fill="#5a1426"/>${parts}${bulbs}<circle cx="160" cy="160" r="33" fill="#fff4dc"/><circle cx="160" cy="160" r="30" fill="#ff0209"/><circle cx="160.0" cy="144.03" r="7.38" fill="#fff"/><circle cx="173.83" cy="167.98" r="7.38" fill="#fff"/><circle cx="146.17" cy="167.98" r="7.38" fill="#fff"/></svg>`;
-    $("#si-note").textContent = !n ? "No gifts on the wheel. Add one." : raw === "" ? "Click a slice to edit that gift." : `This bill's wheel: ${items.map((i) => i.name).join(", ")}`;
+    $("#si-note").textContent = !n ? "No gifts on the wheel. Add one." : raw === "" ? "Click a slice to edit that gift." : `This bill can win: ${winnable.map((i) => i.name).join(", ")}`;
   }
   $("#si-bill").addEventListener("input", siDraw);
   $("#si-wheel").addEventListener("click", (e) => {
