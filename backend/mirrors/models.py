@@ -115,11 +115,54 @@ class Branch(models.Model):
         super().save(*args, **kwargs)
 
 
-# Spin-the-wheel prizes; ids match REWARDS in src/lib/rewards.ts.
-REWARD_IDS = [
-    "neckband", "mini-speaker", "smart-watch",
-    "wired-headphone", "mobile-stand", "power-bank",
-]
+class SpinItem(models.Model):
+    """A gift on the wheel. A customer can win it when their bill falls inside
+    min_bill..max_bill (no max_bill = no upper limit); weight sets how likely
+    it is against the other gifts in that range."""
+
+    slug = models.SlugField(unique=True, max_length=40, blank=True)
+    name = models.CharField(max_length=40)
+    image = models.ImageField(upload_to=customer_path, blank=True)
+    min_bill = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    max_bill = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    weight = models.PositiveIntegerField(default=1)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["min_bill", "name", "id"]
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            base = slugify(self.name)[:34] or "gift"
+            slug, n = base, 2
+            while SpinItem.objects.filter(slug=slug).exclude(pk=self.pk).exists():
+                slug, n = f"{base}-{n}", n + 1
+            self.slug = slug
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def for_bill(cls, bill):
+        """Gifts this bill can win. A bill outside every range gets the highest
+        range below it, so a customer is never left without a wheel."""
+        items = list(cls.objects.filter(is_active=True))
+        if bill is None:
+            return items
+        matching = [
+            i for i in items
+            if i.min_bill <= bill and (i.max_bill is None or bill <= i.max_bill)
+        ]
+        if matching:
+            return matching
+        below = [i for i in items if i.min_bill <= bill]
+        if not below:
+            return items
+        top = max(i.min_bill for i in below)
+        return [i for i in below if i.min_bill == top]
 
 
 class Customer(models.Model):

@@ -8,6 +8,7 @@ router = DefaultRouter()
 router.register("mirrors", views.MirrorViewSet, basename="admin-mirror")
 router.register("customers", views.CustomerViewSet, basename="admin-customer")
 router.register("branches", views.BranchViewSet, basename="admin-branch")
+router.register("spin-items", views.SpinItemViewSet, basename="admin-spin-item")
 
 api_urlpatterns = [
     path("mirrors/", views.PublicMirrorList.as_view(), name="public-mirrors"),

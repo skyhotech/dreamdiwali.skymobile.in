@@ -6,7 +6,7 @@ import { ManagerIntake } from "./components/ManagerIntake";
 import { SpinWheel } from "./components/SpinWheel";
 import { OfflineBanner } from "./components/StatusNotices";
 import { SPIN_TOKEN, fetchLink, spinPrize } from "./lib/backend";
-import { preloadRewards } from "./lib/rewards";
+import { preloadRewards, setWheel } from "./lib/rewards";
 import { useStudio } from "./lib/store";
 import { initializePhotoStorage } from "./lib/persistence";
 const CameraStudio = lazy(() => import("./components/CameraStudio"));
@@ -25,6 +25,7 @@ function Studio() {
   const token = useStudio((s) => s.token);
   const reward = useStudio((s) => s.reward);
   const [linkError, setLinkError] = useState("");
+  const [linkReady, setLinkReady] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   // Gift pictures and the spin sound start loading once the customer signs
   // in, so the wheel opens with everything already on the phone.
@@ -42,9 +43,11 @@ function Studio() {
         const s = useStudio.getState();
         // A different link on this phone: nothing of the last customer stays.
         if (s.token && s.token !== SPIN_TOKEN) s.reset();
+        setWheel(c.items);
         s.setReward(c.reward);
         s.setToken(SPIN_TOKEN);
         s.setPhone(c.phone);
+        setLinkReady(true);
       })
       .catch((e: Error) => live && setLinkError(e.message));
     return () => {
@@ -64,7 +67,7 @@ function Studio() {
   if (!hydrated)
     return <div className="loading">Opening your saved studio…</div>;
   // Only the link itself opens a customer; the main page is always the form.
-  const signedIn = phone && token && token === SPIN_TOKEN;
+  const signedIn = phone && token && token === SPIN_TOKEN && linkReady;
   if (!signedIn)
     return (
       <MotionConfig reducedMotion="user">

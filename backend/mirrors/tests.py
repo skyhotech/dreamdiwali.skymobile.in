@@ -8,7 +8,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from PIL import Image
 
-from .models import Branch, Customer, CustomerEvent
+from .models import Branch, Customer, CustomerEvent, SpinItem
 
 MEDIA = tempfile.mkdtemp()
 IMEI = "490154203237518"
@@ -82,6 +82,36 @@ class BranchFlowTests(TestCase):
         self.client.force_login(self.staff)
         row = self.client.get("/api/admin/customers/").json()["results"][0]
         self.assertEqual(row["poster"], "/media/customers/p.jpg")
+
+    def price_bands(self):
+        SpinItem.objects.all().delete()
+        SpinItem.objects.create(name="Stand", min_bill=0, max_bill=9999)
+        SpinItem.objects.create(name="Speaker", min_bill=10000, max_bill=19999)
+        SpinItem.objects.create(name="Watch", min_bill=20000)
+
+    def test_bill_decides_the_gift(self):
+        self.price_bands()
+        token = self.token(self.check())  # bill 24,999
+        link = self.client.get(f"/api/customers/link/{token}/").json()
+        self.assertEqual([i["label"] for i in link["items"]], ["Watch"])
+        self.assertEqual(self.spin(token).json()["reward"], "watch")
+
+    def test_bill_in_a_gap_gets_the_range_below(self):
+        self.price_bands()
+        SpinItem.objects.filter(name="Watch").update(min_bill=30000)
+        self.assertEqual([i.name for i in SpinItem.for_bill(25000)], ["Speaker"])
+        self.assertEqual([i.name for i in SpinItem.for_bill(500)], ["Stand"])
+
+    def test_admin_manages_spin_items(self):
+        self.client.force_login(self.staff)
+        res = self.client.post("/api/admin/spin-items/", {"name": "TV", "min_bill": 50000, "max_bill": 100})
+        self.assertEqual(res.status_code, 400)
+        res = self.client.post("/api/admin/spin-items/", {"name": "TV", "min_bill": 50000})
+        self.assertEqual(res.status_code, 201)
+        url = f"/api/admin/spin-items/{res.json()['id']}/"
+        self.assertEqual(self.client.delete(url).status_code, 204)
+        self.client.logout()
+        self.assertEqual(self.client.get("/api/admin/spin-items/").status_code, 403)
 
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)
@@ -182,7 +212,7 @@ class BranchFlowTests(TestCase):
         first = self.spin(token).json()["reward"]
         self.assertEqual(self.spin(token).json()["reward"], first)
         link = self.client.get(f"/api/customers/link/{token}/").json()
-        self.assertEqual(link, {"phone": "9845011111", "reward": first})
+        self.assertEqual((link["phone"], link["reward"]), ("9845011111", first))
 
     def test_unknown_token_cannot_spin(self):
         self.assertEqual(self.spin("nope").status_code, 404)

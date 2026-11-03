@@ -193,11 +193,16 @@ export async function fetchLink(token: string) {
   const data = (await res.json().catch(() => ({}))) as {
     phone?: string;
     reward?: string | null;
+    items?: { id: string; label: string; image: string }[];
     detail?: string;
   };
   if (!res.ok || !data.phone)
     throw new ApiError(data.detail ?? ERRORS.server, res.status);
-  return { phone: data.phone, reward: data.reward ?? null };
+  return {
+    phone: data.phone,
+    reward: data.reward ?? null,
+    items: data.items ?? [],
+  };
 }
 export type BranchOption = { slug: string; name: string };
 /** Active stores for the manager page. */

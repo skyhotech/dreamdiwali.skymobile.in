@@ -4,7 +4,7 @@ from rest_framework import serializers
 import re
 from urllib.parse import urlsplit
 
-from .models import Branch, Customer, CustomerEvent, Mirror, validate_rect
+from .models import Branch, Customer, CustomerEvent, Mirror, SpinItem, validate_rect
 
 
 class RectField(serializers.JSONField):
@@ -114,6 +114,34 @@ def _local_images(data):
         key: urlsplit(value).path if isinstance(value, str) and "/media/" in value else value
         for key, value in data.items()
     }
+
+
+class SpinItemSerializer(serializers.ModelSerializer):
+    def validate(self, data):
+        low = data.get("min_bill", getattr(self.instance, "min_bill", 0))
+        high = data.get("max_bill", getattr(self.instance, "max_bill", None))
+        if high is not None and high < low:
+            raise serializers.ValidationError({"max_bill": ["Must be above the minimum bill."]})
+        return data
+
+    def validate_image(self, image):
+        return _limit_size(image) if image else image
+
+    def to_representation(self, obj):
+        return _local_images(super().to_representation(obj))
+
+    class Meta:
+        model = SpinItem
+        fields = ["id", "slug", "name", "image", "min_bill", "max_bill", "weight", "is_active"]
+        read_only_fields = ["slug"]
+
+
+def wheel_items(items):
+    """What the customer's wheel shows."""
+    return [
+        {"id": i.slug, "label": i.name, "image": i.image.url if i.image else ""}
+        for i in items
+    ]
 
 
 class CustomerSerializer(serializers.ModelSerializer):

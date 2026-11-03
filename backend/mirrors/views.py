@@ -24,7 +24,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .images import POSTER_SIZE, SELFIE_SIZE, THUMB_SIZE, compressed_photo, optimized
-from .models import REWARD_IDS, Branch, Customer, CustomerEvent, Mirror
+from .models import Branch, Customer, CustomerEvent, Mirror, SpinItem
 from .serializers import (
     BranchSerializer,
     PublicBranchSerializer,
@@ -33,6 +33,8 @@ from .serializers import (
     CustomerDetailSerializer,
     CustomerIntakeSerializer,
     EventSerializer,
+    SpinItemSerializer,
+    wheel_items,
     CustomerSerializer,
     CustomerUploadSerializer,
     SpinSerializer,
@@ -53,6 +55,8 @@ from .throttles import (
 _IMAGE_WORK = threading.BoundedSemaphore(1)
 IMAGE_WAIT_SECONDS = 25
 
+NO_GIFTS = "Gifts aren't set up yet. Please ask the SKY team."
+_DRAW = secrets.SystemRandom()
 INVALID_LINK = "This gift link isn't valid. Please ask the SKY team for a new one."
 
 INACTIVE_BRANCH = (
@@ -261,7 +265,14 @@ class CustomerLink(APIView):
         if customer is None:
             return Response({"detail": INVALID_LINK}, status=status.HTTP_404_NOT_FOUND)
         _log(customer, "link_opened", version=customer.link_version)
-        return Response({"phone": customer.phone, "reward": customer.reward or None})
+        items = SpinItem.for_bill(customer.bill_value)
+        won = SpinItem.objects.filter(slug=customer.reward).first()
+        if won and won not in items:
+            items.append(won)
+        return Response({
+            "phone": customer.phone, "reward": customer.reward or None,
+            "items": wheel_items(items),
+        })
 
 
 class CustomerSpin(APIView):
@@ -284,7 +295,10 @@ class CustomerSpin(APIView):
             if customer is None:
                 return Response({"detail": INVALID_LINK}, status=status.HTTP_404_NOT_FOUND)
             if not customer.reward:
-                customer.reward = secrets.choice(REWARD_IDS)
+                items = SpinItem.for_bill(customer.bill_value)
+                if not items:
+                    return Response({"detail": NO_GIFTS}, status=status.HTTP_400_BAD_REQUEST)
+                customer.reward = _DRAW.choices(items, [max(i.weight, 1) for i in items])[0].slug
                 customer.save(update_fields=["reward", "updated_at"])
                 _log(customer, "spun", reward=customer.reward)
         return Response({"reward": customer.reward})
@@ -618,6 +632,15 @@ def stats(request):
         ),
     )
     return Response(data)
+
+
+class SpinItemViewSet(viewsets.ModelViewSet):
+    """Wheel gifts and the bill range each one is for."""
+
+    serializer_class = SpinItemSerializer
+    permission_classes = [IsAdminUser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    queryset = SpinItem.objects.all()
 
 
 class BranchViewSet(viewsets.ModelViewSet):

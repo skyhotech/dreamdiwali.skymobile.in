@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Gift, Sparkles } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { REWARDS, preloadRewards, sounds, type Reward } from "../lib/rewards";
-const SLICE = 360 / REWARDS.length;
+import { preloadRewards, sounds, wheelItems, type Reward } from "../lib/rewards";
+// Few gifts repeat around the wheel, which still needs to look like one.
+const MIN_SLICES = 6;
 // Length of process spin.mp3; replaced by the real duration once it loads.
 const FALLBACK_SPIN_MS = 2424;
 // Full turns per spin.
@@ -17,9 +18,9 @@ function point(angle: number, radius: number) {
   const a = ((angle - 90) * Math.PI) / 180;
   return [R + radius * Math.cos(a), R + radius * Math.sin(a)];
 }
-function slicePath(i: number) {
-  const [x1, y1] = point(i * SLICE, R - 14);
-  const [x2, y2] = point((i + 1) * SLICE, R - 14);
+function slicePath(i: number, slice: number) {
+  const [x1, y1] = point(i * slice, R - 14);
+  const [x2, y2] = point((i + 1) * slice, R - 14);
   return `M${R},${R} L${x1},${y1} A${R - 14},${R - 14} 0 0 1 ${x2},${y2} Z`;
 }
 // Time to enjoy the win (sound, confetti) before the prize is added automatically.
@@ -39,6 +40,12 @@ export function SpinWheel({
     onQueue: (waiting: boolean) => void;
   }) => Promise<string>;
 }) {
+  const [slices] = useState(() => {
+    const items = wheelItems();
+    const repeats = Math.ceil(MIN_SLICES / items.length);
+    return Array.from({ length: repeats }, () => items).flat();
+  });
+  const SLICE = 360 / slices.length;
   const [rotation, setRotation] = useState(0);
   const [spinMs, setSpinMs] = useState(FALLBACK_SPIN_MS);
   const [ease, setEase] = useState(LANDING_EASE);
@@ -140,8 +147,9 @@ export function SpinWheel({
           }, 500);
         }),
       ]);
-      index = REWARDS.findIndex((r) => r.id === prize);
-      if (index < 0) throw new Error("Unknown prize. Try again.");
+      const matching = slices.flatMap((r, i) => (r.id === prize ? [i] : []));
+      if (!matching.length) throw new Error("Unknown prize. Try again.");
+      index = matching[Math.floor(Math.random() * matching.length)];
     } catch (e) {
       audio?.pause();
       setError((e as Error).message);
@@ -166,7 +174,7 @@ export function SpinWheel({
       }
       // A long celebratory buzz (Android; iPhones don't allow vibration).
       navigator.vibrate?.([220, 90, 220, 90, 900]);
-      const reward = REWARDS[index];
+      const reward = slices[index];
       setWon(reward);
       setPhase("won");
       claimTimer.current = window.setTimeout(
@@ -244,10 +252,10 @@ export function SpinWheel({
                 aria-hidden="true"
               >
                 <defs>
-                  {REWARDS.map((r, i) => {
+                  {slices.map((r, i) => {
                     const [cx, cy] = point(i * SLICE + SLICE / 2, R * 0.58);
                     return (
-                      <clipPath key={r.id} id={`spin-clip-${r.id}`}>
+                      <clipPath key={i} id={`spin-clip-${i}`}>
                         <circle cx={cx} cy={cy} r={28} />
                       </clipPath>
                     );
@@ -258,14 +266,14 @@ export function SpinWheel({
                   </radialGradient>
                 </defs>
                 <circle cx={R} cy={R} r={R - 1} fill="#5a1426" />
-                {REWARDS.map((r, i) => {
+                {slices.map((r, i) => {
                   const mid = i * SLICE + SLICE / 2;
                   const [cx, cy] = point(mid, R * 0.58);
                   const [tx, ty] = point(mid, R * 0.83);
                   const light = i % 2 === 1;
                   return (
                     <g
-                      key={r.id}
+                      key={i}
                       className={
                         phase === "won" && won?.id === r.id
                           ? "spin-slice-won"
@@ -273,7 +281,7 @@ export function SpinWheel({
                       }
                     >
                       <path
-                        d={slicePath(i)}
+                        d={slicePath(i, SLICE)}
                         fill={COLORS[i % COLORS.length]}
                         stroke="#fff4dc"
                         strokeWidth={2}
@@ -285,7 +293,7 @@ export function SpinWheel({
                         y={cy - 28}
                         width={56}
                         height={56}
-                        clipPath={`url(#spin-clip-${r.id})`}
+                        clipPath={`url(#spin-clip-${i})`}
                         preserveAspectRatio="xMidYMid slice"
                       />
                       <text
