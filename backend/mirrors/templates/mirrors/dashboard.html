@@ -675,6 +675,8 @@
     siForm.id.value = "";
     $("#si-save").textContent = "Add gift";
     $("#si-cancel").hidden = true;
+    siPicture = "";
+    siDraw();
   }
   let siItems = [];
   const SI_COLORS = ["#d22856", "#d6a447", "#7a1631", "#f3cf7a"];
@@ -688,10 +690,30 @@
     $("#si-save").textContent = "Save gift";
     $("#si-cancel").hidden = false;
     siForm.name.focus();
+    siDraw();
   }
+  // The saved gifts with the form's unsaved changes on top, for the live wheel.
+  let siPicture = "";
+  function siDraft() {
+    const id = siForm.id.value, name = siForm.name.value.trim();
+    if (!id && !name) return siItems;
+    const saved = siItems.find((i) => String(i.id) === id);
+    const draft = {
+      ...saved, id: id || "new", name: name || saved?.name || "", min_bill: siForm.min_bill.value || 0,
+      max_bill: siForm.max_bill.value || null, is_active: siForm.is_active.checked,
+      image: siPicture || saved?.image || "",
+    };
+    return saved ? siItems.map((i) => (i === saved ? draft : i)) : [...siItems, draft];
+  }
+  siForm.addEventListener("input", () => {
+    const file = siForm.image.files[0];
+    if (siPicture) URL.revokeObjectURL(siPicture);
+    siPicture = file ? URL.createObjectURL(file) : "";
+    siDraw();
+  });
   // Same choice as SpinItem.for_bill on the server.
   function siForBill(bill) {
-    const live = siItems.filter((i) => i.is_active);
+    const live = siDraft().filter((i) => i.is_active);
     if (bill === null) return live;
     const hit = live.filter((i) => Number(i.min_bill) <= bill && (!i.max_bill || bill <= Number(i.max_bill)));
     if (hit.length) return hit;
