@@ -1,59 +1,56 @@
-import { expect, test } from "@playwright/test";
-const PIXEL = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
-  "base64",
-);
-test("manager checks a purchase, then gets the WhatsApp button", async ({ page }) => {
+import { expect, test, type Page } from "@playwright/test";
+// The manager's form, with a real PDF invoice read on the device.
+const INVOICE = "tests/fixtures/invoice.pdf";
+async function openForm(page: Page) {
+  await page.route("**/api/live/", (r) => r.fulfill({ status: 204 }));
   await page.route("**/api/manager/branches/", (r) =>
-    r.fulfill({
-      json: [
-        { slug: "anna-nagar", name: "Anna Nagar" },
-        { slug: "t-nagar", name: "T Nagar" },
-      ],
-    }),
-  );
-  let bad = true;
-  await page.route("**/api/manager/check/", (r) =>
-    bad
-      ? r.fulfill({
-          status: 400,
-          json: { imei: ["This IMEI is already registered."] },
-        })
-      : r.fulfill({
-          json: { phone: "9845012345", link: "https://x.test/?spin=abc" },
-        }),
+    r.fulfill({ json: [{ slug: "arni-1", name: "ARNI-1" }, { slug: "arcot", name: "ARCOT" }] }),
   );
   await page.goto("/");
-  await page.getByLabel("Customer name").fill("Asha");
-  await page.locator("#m-phone").fill("9845012345");
-  await page.getByLabel("Product details").fill("Phone 15");
-  await page.locator("#m-imei").fill("490154203237519");
-  await page.getByLabel("Invoice number").fill("INV-1");
-  await page.getByLabel("Bill value").fill("24999");
+}
+async function chooseBranch(page: Page, name: string) {
   await page.getByLabel("Branch").click();
-  await page.getByLabel("Branch").fill("anna");
-  await expect(page.getByRole("option")).toHaveCount(1);
-  await page.getByRole("option", { name: "Anna Nagar" }).click();
-  await page.locator("#m-image").setInputFiles({
-    name: "invoice.png",
-    mimeType: "image/png",
-    buffer: PIXEL,
+  await page.getByRole("option", { name }).click();
+}
+
+test("a PDF invoice fills the form, passes the check and offers WhatsApp", async ({ page }) => {
+  let sent: string | null = null;
+  await page.route("**/api/manager/check/", (r) => {
+    sent = r.request().postData();
+    return r.fulfill({ json: { phone: "9787372973", link: "https://x.test/?spin=abc" } });
   });
-  await page.getByRole("button", { name: "Check" }).click();
-  await expect(page.getByRole("alert").first()).toContainText("IMEI number is not valid");
-  await page.locator("#m-imei").fill("490154203237518");
-  await page.getByRole("button", { name: "Check" }).click();
-  await expect(page.getByRole("alert").first()).toContainText("Data mismatch: This IMEI is already");
-  bad = false;
+  await openForm(page);
+  await page.locator("#m-image").setInputFiles(INVOICE);
+  await expect(page.getByLabel("Customer name")).toHaveValue("M MAHENDRAN", { timeout: 20_000 });
+  await expect(page.locator("#m-phone")).toHaveValue("9787372973");
+  await expect(page.locator("#m-imei")).toHaveValue("P-12568801-D");
+  await expect(page.getByLabel("Invoice number")).toHaveValue("SI2627VLR31054");
+  await expect(page.getByLabel("Bill value")).toHaveValue("64000");
+  await chooseBranch(page, "ARNI-1");
   await page.getByRole("button", { name: "Check" }).click();
   await expect(page.getByRole("button", { name: "Send link in WhatsApp" })).toBeVisible();
-  await page.locator("#m-imei").fill("490154203237");
-  await expect(page.getByRole("button", { name: "Check" })).toBeVisible();
+  expect(sent).toContain("SI2627VLR31054");
+  expect(sent).not.toContain("%PDF"); // the PDF itself is never uploaded
 });
-test("customer link opens the wheel before the camera", async ({ page }) => {
-  await page.route("**/api/customers/link/abc/", (r) =>
-    r.fulfill({ json: { phone: "9845012345", reward: null } }),
-  );
-  await page.goto("/?spin=abc");
-  await expect(page.getByRole("button", { name: "Tap to spin" })).toBeVisible();
+
+test("an invoice number that differs from the bill is a data mismatch", async ({ page }) => {
+  let checked = false;
+  await page.route("**/api/manager/check/", (r) => ((checked = true), r.fulfill({ json: {} })));
+  await openForm(page);
+  await page.locator("#m-image").setInputFiles(INVOICE);
+  await expect(page.getByLabel("Invoice number")).toHaveValue("SI2627VLR31054", { timeout: 20_000 });
+  await page.getByLabel("Invoice number").fill("SI2627VLR31099");
+  await chooseBranch(page, "ARCOT");
+  await page.getByRole("button", { name: "Check" }).click();
+  await expect(page.getByRole("alert").first()).toContainText("Data mismatch");
+  await expect(page.getByRole("alert").first()).toContainText("invoice number");
+  expect(checked).toBe(false);
+});
+
+test("a chosen branch can be changed", async ({ page }) => {
+  await openForm(page);
+  await chooseBranch(page, "ARCOT");
+  await expect(page.getByLabel("Branch")).toHaveValue("ARCOT");
+  await chooseBranch(page, "ARNI-1");
+  await expect(page.getByLabel("Branch")).toHaveValue("ARNI-1");
 });
