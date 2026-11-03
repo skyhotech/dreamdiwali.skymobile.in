@@ -366,6 +366,8 @@ class ManagerCheck(APIView):
                         for field in ("branch", "name", "email", "product_details",
                                       "imei", "invoice_number", "bill_value")
                     },
+                    # What the scanner read, to see why a real bill was refused.
+                    "ocr_text": str(request.data.get("ocr_text", ""))[:4000],
                 },
             )
             raise

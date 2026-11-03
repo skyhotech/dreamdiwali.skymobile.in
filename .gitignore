@@ -19,3 +19,6 @@ backend/backups/
 .env.*
 !.env.example
 !**/.env.example
+
+# Branch QR code PDFs made from the live site; not part of the code.
+links/

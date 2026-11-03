@@ -313,6 +313,19 @@ class BranchFlowTests(TestCase):
                 f"IEE NO: {IMEI} 85171300\n")
         self.assertEqual(self.check(invoice_number="SI2627A14813", ocr_text=text).status_code, 200)
 
+    def test_a_photo_scan_may_split_or_misread_the_invoice_number(self):
+        for scanned in ("SI2627KRI 1251", "SI2627KR11251", "S12627KRl1251", "SI2627KRI125l"):
+            text = f"Invoice No : {scanned} Invoice Date : 02/11/2026\nBilled To,\nAsha\nPh: 9845011111\nIMEI NO: {IMEI}\n"
+            Customer.objects.all().delete()
+            res = self.check(invoice_number="SI2627KRI1251", ocr_text=text)
+            self.assertEqual(res.status_code, 200, scanned)
+
+    def test_a_different_invoice_number_is_still_refused(self):
+        text = f"Invoice No : SI2627KRI1251 Invoice Date : 02/11/2026\nBilled To,\nAsha\nPh: 9845011111\nIMEI NO: {IMEI}\n"
+        res = self.check(invoice_number="SI2627VLR3105", ocr_text=text)
+        self.assertIn("invoice number", res.json()["invoice_image"][0])
+        self.assertIn("SI2627KRI1251", CustomerEvent.objects.get(kind="check_failed").detail["ocr_text"])
+
     def test_mobile_number_must_match_the_bill(self):
         res = self.check(ocr_text=bill_text("9845022222", IMEI))
         self.assertIn("mobile number", res.json()["invoice_image"][0])

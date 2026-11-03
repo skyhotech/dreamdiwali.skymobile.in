@@ -1,6 +1,6 @@
 import { imeiValid } from "./backend";
-// Document scanner for invoice photos: rejects blurry shots, reads every word
-// with OCR on the device, and compares it with what the manager typed.
+// Document scanner for invoice photos: rejects blurry shots and reads every
+// word with OCR on the device. Django compares it with what was typed.
 export const BLURRY = "Invoice photo is blurry. Please retake it.";
 // Variance of the Laplacian at 1000 px; crisp print scores far above this.
 const SHARPNESS_FLOOR = 50;
@@ -76,36 +76,6 @@ export type InvoiceFields = {
   invoice: string;
   bill: string;
 };
-/** Which typed details don't match the bill: invoice number, IMEI or serial,
- *  and the customer's number under Billed To. Each is read from its place.
- *  Kept in sync with invoice_missing in backend/mirrors/serializers.py. */
-export function invoiceMissing(
-  text: string,
-  f: Pick<InvoiceFields, "invoice" | "imei" | "phone">,
-) {
-  const missing = [];
-  const number = text.match(INVOICE_LABEL)?.[1];
-  if (!printed(text, number ? [number] : [], f.invoice))
-    missing.push("invoice number");
-  // P-12568801-D, P_12568801_D and 12568801 are the same serial.
-  const want = compact(f.imei);
-  // The label first; only when a scan lost it, any valid 15-digit IMEI.
-  const labelled = [...text.matchAll(IMEI_LABEL)].map((m) => m[1]);
-  const imeis = (labelled.length ? labelled : luhnImeis(text)).map(compact);
-  if (
-    imeis.length
-      ? !imeis.some((v) => v.includes(want) || want.includes(v))
-      : !printed(text, [], f.imei)
-  )
-    missing.push("IMEI");
-  const billedAt = text.search(/billed\s*to/i);
-  const phone = (billedAt < 0 ? text : text.slice(billedAt)).match(
-    /ph\w*\s*[.:;\-]*\s*((?:\+?91)?\d{10})/i,
-  )?.[1];
-  if (phone ? !phone.endsWith(f.phone) : !text.includes(f.phone))
-    missing.push("mobile number");
-  return missing;
-}
 /** The customer details printed on an invoice, for filling in the form. */
 export function extractInvoice(
   text: string,
@@ -182,6 +152,20 @@ async function measure(file: Blob) {
       0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
   return sharpness(gray, c.width, c.height);
 }
+// Small print reads best enlarged, in grey, with the contrast raised.
+const OCR_WIDTH = 2200;
+async function forOcr(file: Blob) {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.max(1, OCR_WIDTH / bitmap.width);
+  const c = document.createElement("canvas");
+  c.width = Math.round(bitmap.width * scale);
+  c.height = Math.round(bitmap.height * scale);
+  const ctx = c.getContext("2d")!;
+  ctx.filter = "grayscale(1) contrast(1.5)";
+  ctx.drawImage(bitmap, 0, 0, c.width, c.height);
+  bitmap.close();
+  return c;
+}
 /** Refuses a blurry photo, otherwise returns all the text on it. */
 export async function readInvoice(file: Blob) {
   const score = await measure(file);
@@ -189,7 +173,7 @@ export async function readInvoice(file: Blob) {
   const { createWorker } = await import("tesseract.js");
   const worker = await createWorker("eng");
   try {
-    const { data } = await worker.recognize(file);
+    const { data } = await worker.recognize(await forOcr(file));
     return { text: data.text, sharpness: score };
   } finally {
     void worker.terminate();

@@ -304,12 +304,55 @@ _IMEI_LABEL = re.compile(
 )
 
 
+# Everything after "Invoice No" up to the date: a scan may split the number.
+_INVOICE_LINE = re.compile(r"invoice\s*(?:no|number|num)\b\s*[.:;\-]*\s*(.+?)(?:\s+invoice\s*date|\s+date\b|$)", re.I | re.M)
+
+
+def _swap_cost(a, b):
+    """Scans misread letters, not digits: one digit read as another would let
+    the next invoice (…31055 for …31054) pass, so it is never forgiven."""
+    if a == b:
+        return 0
+    return 99 if a.isdigit() and b.isdigit() else 1
+
+
+def _gap_cost(ch):
+    """A dropped or extra letter is a misread; a dropped or extra digit would
+    turn one invoice number into another, so it is never forgiven."""
+    return 99 if ch.isdigit() else 1
+
+
+def _fuzzy_in(want, text, slack):
+    """True when `want` appears in `text` with at most `slack` characters
+    wrong, missing or extra: approximate substring search (Sellers)."""
+    if not want:
+        return False
+    previous = [0] * (len(text) + 1)  # a match may start anywhere in text
+    for i, ch in enumerate(want, 1):
+        current = [i] + [0] * len(text)
+        for j, tc in enumerate(text, 1):
+            current[j] = min(
+                previous[j - 1] + _swap_cost(ch, tc),
+                previous[j] + _gap_cost(ch),  # a character the scan dropped
+                current[j - 1] + _gap_cost(tc),  # one it added
+            )
+        previous = current
+    return min(previous) <= slack
+
+
+def _slack(want):
+    """Characters a phone-photo scan may get wrong: 1 in short values, 2 in long."""
+    return 0 if len(want) < 6 else 1 if len(want) < 10 else 2
+
+
 def _printed(text, labelled, typed):
-    """True when the value at a label, or failing that anywhere, matches."""
+    """True when the value printed at its label (or, with no label, anywhere)
+    matches what was typed, allowing the few misread characters of a photo."""
     want = _compact(typed)
-    if labelled:
-        return any(_compact(value) == want for value in labelled)
-    return len(want) >= 4 and want in _compact(text)
+    if len(want) < 4:
+        return False
+    places = [_compact(v) for v in labelled] if labelled else [_compact(text)]
+    return any(_fuzzy_in(want, place, _slack(want)) for place in places)
 
 
 def invoice_missing(text, data):
@@ -317,7 +360,7 @@ def invoice_missing(text, data):
     and the customer's number under Billed To. Each is read from its place.
     Kept in sync with invoiceMissing in src/lib/invoiceScan.ts."""
     missing = []
-    if not _printed(text, _INVOICE_LABEL.findall(text)[:1], data["invoice_number"]):
+    if not _printed(text, _INVOICE_LINE.findall(text)[:1], data["invoice_number"]):
         missing.append("invoice number")
     # P-12568801-D, P_12568801_D and 12568801 are the same serial.
     # A scan can garble the "IMEI NO" label; a 15-digit run that passes the
@@ -326,7 +369,8 @@ def invoice_missing(text, data):
         n for n in re.findall(r"(?<!\d)\d{15}(?!\d)", text) if imei_valid(n)
     ]
     want, imeis = _compact(data["imei"]), [_compact(v) for v in found]
-    if not (any(want in v or v in want for v in imeis) if imeis else _printed(text, [], want)):
+    if not (any(want in v or v in want or _fuzzy_in(want, v, _slack(want)) for v in imeis)
+            if imeis else _printed(text, [], want)):
         missing.append("IMEI")
     at = re.search(r"billed\s*to", text, re.I)
     phone = re.search(r"ph\w*\s*[.:;\-]*\s*((?:\+?91)?\d{10})", text[at.start():] if at else text, re.I)

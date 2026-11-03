@@ -43,9 +43,15 @@ test("a PDF invoice fills the form, passes the check and offers WhatsApp", async
   expect(sent).not.toContain("%PDF"); // the PDF itself is never uploaded
 });
 
-test("an invoice number that differs from the bill is a data mismatch", async ({ page }) => {
-  let checked = false;
-  await page.route("**/api/manager/check/", (r) => ((checked = true), r.fulfill({ json: {} })));
+test("Django's mismatch verdict is shown, with the scan sent for checking", async ({ page }) => {
+  let sent = "";
+  await page.route("**/api/manager/check/", (r) => {
+    sent = r.request().postData() ?? "";
+    return r.fulfill({
+      status: 400,
+      json: { invoice_image: ["Invoice does not show this invoice number."] },
+    });
+  });
   await openForm(page);
   await page.locator("#m-image").setInputFiles(INVOICE);
   await expect(page.getByLabel("Invoice number")).toHaveValue("SI2627VLR31054", { timeout: 20_000 });
@@ -53,9 +59,12 @@ test("an invoice number that differs from the bill is a data mismatch", async ({
   await page.getByLabel("Bill value").fill("64000");
   await chooseBranch(page, "ARCOT");
   await page.getByRole("button", { name: "Check" }).click();
-  await expect(page.getByRole("alert").first()).toContainText("Data mismatch");
-  await expect(page.getByRole("alert").first()).toContainText("invoice number");
-  expect(checked).toBe(false);
+  await expect(page.getByRole("alert").first()).toContainText(
+    "Data mismatch: Invoice does not show this invoice number.",
+  );
+  // The phone no longer judges: everything goes to Django, scan included.
+  expect(sent).toContain("SI2627VLR31099");
+  expect(sent).toContain("SI2627VLR31054");
 });
 
 test("a chosen branch can be changed", async ({ page }) => {
@@ -81,23 +90,5 @@ test("a bill below ₹10,000 gets no link and an explanation window", async ({ p
   await notice.getByRole("button", { name: "OK" }).click();
   await expect(notice).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Send link in WhatsApp" })).toHaveCount(0);
-  expect(checked).toBe(false);
-});
-
-test("an IMEI or mobile number that differs from the bill is a data mismatch", async ({ page }) => {
-  let checked = false;
-  await page.route("**/api/manager/check/", (r) => ((checked = true), r.fulfill({ json: {} })));
-  await openForm(page);
-  await page.locator("#m-image").setInputFiles(INVOICE);
-  await expect(page.locator("#m-imei")).toHaveValue("P-12568801-D", { timeout: 20_000 });
-  await chooseBranch(page, "ARCOT");
-  await page.getByLabel("Bill value").fill("64000");
-  await page.locator("#m-imei").fill("P-99999999-D");
-  await page.getByRole("button", { name: "Check" }).click();
-  await expect(page.getByRole("alert").first()).toContainText("IMEI");
-  await page.locator("#m-imei").fill("P_12568801_D"); // same serial, other separators
-  await page.locator("#m-phone").fill("9845098450");
-  await page.getByRole("button", { name: "Check" }).click();
-  await expect(page.getByRole("alert").first()).toContainText("mobile number");
   expect(checked).toBe(false);
 });

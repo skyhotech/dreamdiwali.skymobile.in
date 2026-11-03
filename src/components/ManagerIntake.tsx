@@ -23,7 +23,6 @@ import {
 } from "../lib/backend";
 import {
   extractInvoice,
-  invoiceMissing,
   pdfToImage,
   readPdf,
   readInvoice,
@@ -195,11 +194,7 @@ export function ManagerIntake() {
         scan.current = null;
         throw e;
       });
-      const missing = invoiceMissing(text, form);
-      if (missing.length) {
-        fail(`${MISMATCH}: Invoice does not show this ${missing.join(" or ")}.`);
-        return;
-      }
+      // Django compares the scan with the typed details and explains a mismatch.
       setStage("Checking…");
       const body = new FormData();
       body.append("name", form.name.trim());
