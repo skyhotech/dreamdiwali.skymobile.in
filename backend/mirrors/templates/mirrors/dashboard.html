@@ -273,6 +273,11 @@
   .vr-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
   .vr-ig { font-size: 18px; font-weight: 800; color: #d62976; text-decoration: none; }
   .vr-post { font-weight: 600; color: #7a1631; overflow-wrap: anywhere; }
+  .po-card { border-left: 5px solid #8a7a68; }
+  .po-instagram { border-left-color: #d62976; }
+  .po-whatsapp { border-left-color: #25d366; }
+  .po-facebook { border-left-color: #1877f2; }
+  .po-platform { font-size: 12px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); }
   .menu-btn { display: none; align-items: center; gap: 8px; margin-bottom: 14px; min-height: 44px; padding: 0 14px;
     border: 0; border-radius: 10px; background: var(--side); color: #fff; font: inherit; }
   .menu-shade { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
@@ -321,6 +326,7 @@
     <a href="#dashboard" data-view="dashboard">Dashboard</a>
     <a href="#mirrors" data-view="mirrors">Mirrors <span class="badge" id="nav-mirrors">–</span></a>
     <a href="#branches" data-view="branches">Branches <span class="badge" id="nav-branches">–</span></a>
+    <a href="#posts" data-view="posts">Posts <span class="badge" id="nav-posts">–</span></a>
     <a href="#video-reviews" data-view="video-reviews">Video reviews <span class="badge" id="nav-video">–</span></a>
     <a href="#rejections" data-view="rejections">Rejections <span class="badge" id="nav-rejections">–</span></a>
     <a href="#server" data-view="server">Server status</a>
@@ -503,6 +509,13 @@
       <div class="cgrid" id="j-list"></div>
     </section>
 
+    <!-- Posts -->
+    <section id="view-posts" hidden>
+      <div class="toolbar"><h2>Posts</h2><select id="po-platform"><option value="">All platforms</option><option value="instagram">Instagram</option><option value="whatsapp">WhatsApp Status</option><option value="facebook">Facebook</option></select></div>
+      <div class="stats" id="po-totals"></div>
+      <div class="cgrid" id="po-list"></div>
+    </section>
+
     <!-- Video reviews -->
     <section id="view-video-reviews" hidden>
       <div class="toolbar"><h2>Video reviews</h2><a class="btn" id="vr-export" href="/api/admin/customers/export/?video=1" download>Export CSV</a></div>
@@ -659,7 +672,7 @@
   lightbox.addEventListener("click", () => lightbox.classList.remove("open"));
 
   // ---------------- Router ----------------
-  const views = { "video-reviews": loadVideoReviews, rejections: loadRejections, server: loadServer, journey: loadJourney, "spin-items": loadSpinItems, dashboard: loadDashboard, mirrors: loadMirrors, branches: loadBranches, customers: () => loadCustomers(true) };
+  const views = { posts: loadPosts, "video-reviews": loadVideoReviews, rejections: loadRejections, server: loadServer, journey: loadJourney, "spin-items": loadSpinItems, dashboard: loadDashboard, mirrors: loadMirrors, branches: loadBranches, customers: () => loadCustomers(true) };
   function route() {
     const view = (location.hash.slice(1) || "dashboard").split("/")[0];
     const name = views[view] ? view : "dashboard";
@@ -681,6 +694,7 @@
   async function loadDashboard() {
     const [s, recent] = await Promise.all([api("stats/"), api("customers/?page_size=12")]);
     api("rejections/").then((r) => ($("#nav-rejections").textContent = r.length)).catch(() => {});
+    api("posts/").then((r) => ($("#nav-posts").textContent = (r.totals.instagram || 0) + (r.totals.whatsapp || 0) + (r.totals.facebook || 0))).catch(() => {});
     api("customers/?video=1&page_size=1").then((r) => ($("#nav-video").textContent = r.count)).catch(() => {});
     $("#s-today").textContent = s.customers_today;
     $("#s-customers").textContent = s.customers;
@@ -915,6 +929,36 @@
     };
     show(Math.min(Number(grid.dataset.page) || 1, pages));
   }
+
+  // ---------------- Posts ----------------
+  let poPage = 1;
+  const PO_LABEL = { instagram: "📸 Instagram", whatsapp: "💬 WhatsApp Status", facebook: "📘 Facebook", more: "Other" };
+  async function loadPosts() {
+    const platform = $("#po-platform").value;
+    const data = await api(`posts/?page=${poPage}${platform ? "&platform=" + platform : ""}`, { fresh: true });
+    const t = data.totals;
+    $("#nav-posts").textContent = (t.instagram || 0) + (t.whatsapp || 0) + (t.facebook || 0);
+    $("#po-totals").innerHTML = ["instagram", "whatsapp", "facebook"].map((k) => `<div class="card stat"><span>${PO_LABEL[k]}</span><b>${t[k] || 0}</b></div>`).join("");
+    const list = $("#po-list");
+    list.innerHTML = data.results.length ? "" : `<div class="empty-note">No posts yet.</div>`;
+    for (const r of data.results) {
+      const el = document.createElement("div");
+      el.className = `cust po-card po-${r.platform}`;
+      el.innerHTML = `<div class="info">
+          <span class="po-platform">${PO_LABEL[r.platform] || r.platform}</span>
+          <b>${esc(r.name || r.phone)}</b>
+          ${r.instagram_id ? `<a class="vr-ig" href="https://instagram.com/${encodeURIComponent(r.instagram_id)}" target="_blank" rel="noopener">@${esc(r.instagram_id)}</a>` : ""}
+          <small>${esc(r.phone)} · ${esc(r.branch || "No branch")}${r.reward ? " · 🎁 " + esc(rewardLabel(r.reward)) : ""}</small>
+          ${r.url ? `<a class="vr-post" href="${esc(r.url)}" target="_blank" rel="noopener">▶ Open the post</a>` : `<small class="hint">Confirmed by the customer (WhatsApp has no post link)</small>`}
+          <small>${new Date(r.at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</small>
+        </div>
+        <div class="acts"><button class="details primary">Customer</button>${r.url ? `<a class="btn" href="${esc(r.url)}" target="_blank" rel="noopener">Open post</a>` : ""}</div>`;
+      $("button.details", el).addEventListener("click", () => customerDetail(r.customer).catch((e) => toast(e.message, true)));
+      list.appendChild(el);
+    }
+    pagerNav(list, poPage, Math.ceil(data.count / PER_PAGE), (n) => { poPage = n; loadPosts().catch((e) => toast(e.message, true)); });
+  }
+  $("#po-platform").addEventListener("change", () => { poPage = 1; loadPosts().catch((e) => toast(e.message, true)); });
 
   // ---------------- Video reviews ----------------
   let vrPage = 1;

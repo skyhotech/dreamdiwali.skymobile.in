@@ -858,6 +858,41 @@ def _customer_stats(customers):
 
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
+def posts(request):
+    """Who posted where: Instagram and Facebook post links, and WhatsApp
+    Status confirmations, newest first, 15 a page."""
+    kinds = CustomerEvent.POSTED_KINDS
+    platform = request.query_params.get("platform", "")
+    if platform:
+        kinds = [k for k in kinds if k == f"posted_{platform}"]
+    rows = (
+        CustomerEvent.objects.filter(kind__in=kinds, customer__isnull=False)
+        .select_related("customer").order_by("-created_at")
+    )
+    page = max(1, int(request.query_params.get("page", "1") or 1)) if str(request.query_params.get("page", "1")).isdigit() else 1
+    size = 15
+    total = rows.count()
+    counts = dict(
+        CustomerEvent.objects.filter(kind__in=CustomerEvent.POSTED_KINDS, customer__isnull=False)
+        .values_list("kind").annotate(n=Count("id"))
+    )
+    results = [
+        {
+            "platform": e.kind.removeprefix("posted_"), "url": e.detail.get("url", ""),
+            "at": e.created_at, "customer": e.customer_id, "name": e.customer.name,
+            "phone": e.customer.phone, "branch": e.customer.branch_name,
+            "instagram_id": e.customer.instagram_id, "reward": e.customer.reward,
+        }
+        for e in rows[(page - 1) * size: page * size]
+    ]
+    return Response({
+        "count": total, "results": results,
+        "totals": {k.removeprefix("posted_"): counts.get(k, 0) for k in CustomerEvent.POSTED_KINDS},
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
 def rejections(request):
     """Refused checks still waiting: what was typed and what Django read."""
     return Response(CustomerEventSerializer(_failed_attempts()[:200], many=True, context={"ids": True}).data)
