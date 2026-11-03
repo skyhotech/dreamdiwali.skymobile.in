@@ -110,23 +110,21 @@
   .bhead h3 { margin: 0; font-size: 20px; }
   .tag { font-size: 11px; padding: 1px 8px; border-radius: 99px; background: #f6ecd9; color: #7a5a1f; align-self: flex-start; }
   [hidden] { display: none !important; }
+  .menu-btn { display: none; align-items: center; gap: 8px; margin-bottom: 14px; min-height: 44px; padding: 0 14px;
+    border: 0; border-radius: 10px; background: var(--side); color: #fff; font: inherit; }
+  .menu-shade { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
   @media (max-width: 1100px) { .mirrors, .editor, .branches { grid-template-columns: 1fr; } .stage { max-width: 380px; } }
   @media (max-width: 600px) { .share { grid-template-columns: 1fr; } .share .qr { max-width: 220px; margin: 0 auto; } }
   @media (max-width: 760px) {
     .app { grid-template-columns: 1fr; }
     /* Sidebar becomes a sticky top bar that scrolls sideways if needed. */
     aside {
-      position: sticky; top: 0; z-index: 5; height: auto; width: 100%;
-      flex-direction: row; align-items: center; gap: 4px;
-      padding: 8px 10px; padding-top: max(8px, env(safe-area-inset-top));
-      overflow-x: auto; scrollbar-width: none;
+      position: fixed; inset: 0 auto 0 0; z-index: 60; width: min(270px, 82vw); height: 100dvh;
+      overflow-y: auto; transform: translateX(-100%); transition: transform .2s ease;
     }
-    aside::-webkit-scrollbar { display: none; }
-    aside h1, aside .spacer, aside .user { display: none; }
-    aside a { flex: none; padding: 8px 9px; font-size: 13.5px; gap: 6px; }
-    aside .badge { padding: 0 6px; }
-    aside form { margin-left: auto; flex: none; }
-    aside form button { width: auto !important; padding: 7px 10px; font-size: 13px; }
+    .app.menu-open aside { transform: none; box-shadow: 0 0 40px rgba(0,0,0,.4); }
+    .app.menu-open .menu-shade { display: block; }
+    .menu-btn { display: inline-flex; }
     main { padding: 14px 12px 40px; }
     h2 { font-size: 20px; }
     .grid2 { grid-template-columns: 1fr; }
@@ -144,7 +142,6 @@
   }
   @media (max-width: 400px) {
     /* Keep Log out on screen: drop the count badges from the top bar. */
-    aside .badge { display: none; }
   }
   @media (max-width: 340px) {
     .cgrid { grid-template-columns: 1fr; }
@@ -156,7 +153,7 @@
 </head>
 <body>
 <div class="app">
-  <aside>
+  <aside id="side-menu">
     <h1>✦ SKY Mirror</h1>
     <a href="#dashboard" data-view="dashboard">Dashboard</a>
     <a href="#mirrors" data-view="mirrors">Mirrors <span class="badge" id="nav-mirrors">–</span></a>
@@ -167,7 +164,9 @@
     <form method="post" action="{% url 'mirror-logout' %}">{% csrf_token %}<button style="width:100%">Log out</button></form>
   </aside>
 
+  <div class="menu-shade" id="menu-shade"></div>
   <main>
+    <button class="menu-btn" id="menu-btn" aria-expanded="false" aria-controls="side-menu">☰ Menu</button>
     <!-- Dashboard -->
     <section id="view-dashboard" hidden>
       <div class="toolbar"><h2>Dashboard</h2><a class="btn" href="/api/admin/backup.sql" download>⬇ Download database (.sql)</a></div>
@@ -800,6 +799,14 @@
 
   route();
 })();
+  // Mobile menu: the sidebar slides in, and any choice or outside tap closes it.
+  (() => {
+    const app = document.querySelector(".app"), btn = document.getElementById("menu-btn");
+    const set = (open) => { app.classList.toggle("menu-open", open); btn.setAttribute("aria-expanded", open); };
+    btn.addEventListener("click", () => set(!app.classList.contains("menu-open")));
+    document.getElementById("menu-shade").addEventListener("click", () => set(false));
+    document.getElementById("side-menu").addEventListener("click", (e) => { if (e.target.closest("a")) set(false); });
+  })();
 </script>
 </body>
 </html>
