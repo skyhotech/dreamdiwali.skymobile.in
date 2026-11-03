@@ -25,7 +25,24 @@ function slicePath(i: number, slice: number) {
   return `M${R},${R} L${x1},${y1} A${R - 14},${R - 14} 0 0 1 ${x2},${y2} Z`;
 }
 // Time to enjoy the win (sound, confetti) before the prize is added automatically.
-const AUTO_CLAIM_MS = 2200;
+// Longest the prize screen waits for the win sound and the spoken message.
+const MAX_ANNOUNCE_MS = 12_000;
+/** Reads text aloud in an Indian English voice when the phone has one. */
+function speak(text: string, done: () => void) {
+  const synth = typeof speechSynthesis === "undefined" ? null : speechSynthesis;
+  if (!synth) return done();
+  const say = new SpeechSynthesisUtterance(text);
+  const voices = synth.getVoices();
+  say.voice =
+    voices.find((v) => v.lang === "en-IN") ??
+    voices.find((v) => v.lang.startsWith("en")) ??
+    null;
+  say.lang = say.voice?.lang ?? "en-IN";
+  say.rate = 0.95;
+  say.onend = say.onerror = () => done();
+  synth.cancel();
+  synth.speak(say);
+}
 // Longest the wheel turns while waiting for the prize (the queue can extend it).
 const MAX_WAIT_MS = 25_000;
 // Starts at roughly the waiting speed, then a long smooth slow-down.
@@ -33,7 +50,10 @@ const LANDING_EASE = "cubic-bezier(0.33, 0.6, 0.3, 1)";
 export function SpinWheel({
   onClaim,
   getPrize,
+  customerName = "",
 }: {
+  /** Read out in the congratulations after the win. */
+  customerName?: string;
   onClaim: (reward: Reward) => void;
   /** Resolves the prize id; the server decides it, once per customer.
    *  onQueue(true) while the customer waits in line because SKY is busy. */
@@ -118,6 +138,9 @@ export function SpinWheel({
     setError("");
     setPhase("spinning");
     const audio = spinAudio.current;
+    // Unlock speech inside the tap too; iPhones refuse it otherwise.
+    if (typeof speechSynthesis !== "undefined")
+      speechSynthesis.speak(new SpeechSynthesisUtterance(""));
     // Start the sound inside the tap; phones block audio started later.
     if (audio) {
       audio.currentTime = 0;
@@ -183,10 +206,24 @@ export function SpinWheel({
       const reward = slices[index];
       setWon(reward);
       setPhase("won");
-      claimTimer.current = window.setTimeout(
-        () => onClaim(reward),
-        AUTO_CLAIM_MS,
-      );
+      // After the win sound, the prize is read out; the next screen waits for it.
+      let claimed = false;
+      const claim = () => {
+        if (claimed) return;
+        claimed = true;
+        onClaim(reward);
+      };
+      const announce = () =>
+        speak(
+          `Congratulations${customerName ? " " + customerName : ""}! You won ${
+            /^[aeiou]/i.test(reward.label) ? "an" : "a"
+          } ${reward.label} on the wheel. Enjoy!`,
+          () => (claimTimer.current = window.setTimeout(claim, 600)),
+        );
+      const win = winAudio.current;
+      if (win && !win.paused) win.addEventListener("ended", announce, { once: true });
+      else announce();
+      claimTimer.current = window.setTimeout(claim, MAX_ANNOUNCE_MS);
     };
     // The transition restarts from the wheel's current angle: no jump.
     setSpinMs(remaining);

@@ -212,6 +212,7 @@ export async function fetchLink(token: string) {
     reward?: string | null;
     items?: { id: string; label: string; image: string }[];
     poster?: string | null;
+    name?: string;
     next?: string;
     video_review?: boolean;
     detail?: string;
@@ -221,6 +222,7 @@ export async function fetchLink(token: string) {
   return {
     phone: data.phone,
     reward: data.reward ?? null,
+    name: data.name ?? "",
     items: data.items ?? [],
     poster: data.poster ? MEDIA_ORIGIN + data.poster : null,
     reviewed: !["terms", "spin", "review"].includes(data.next ?? ""),

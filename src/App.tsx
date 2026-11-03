@@ -31,6 +31,7 @@ function Studio() {
   const [linkError, setLinkError] = useState("");
   const [linkReady, setLinkReady] = useState(false);
   const [poster, setPoster] = useState<string | null>(null);
+  const [customerName, setCustomerName] = useState("");
   const [reviewed, setReviewed] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [offerDone, setOfferDone] = useState(false);
@@ -56,6 +57,7 @@ function Studio() {
         s.setToken(SPIN_TOKEN);
         s.setPhone(c.phone);
         setPoster(c.poster);
+        setCustomerName(c.name);
         setReviewed(c.reviewed);
         setTermsAccepted(c.termsAccepted);
         setOfferDone(c.videoReview || c.reviewed);
@@ -130,6 +132,7 @@ function Studio() {
           <Festive banner>
             <SpinWheel
               getPrize={({ onQueue }) => spinPrize(token, onQueue)}
+              customerName={customerName}
               onClaim={(r) => useStudio.getState().setReward(r.id)}
             />
           </Festive>

@@ -527,7 +527,21 @@
     if (button) button.disabled = true;
     try { return await apiCall(path, opts); } finally { if (button) button.disabled = false; }
   }
+  // Pages open instantly from what was loaded in the last minute, then refresh;
+  // any change clears it so nothing stale is shown after an edit.
+  const CACHE_MS = 60000, cached = new Map();
   async function apiCall(path, opts = {}) {
+    const method = (opts.method || "GET").toUpperCase();
+    if (method !== "GET") cached.clear();
+    else if (!opts.fresh) {
+      const hit = cached.get(path);
+      if (hit && Date.now() - hit.at < CACHE_MS) return hit.data;
+    }
+    const data = await apiFetch(path, opts);
+    if (method === "GET") cached.set(path, { at: Date.now(), data });
+    return data;
+  }
+  async function apiFetch(path, opts = {}) {
     const headers = { "X-CSRFToken": csrf(), ...(opts.headers || {}) };
     if (opts.json !== undefined) { headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(opts.json); }
     const res = await fetch("/api/admin/" + path, { credentials: "same-origin", ...opts, headers });
@@ -945,7 +959,7 @@
   setInterval(async () => {
     if ($("#view-dashboard").hidden || document.hidden) return;
     try {
-      const s = await api("stats/");
+      const s = await api("stats/", { fresh: true });
       showLive(s.live);
       branchBoxes(s.top_branches);
     } catch { /* next tick retries */ }
@@ -1138,7 +1152,7 @@
   setInterval(async () => {
     if ($("#view-branches").hidden || document.hidden) return;
     try {
-      const fresh = await api("branches/");
+      const fresh = await api("branches/", { fresh: true });
       if (JSON.stringify(fresh) !== JSON.stringify(branches)) { branches = fresh; renderBranches(); }
     } catch { /* next tick retries */ }
   }, 30000);

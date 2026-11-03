@@ -289,7 +289,7 @@ class CustomerLink(APIView):
         if won and won not in items:
             items.append(won)
         return Response({
-            "phone": customer.phone, "reward": customer.reward or None,
+            "phone": customer.phone, "name": customer.name, "reward": customer.reward or None,
             "items": wheel_items(items),
             "next": customer.next_step,
             "video_review": customer.video_review,
