@@ -40,21 +40,38 @@ export type InvoiceFields = {
   invoice: string;
   bill: string;
 };
-/** Whether the typed invoice number matches the bill; other fields are not
- *  compared. It is read from its place, so any value or format works. Kept in sync with
- *  invoice_missing in backend/mirrors/serializers.py. */
+/** Which typed details don't match the bill: invoice number, IMEI or serial,
+ *  and the customer's number under Billed To. Each is read from its place.
+ *  Kept in sync with invoice_missing in backend/mirrors/serializers.py. */
 export function invoiceMissing(
   text: string,
-  f: Pick<InvoiceFields, "invoice">,
+  f: Pick<InvoiceFields, "invoice" | "imei" | "phone">,
 ) {
   const missing = [];
   const number = text.match(INVOICE_LABEL)?.[1];
   if (!printed(text, number ? [number] : [], f.invoice))
     missing.push("invoice number");
+  // P-12568801-D, P_12568801_D and 12568801 are the same serial.
+  const want = compact(f.imei);
+  const imeis = [...text.matchAll(IMEI_LABEL)].map((m) => compact(m[1]));
+  if (
+    imeis.length
+      ? !imeis.some((v) => v.includes(want) || want.includes(v))
+      : !printed(text, [], f.imei)
+  )
+    missing.push("IMEI");
+  const billedAt = text.search(/billed\s*to/i);
+  const phone = (billedAt < 0 ? text : text.slice(billedAt)).match(
+    /ph\w*\s*[.:;\-]*\s*((?:\+?91)?\d{10})/i,
+  )?.[1];
+  if (phone ? !phone.endsWith(f.phone) : !text.includes(f.phone))
+    missing.push("mobile number");
   return missing;
 }
 /** The customer details printed on an invoice, for filling in the form. */
-export function extractInvoice(text: string): Partial<InvoiceFields> {
+export function extractInvoice(
+  text: string,
+): Partial<InvoiceFields> & { storePhone?: string } {
   const lines = text.split("\n").map((l) => l.replace(/[|\[\]]/g, " ").trim());
   const billedAt = lines.findIndex((l) => /billed\s*to/i.test(l));
   // Billed To and Shipped To sit side by side, so a name can appear twice.
@@ -75,7 +92,11 @@ export function extractInvoice(text: string): Partial<InvoiceFields> {
     .replace(/\s+\d{6,8}\b.*$/, "")
     .trim();
   const bill = billAmount(text);
+  // The store's own number sits above Billed To: it identifies the branch.
+  const top = billedAt < 0 ? "" : text.slice(0, text.search(/billed\s*to/i));
+  const storePhone = top.match(/ph\w*\s*[.:;\-]*\s*(?:\+?91)?(\d{10})/i)?.[1];
   return {
+    storePhone,
     name: name || undefined,
     phone,
     product,

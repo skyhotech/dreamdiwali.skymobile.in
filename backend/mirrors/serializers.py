@@ -115,7 +115,8 @@ class BranchSerializer(serializers.ModelSerializer):
 class PublicBranchSerializer(serializers.ModelSerializer):
     class Meta:
         model = Branch
-        fields = ["slug", "name"]
+        # The store number is printed on its invoices: it picks the branch.
+        fields = ["slug", "name", "phone"]
 
 
 def _local_images(data):
@@ -312,10 +313,21 @@ def _printed(text, labelled, typed):
 
 
 def invoice_missing(text, data):
-    """Whether the typed invoice number matches the bill; other fields are not
-    compared. Kept in sync with invoiceMissing in src/lib/invoiceScan.ts."""
-    number = _INVOICE_LABEL.findall(text)[:1]
-    return [] if _printed(text, number, data["invoice_number"]) else ["invoice number"]
+    """Which typed details don't match the bill: invoice number, IMEI or serial,
+    and the customer's number under Billed To. Each is read from its place.
+    Kept in sync with invoiceMissing in src/lib/invoiceScan.ts."""
+    missing = []
+    if not _printed(text, _INVOICE_LABEL.findall(text)[:1], data["invoice_number"]):
+        missing.append("invoice number")
+    # P-12568801-D, P_12568801_D and 12568801 are the same serial.
+    want, imeis = _compact(data["imei"]), [_compact(v) for v in _IMEI_LABEL.findall(text)]
+    if not (any(want in v or v in want for v in imeis) if imeis else _printed(text, [], want)):
+        missing.append("IMEI")
+    at = re.search(r"billed\s*to", text, re.I)
+    phone = re.search(r"ph\w*\s*[.:;\-]*\s*((?:\+?91)?\d{10})", text[at.start():] if at else text, re.I)
+    if not (phone[1].endswith(data["phone"]) if phone else data["phone"] in text):
+        missing.append("mobile number")
+    return missing
 
 
 # Only purchases of at least this much get a spin link. Kept in sync with
@@ -337,6 +349,17 @@ class CustomerIntakeSerializer(serializers.Serializer):
     email = serializers.EmailField(required=False, allow_blank=True)
     product_details = serializers.CharField(max_length=160)
     imei = serializers.CharField(max_length=30)
+
+    def validate_imei(self, value):
+        value = value.strip().upper()
+        # A phone's 15-digit IMEI must pass the Luhn check; other products
+        # print a serial in any format.
+        ok = imei_valid(value) if re.fullmatch(r"\d{15}", value) else re.fullmatch(
+            r"[A-Z0-9][A-Z0-9_-]{3,29}", value
+        )
+        if not ok:
+            raise serializers.ValidationError("This IMEI number is not valid.")
+        return value
     invoice_number = serializers.CharField(max_length=40)
     bill_value = serializers.DecimalField(
         max_digits=10, decimal_places=2, min_value=MIN_BILL,

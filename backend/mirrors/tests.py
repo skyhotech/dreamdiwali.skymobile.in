@@ -300,8 +300,20 @@ class BranchFlowTests(TestCase):
         funnel = self.client.get("/api/admin/stats/").json()["funnel"]
         self.assertEqual((funnel["spun"], funnel["shared"]), (1, 1))
 
-    def test_imei_is_not_validated(self):
-        self.assertEqual(self.check(imei="anything").status_code, 200)
+    def test_imei_is_checked_and_matched_to_the_bill(self):
+        bad = self.check(imei="490154203237519")  # fails the Luhn check
+        self.assertIn("not valid", bad.json()["imei"][0])
+        res = self.check(imei=OTHER_IMEI, ocr_text=bill_text("9845011111", IMEI, f"INV-{OTHER_IMEI}"),
+                         invoice_number=f"INV-{OTHER_IMEI}")
+        self.assertIn("IMEI", res.json()["invoice_image"][0])
+
+    def test_mobile_number_must_match_the_bill(self):
+        res = self.check(ocr_text=bill_text("9845022222", IMEI))
+        self.assertIn("mobile number", res.json()["invoice_image"][0])
+
+    def test_public_branch_list_has_the_store_number(self):
+        rows = self.client.get("/api/manager/branches/").json()
+        self.assertEqual(next(b for b in rows if b["slug"] == "vellore-3")["phone"], "8754740002")
 
     def test_used_imei_or_invoice_is_refused(self):
         self.check()
@@ -330,7 +342,7 @@ class BranchFlowTests(TestCase):
     def test_public_lookup_gives_the_branch_name(self):
         self.assertEqual(
             self.client.get("/api/branches/anna-nagar/").json(),
-            {"slug": "anna-nagar", "name": "Anna Nagar"},
+            {"slug": "anna-nagar", "name": "Anna Nagar", "phone": ""},
         )
 
     def test_spin_is_once_only_and_needs_no_selfie(self):

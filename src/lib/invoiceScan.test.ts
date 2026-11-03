@@ -20,9 +20,15 @@ const OK = {
   invoice: "SI2627VLR31054",
   bill: "64000",
 };
-test("only the invoice number is compared", () => {
+test("invoice number, IMEI and mobile number are compared", () => {
   expect(invoiceMissing(BILL, OK)).toEqual([]);
-  expect(invoiceMissing(BILL, { ...OK, name: "Ravi", bill: "1", imei: "X" } as typeof OK)).toEqual([]);
+  // Name and bill value are not compared.
+  expect(invoiceMissing(BILL, { ...OK, name: "Ravi", bill: "1" } as typeof OK)).toEqual([]);
+  expect(invoiceMissing(BILL, { ...OK, imei: "P_12568801_D" })).toEqual([]);
+  expect(invoiceMissing(BILL, { ...OK, imei: "12568801" })).toEqual([]);
+  expect(invoiceMissing(BILL, { ...OK, imei: "P-99999999-D" })).toEqual(["IMEI"]);
+  // The store's number at the top is not the customer's.
+  expect(invoiceMissing(BILL, { ...OK, phone: "8754740002" })).toEqual(["mobile number"]);
 });
 test.each([
   ["invoice", "SI2627VLR31055", "invoice number"],
@@ -36,6 +42,7 @@ test("an invoice fills in the form, and the result passes its own check", () => 
   );
   const f = extractInvoice(text);
   expect(f).toEqual({
+    storePhone: "8754740002",
     name: "M MAHENDRAN",
     phone: "9787372973",
     product: "SONY:LED TV:SONY (KD - 65X82L) 65INCH LED TV",

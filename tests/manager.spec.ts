@@ -4,7 +4,13 @@ const INVOICE = "tests/fixtures/invoice.pdf";
 async function openForm(page: Page) {
   await page.route("**/api/live/", (r) => r.fulfill({ status: 204 }));
   await page.route("**/api/manager/branches/", (r) =>
-    r.fulfill({ json: [{ slug: "arni-1", name: "ARNI-1" }, { slug: "arcot", name: "ARCOT" }] }),
+    r.fulfill({
+      json: [
+        { slug: "arni-1", name: "ARNI-1", phone: "8754750009" },
+        { slug: "arcot", name: "ARCOT", phone: "9361373727" },
+        { slug: "vellore-3", name: "VELLORE-3", phone: "8754740002" },
+      ],
+    }),
   );
   await page.goto("/");
 }
@@ -26,7 +32,8 @@ test("a PDF invoice fills the form, passes the check and offers WhatsApp", async
   await expect(page.locator("#m-imei")).toHaveValue("P-12568801-D");
   await expect(page.getByLabel("Invoice number")).toHaveValue("SI2627VLR31054");
   await expect(page.getByLabel("Bill value")).toHaveValue("64000");
-  await chooseBranch(page, "ARNI-1");
+  // The store number on the bill (8754740002) picks VELLORE-3 by itself.
+  await expect(page.getByLabel("Branch")).toHaveValue("VELLORE-3");
   await page.getByRole("button", { name: "Check" }).click();
   await expect(page.getByRole("button", { name: "Send link in WhatsApp" })).toBeVisible();
   expect(sent).toContain("SI2627VLR31054");
@@ -70,5 +77,21 @@ test("a bill below ₹10,000 gets no link and an explanation window", async ({ p
   await notice.getByRole("button", { name: "OK" }).click();
   await expect(notice).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Send link in WhatsApp" })).toHaveCount(0);
+  expect(checked).toBe(false);
+});
+
+test("an IMEI or mobile number that differs from the bill is a data mismatch", async ({ page }) => {
+  let checked = false;
+  await page.route("**/api/manager/check/", (r) => ((checked = true), r.fulfill({ json: {} })));
+  await openForm(page);
+  await page.locator("#m-image").setInputFiles(INVOICE);
+  await expect(page.locator("#m-imei")).toHaveValue("P-12568801-D", { timeout: 20_000 });
+  await page.locator("#m-imei").fill("P-99999999-D");
+  await page.getByRole("button", { name: "Check" }).click();
+  await expect(page.getByRole("alert").first()).toContainText("IMEI");
+  await page.locator("#m-imei").fill("P_12568801_D"); // same serial, other separators
+  await page.locator("#m-phone").fill("9845098450");
+  await page.getByRole("button", { name: "Check" }).click();
+  await expect(page.getByRole("alert").first()).toContainText("mobile number");
   expect(checked).toBe(false);
 });

@@ -230,7 +230,7 @@ export async function fetchLink(token: string) {
     videoReview: Boolean(data.video_review),
   };
 }
-export type BranchOption = { slug: string; name: string };
+export type BranchOption = { slug: string; name: string; phone?: string };
 /** Active stores for the manager page. */
 export async function fetchManagerBranches() {
   let res: Response;
@@ -286,6 +286,13 @@ export function startLivePing() {
   ping();
   setInterval(ping, LIVE_MS);
   document.addEventListener("visibilitychange", ping);
+}
+/** Phones have a 15-digit IMEI that passes the Luhn check; other products
+ *  print a serial in any format. Kept in sync with validate_imei in
+ *  backend/mirrors/serializers.py. */
+export function imeiOrSerialValid(value: string) {
+  const v = value.trim();
+  return /^\d{15}$/.test(v) ? imeiValid(v) : /^[A-Z0-9][A-Z0-9_-]{3,29}$/i.test(v);
 }
 /** Timeline entries; a lost one must never interrupt the customer. */
 export function trackSent(phone: string) {

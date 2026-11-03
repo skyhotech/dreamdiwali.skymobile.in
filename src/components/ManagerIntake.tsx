@@ -17,6 +17,7 @@ import {
   PHONE_PATTERN,
   checkPurchase,
   fetchManagerBranches,
+  imeiOrSerialValid,
   trackSent,
   type BranchOption,
 } from "../lib/backend";
@@ -144,6 +145,11 @@ export function ManagerIntake() {
     setFilling(true);
     try {
       const found = extractInvoice((await readFile(file)).text);
+      // The store number printed on the bill picks its branch.
+      const store = found.storePhone
+        ? branches.find((b) => b.phone === found.storePhone)
+        : undefined;
+      if (store) setBranch((b) => b ?? store);
       // Fills gaps only: what the manager typed stays.
       setForm((f) => ({
         name: f.name || found.name || "",
@@ -166,7 +172,7 @@ export function ManagerIntake() {
     if (!PHONE_PATTERN.test(form.phone))
       return "Enter a valid 10-digit mobile number.";
     if (!form.product.trim()) return "Enter the product details.";
-    if (!form.imei.trim()) return "Enter the IMEI or serial number.";
+    if (!imeiOrSerialValid(form.imei)) return "This IMEI number is not valid.";
     if (!form.invoice.trim()) return "Enter the invoice number.";
     if (!(Number(form.bill) >= 1)) return "Enter the bill value.";
     if (!branch) return "Select a branch.";
