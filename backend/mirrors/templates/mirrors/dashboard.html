@@ -152,6 +152,7 @@
   .si-stage { position: relative; display: grid; gap: 12px; text-align: center; }
   .si-wheel svg { display: block; width: 100%; filter: drop-shadow(0 12px 22px rgba(122,86,30,.35)); }
   .si-pointer { position: absolute; z-index: 1; top: 8px; left: 50%; margin-left: -13px; border: 13px solid transparent; border-top: 24px solid #fff4dc; filter: drop-shadow(0 2px 2px rgba(0,0,0,.4)); }
+  .si-thumb { width: 120px; height: 120px; object-fit: contain; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: #fff9ef; }
   .si-slice { cursor: pointer; transition: opacity .15s; }
   .si-slice:hover { opacity: .82; }
   .si-card img { width: 100%; height: 130px; object-fit: contain; background: #fff9ef; }
@@ -395,6 +396,7 @@
           <label class="f">Chance<input name="weight" type="number" min="1" step="1" required value="1"></label>
           <label class="f">Picture<input name="image" type="file" accept="image/png,image/jpeg,image/webp"></label>
         </div>
+        <img id="si-thumb" class="si-thumb" alt="Gift picture preview" hidden>
         <label class="row"><input name="is_active" type="checkbox" checked style="width:auto"> Show on the wheel</label>
         <div class="row" style="margin-top:10px"><button class="btn" id="si-save">Add gift</button><button class="btn" type="button" id="si-cancel" hidden>Cancel</button></div>
       </form>
@@ -724,6 +726,9 @@
   }
   // The customer's wheel, drawn the same way: colours, bulbs, hub and pictures.
   function siDraw() {
+    const shown = siPicture || siItems.find((i) => String(i.id) === siForm.id.value)?.image || "";
+    $("#si-thumb").hidden = !shown;
+    if (shown) $("#si-thumb").src = shown;
     const raw = $("#si-bill").value, items = siForBill(raw === "" ? null : Number(raw));
     const S = 320, R = S / 2, n = items.length ? Math.max(6, items.length) : 0;
     const slices = Array.from({ length: n }, (_, i) => items[i % items.length]);
