@@ -35,8 +35,6 @@ export default defineConfig({
       "@mediapipe/tasks-vision",
       "@zxing/browser",
       "@zxing/library",
-      "tesseract.js",
-      "pdfjs-dist",
       "lucide-react",
       "motion/react",
       "zustand",

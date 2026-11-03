@@ -244,6 +244,34 @@ export async function fetchManagerBranches() {
   if (!res.ok) throw new ApiError(ERRORS.server, res.status);
   return (await res.json()) as BranchOption[];
 }
+// Phone photos are several MB; this size still reads perfectly and uploads fast.
+const UPLOAD_SIDE = 2600;
+async function shrinkPhoto(file: File): Promise<Blob> {
+  if (file.type === "application/pdf" || file.size < 1_500_000) return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, UPLOAD_SIDE / Math.max(bitmap.width, bitmap.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(bitmap.width * scale);
+    c.height = Math.round(bitmap.height * scale);
+    c.getContext("2d")!.drawImage(bitmap, 0, 0, c.width, c.height);
+    bitmap.close();
+    return await new Promise<Blob>((resolve) =>
+      c.toBlob((b) => resolve(b ?? file), "image/jpeg", 0.92),
+    );
+  } catch {
+    return file;
+  }
+}
+/** Django reads the invoice (PDF text, or enhanced OCR) and keeps the
+ *  reading for the check; the text comes back to fill in the form. */
+export async function scanInvoice(file: File | Blob, name = "invoice") {
+  const form = new FormData();
+  const upload = file instanceof File ? await shrinkPhoto(file) : file;
+  const pdf = upload.type === "application/pdf";
+  form.append("invoice", upload, pdf ? "invoice.pdf" : `${name}.jpg`);
+  return postJson<{ scan: string; text: string }>("/manager/scan/", form);
+}
 /** Validates and saves the purchase; returns the customer's spin link. */
 export const checkPurchase = (form: FormData) =>
   postJson<{ phone: string; link: string }>("/manager/check/", form);

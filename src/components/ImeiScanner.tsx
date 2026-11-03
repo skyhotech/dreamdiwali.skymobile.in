@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { imeiValid } from "../lib/backend";
+import { imeiValid, scanInvoice } from "../lib/backend";
 /** The IMEI inside a barcode's text, which may hold a label or two IMEIs. */
 export function findImei(text: string) {
   for (const run of text.replace(/[ -]/g, "").match(/\d{15,}/g) ?? [])
@@ -114,18 +114,17 @@ export default function ImeiScanner({
     setError("");
     const canvas = document.createElement("canvas");
     band(v, canvas);
-    const { createWorker } = await import("tesseract.js");
-    const worker = await createWorker("eng");
     try {
-      await worker.setParameters({ tessedit_char_whitelist: "0123456789 -" });
-      const { data } = await worker.recognize(canvas);
-      const imei = findImei(data.text);
+      const frame = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", 0.92));
+      if (!frame) throw new Error("no frame");
+      // Django enhances the frame and reads it (mirrors/extract.py).
+      const { text } = await scanInvoice(frame, "imei");
+      const imei = findImei(text);
       if (imei) onScan(imei);
       else setError("Couldn't read an IMEI. Hold the digits on the red line.");
     } catch {
       setError("Couldn't read the digits. Try again or type the IMEI.");
     } finally {
-      void worker.terminate();
       setReading(false);
     }
   }

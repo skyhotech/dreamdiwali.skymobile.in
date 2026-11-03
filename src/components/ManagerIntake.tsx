@@ -16,6 +16,7 @@ import {
   BRANCH,
   PHONE_PATTERN,
   checkPurchase,
+  scanInvoice,
   fetchManagerBranches,
   imeiOrSerialValid,
   trackSent,
@@ -23,9 +24,7 @@ import {
 } from "../lib/backend";
 import {
   extractInvoice,
-  pdfToImage,
-  readPdf,
-  readInvoice,
+  checkSharpness,
 } from "../lib/invoiceScan";
 import { initialBranches, saveBranches } from "../lib/branches";
 import { Festive } from "./Festive";
@@ -33,7 +32,6 @@ const ImeiScanner = lazy(() => import("./ImeiScanner"));
 // Loaded up front so the sound plays the moment a check fails.
 const errorAudio = typeof Audio === "undefined" ? null : new Audio(errorSound);
 // Text inside a PDF can't be blurry; recorded as a clearly sharp score.
-const PDF_SHARPNESS = 9999;
 // Only purchases of at least this much get a spin link. Kept in sync with
 // MIN_BILL in backend/mirrors/serializers.py.
 const MIN_BILL = 10_000;
@@ -121,16 +119,15 @@ export function ManagerIntake() {
   // One reading per file: Check reuses what the upload already read.
   const scan = useRef<{
     file: File;
-    result: Promise<{ text: string; sharpness: number }>;
+    result: Promise<{ text: string; sharpness: number; scan: string }>;
   } | null>(null);
   function readFile(file: File) {
     if (scan.current?.file !== file) {
+      // Blurry photos are refused here; Django reads the rest.
       const result = (async () => {
-        if (file.type !== "application/pdf") return readInvoice(file);
-        const text = await readPdf(file);
-        return text
-          ? { text, sharpness: PDF_SHARPNESS }
-          : readInvoice(await pdfToImage(file));
+        const sharpness = await checkSharpness(file);
+        const { scan, text } = await scanInvoice(file);
+        return { text, sharpness, scan };
       })();
       scan.current = { file, result };
     }
@@ -190,7 +187,7 @@ export function ManagerIntake() {
     try {
       // Read here and dropped: only the text is sent to the server.
       setStage("Scanning invoice…");
-      const { text, sharpness } = await readFile(image!).catch((e: Error) => {
+      const { scan: scanId, sharpness } = await readFile(image!).catch((e: Error) => {
         scan.current = null;
         throw e;
       });
@@ -205,7 +202,7 @@ export function ManagerIntake() {
       body.append("invoice_number", form.invoice.trim());
       body.append("bill_value", form.bill);
       body.append("branch", branch!.slug);
-      body.append("ocr_text", text);
+      body.append("scan", scanId);
       body.append("blur_score", String(Math.round(sharpness)));
       const res = await checkPurchase(body);
       setLink(res.link);

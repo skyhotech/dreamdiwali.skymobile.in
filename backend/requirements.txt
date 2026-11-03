@@ -7,3 +7,8 @@ gunicorn==23.0.0; sys_platform != "win32"
 mysqlclient==2.2.7; sys_platform != "win32"
 redis==8.1.0
 qrcode==8.2
+# Reading invoices: PDF text, PDF pages as images, and OCR (needs the
+# tesseract-ocr system package).
+pypdf==6.21.4
+pypdfium2==5.14.0
+pytesseract==0.3.13

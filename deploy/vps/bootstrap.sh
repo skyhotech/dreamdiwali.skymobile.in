@@ -5,7 +5,7 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 apt-get update -q
 apt-get install -y -q python3-venv python3-dev build-essential pkg-config rsync curl \
-  default-libmysqlclient-dev mysql-server redis-server caddy
+  default-libmysqlclient-dev mysql-server redis-server caddy tesseract-ocr tesseract-ocr-eng
 
 id skymirror >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin skymirror
 id deployer >/dev/null 2>&1 || useradd -m -s /bin/bash deployer

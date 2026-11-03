@@ -23,6 +23,7 @@ api_urlpatterns = [
     path("live/", views.LivePing.as_view(), name="live-ping"),
     path("customers/event/", views.CustomerEventView.as_view(), name="customer-event"),
     path("manager/sent/", views.ManagerSent.as_view(), name="manager-sent"),
+    path("manager/scan/", views.ManagerScan.as_view(), name="manager-scan"),
     path("manager/check/", views.ManagerCheck.as_view(), name="manager-check"),
     path("branches/<slug:slug>/", views.PublicBranch.as_view(), name="public-branch"),
     path("admin/stats/", views.stats, name="admin-stats"),

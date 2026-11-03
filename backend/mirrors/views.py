@@ -367,7 +367,7 @@ class ManagerCheck(APIView):
                                       "imei", "invoice_number", "bill_value")
                     },
                     # What the scanner read, to see why a real bill was refused.
-                    "ocr_text": str(request.data.get("ocr_text", ""))[:4000],
+                    "ocr_text": (cache.get(f"invoice-scan:{request.data.get('scan', '')}") or "")[:4000],
                 },
             )
             raise
@@ -420,6 +420,42 @@ class ManagerCheck(APIView):
             # Two counters submitted the same purchase at the same moment.
             raise ValidationError({"imei": ["This purchase is already registered."]})
         return Response({"phone": customer.phone, "link": spin_link(customer.spin_token)})
+
+
+# OCR is CPU-heavy: at most three invoices are read at once per worker.
+_OCR_WORK = threading.BoundedSemaphore(3)
+SCAN_SECONDS = 30 * 60
+
+
+class ManagerScan(APIView):
+    """Reads an uploaded invoice (photo or PDF) on the server and keeps the
+    text briefly for the check. The file itself is never stored."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [ManagerThrottle]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        from .extract import UnreadableInvoice, extract_text
+
+        upload = request.FILES.get("invoice")
+        if upload is None:
+            return Response({"invoice": ["Upload the invoice image or PDF."]}, status=400)
+        if not _OCR_WORK.acquire(timeout=IMAGE_WAIT_SECONDS):
+            return Response(
+                {"detail": "SKY is busy reading other invoices. Please try again."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE, headers={"Retry-After": "5"},
+            )
+        try:
+            text = extract_text(upload.read(), upload.name)
+        except UnreadableInvoice as exc:
+            return Response({"invoice": [str(exc)]}, status=400)
+        finally:
+            _OCR_WORK.release()
+        scan = secrets.token_urlsafe(16)
+        cache.set(f"invoice-scan:{scan}", text, SCAN_SECONDS)
+        return Response({"scan": scan, "text": text})
 
 
 class ManagerSent(APIView):

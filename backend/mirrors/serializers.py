@@ -415,12 +415,26 @@ class CustomerIntakeSerializer(serializers.Serializer):
         error_messages={"min_value": BELOW_MIN_BILL},
     )
     branch = serializers.CharField(max_length=60)
-    # What the document scanner read; the server repeats the comparison.
-    ocr_text = serializers.CharField(max_length=20000, trim_whitespace=False)
+    # The invoice as Django itself read it (see ManagerScan): never text
+    # sent from the phone.
+    scan = serializers.CharField(max_length=64)
     blur_score = serializers.FloatField(min_value=0)
 
+    def validate_invoice_number(self, value):
+        from .extract import normalize_invoice_number
+
+        return normalize_invoice_number(value)
+
     def validate(self, data):
-        missing = invoice_missing(data["ocr_text"], data)
+        from django.core.cache import cache
+
+        text = cache.get(f"invoice-scan:{data['scan']}")
+        if text is None:
+            raise serializers.ValidationError(
+                {"invoice_image": ["Please upload the invoice again."]}
+            )
+        data["ocr_text"] = text
+        missing = invoice_missing(text, data)
         if missing:
             raise serializers.ValidationError(
                 {"invoice_image": [f"Invoice does not show this {' or '.join(missing)}."]}

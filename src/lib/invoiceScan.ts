@@ -1,6 +1,7 @@
 import { imeiValid } from "./backend";
-// Document scanner for invoice photos: rejects blurry shots and reads every
-// word with OCR on the device. Django compares it with what was typed.
+// Invoice photos: blurry shots are refused here, before upload. Django reads
+// the text (mirrors/extract.py) and checks it; this file fills in the form
+// from that reading.
 export const BLURRY = "Invoice photo is blurry. Please retake it.";
 // Variance of the Laplacian at 1000 px; crisp print scores far above this.
 const SHARPNESS_FLOOR = 50;
@@ -134,6 +135,15 @@ export function sharpness(gray: Float32Array, w: number, h: number) {
     }
   return n ? squares / n - (sum / n) ** 2 : 0;
 }
+/** Refuses a blurry photo before it is uploaded; PDFs are always sharp. */
+export async function checkSharpness(file: Blob) {
+  if (file.type === "application/pdf") return PDF_SHARPNESS;
+  const score = await measure(file);
+  if (score < SHARPNESS_FLOOR) throw new Error(BLURRY);
+  return score;
+}
+// Text inside a PDF can't be blurry; recorded as a clearly sharp score.
+const PDF_SHARPNESS = 9999;
 async function measure(file: Blob) {
   const bitmap = await createImageBitmap(file).catch(() => {
     throw new Error("That file isn't a readable image.");
@@ -151,99 +161,4 @@ async function measure(file: Blob) {
     gray[i] =
       0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
   return sharpness(gray, c.width, c.height);
-}
-// Small print reads best enlarged, in grey, with the contrast raised.
-const OCR_WIDTH = 2200;
-async function forOcr(file: Blob) {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.max(1, OCR_WIDTH / bitmap.width);
-  const c = document.createElement("canvas");
-  c.width = Math.round(bitmap.width * scale);
-  c.height = Math.round(bitmap.height * scale);
-  const ctx = c.getContext("2d")!;
-  ctx.filter = "grayscale(1) contrast(1.5)";
-  ctx.drawImage(bitmap, 0, 0, c.width, c.height);
-  bitmap.close();
-  return c;
-}
-/** Refuses a blurry photo, otherwise returns all the text on it. */
-export async function readInvoice(file: Blob) {
-  const score = await measure(file);
-  if (score < SHARPNESS_FLOOR) throw new Error(BLURRY);
-  const { createWorker } = await import("tesseract.js");
-  const worker = await createWorker("eng");
-  try {
-    const { data } = await worker.recognize(await forOcr(file));
-    return { text: data.text, sharpness: score };
-  } finally {
-    void worker.terminate();
-  }
-}
-type TextPiece = { str: string; transform: number[] };
-// A PDF made by billing software holds its words: reading them is instant and
-// exact. Scanned PDFs hold only a picture, so they go through OCR instead.
-const MIN_PDF_TEXT = 40;
-const LINE_TOLERANCE = 4;
-async function loadPdf() {
-  const pdfjs = await import("pdfjs-dist");
-  const worker = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
-  pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-  return pdfjs;
-}
-export async function readPdf(file: Blob) {
-  const pdfjs = await loadPdf();
-  const task = pdfjs.getDocument({ data: await file.arrayBuffer() });
-  try {
-    const page = await (await task.promise).getPage(1);
-    const pieces = (await page.getTextContent()).items.filter(
-      (i): i is TextPiece & typeof i => "str" in i && Boolean(i.str.trim()),
-    );
-    // Top to bottom, then left to right, joining pieces on one printed line.
-    pieces.sort(
-      (a, b) =>
-        b.transform[5] - a.transform[5] || a.transform[4] - b.transform[4],
-    );
-    const lines: { y: number; parts: typeof pieces }[] = [];
-    for (const p of pieces) {
-      const line = lines.find(
-        (l) => Math.abs(l.y - p.transform[5]) < LINE_TOLERANCE,
-      );
-      if (line) line.parts.push(p);
-      else lines.push({ y: p.transform[5], parts: [p] });
-    }
-    const text = lines
-      .map((l) =>
-        l.parts
-          .sort((a, b) => a.transform[4] - b.transform[4])
-          .map((p) => p.str.trim())
-          .join(" "),
-      )
-      .join("\n");
-    return text.length >= MIN_PDF_TEXT ? text : "";
-  } finally {
-    void task.destroy();
-  }
-}
-/** First page of a PDF as a sharp image. Runs on this device only: the PDF
- *  is held in memory for the check and never uploaded. */
-export async function pdfToImage(file: Blob) {
-  const pdfjs = await loadPdf();
-  const task = pdfjs.getDocument({ data: await file.arrayBuffer() });
-  const doc = await task.promise;
-  try {
-    const page = await doc.getPage(1);
-    const viewport = page.getViewport({ scale: 2.5 });
-    const canvas = document.createElement("canvas");
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    await page.render({ canvas, viewport }).promise;
-    return await new Promise<Blob>((resolve, reject) =>
-      canvas.toBlob(
-        (b) => (b ? resolve(b) : reject(new Error("Could not read this PDF."))),
-        "image/png",
-      ),
-    );
-  } finally {
-    void task.destroy();
-  }
 }

@@ -6,7 +6,11 @@ from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
-from PIL import Image
+from unittest import skipUnless
+
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+from .extract import ocr_available
 
 from unittest.mock import patch
 
@@ -23,6 +27,26 @@ def bill_text(phone, imei, invoice=None, name="Asha", product="Phone 15"):
         f"Invoice No : {invoice or 'INV-' + imei}\nBilled To,\n{name}\nPh: {phone}\n"
         f"{product}\nIMEI NO: {imei}\nNet Total 1 24,999.00\n"
     )
+
+
+def text_pdf(text):
+    """A one-page PDF whose text layer holds `text`."""
+    lines = "".join(f"({l.replace('(', '').replace(')', '')}) Tj T*\n" for l in text.splitlines())
+    stream = f"BT /F1 11 Tf 40 800 Td 14 TL\n{lines}ET"
+    objs = [
+        "<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        f"<< /Length {len(stream)} >>\nstream\n{stream}\nendstream",
+    ]
+    out, offsets = "%PDF-1.4\n", []
+    for i, obj in enumerate(objs, 1):
+        offsets.append(len(out))
+        out += f"{i} 0 obj\n{obj}\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n" + "".join(f"{o:010d} 00000 n \n" for o in offsets)
+    out += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n"
+    return out.encode()
 
 
 def jpeg(name="selfie.jpg"):
@@ -51,9 +75,15 @@ class BranchFlowTests(TestCase):
         body = {
             "name": "Asha", "phone": phone, "product_details": "Phone 15", "imei": imei,
             "invoice_number": f"INV-{imei}", "bill_value": "24999.00",
-            "branch": "anna-nagar", "blur_score": 200,
-            "ocr_text": bill_text(phone, imei), **extra,
+            "branch": "anna-nagar", "blur_score": 200, **extra,
         }
+        # The text Django read from the invoice (ManagerScan), by its scan id.
+        text = body.pop("ocr_text", None) or bill_text(phone, imei)
+        scan = f"test-{len(text)}-{hash(text) & 0xffff}"
+        cache.set(f"invoice-scan:{scan}", text, 600)
+        body["scan"] = scan
+        if "scan_override" in body:
+            body["scan"] = body.pop("scan_override")
         return self.client.post("/api/manager/check/", body)
 
     def token(self, res):
@@ -239,6 +269,43 @@ class BranchFlowTests(TestCase):
         self.assertIn("below ₹10,000", res.json()["bill_value"][0])
         self.assertFalse(Customer.objects.exists())
         self.assertEqual(self.check(bill_value="10000").status_code, 200)
+
+    def test_scan_reads_a_text_pdf_and_the_check_uses_that_reading(self):
+        pdf = SimpleUploadedFile("bill.pdf", text_pdf(bill_text("9845011111", IMEI)), "application/pdf")
+        res = self.client.post("/api/manager/scan/", {"invoice": pdf})
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(IMEI, res.json()["text"])
+        body = {
+            "name": "Asha", "phone": "9845011111", "product_details": "Phone 15", "imei": IMEI,
+            "invoice_number": f"INV-{IMEI}", "bill_value": "24999.00", "branch": "anna-nagar",
+            "blur_score": 200, "scan": res.json()["scan"],
+        }
+        self.assertEqual(self.client.post("/api/manager/check/", body).status_code, 200)
+
+    def test_an_unknown_scan_is_refused(self):
+        res = self.check(scan_override="nope")
+        self.assertIn("upload the invoice again", res.json()["invoice_image"][0])
+
+    def test_invoice_number_prefix_slip_is_fixed(self):
+        from .extract import normalize_invoice_number
+
+        self.assertEqual(normalize_invoice_number("S12627CHE1041"), "SI2627CHE1041")
+        self.assertEqual(normalize_invoice_number(" si2627vlr31054 "), "SI2627VLR31054")
+        self.assertEqual(normalize_invoice_number("INV-12345"), "INV-12345")
+
+    @skipUnless(ocr_available(), "needs the tesseract-ocr package")
+    def test_a_photo_is_enhanced_and_read(self):
+        from .extract import extract_text
+
+        image = Image.new("RGB", (900, 260), (205, 205, 200))
+        draw = ImageDraw.Draw(image)
+        font = ImageFont.load_default(size=34)
+        draw.text((30, 40), "Invoice No : SI2627CHE1041", fill=(70, 70, 70), font=font)
+        draw.text((30, 140), f"IMEI NO: {IMEI}", fill=(70, 70, 70), font=font)
+        out = io.BytesIO()
+        image.filter(ImageFilter.GaussianBlur(1)).save(out, "JPEG", quality=60)
+        text = extract_text(out.getvalue(), "bill.jpg")
+        self.assertIn(IMEI, text.replace(" ", ""))
 
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)

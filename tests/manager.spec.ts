@@ -1,7 +1,24 @@
 import { expect, test, type Page } from "@playwright/test";
 // The manager's form, with a real PDF invoice read on the device.
 const INVOICE = "tests/fixtures/invoice.pdf";
+// What Django reads from the fixture invoice (mirrors/extract.py).
+const READING = [
+  "SKY WORLD",
+  "VELAPADI,VELLORE-632001 Ph: 8754740002",
+  "TAX INVOICE",
+  "Invoice No : SI2627VLR31054   Invoice Date : 31/10/2026",
+  "Billed To,",
+  "M MAHENDRAN",
+  "Ph: 9787372973",
+  "SNo Particulars HSN/SAC Qty",
+  "1 SONY LED TV 85287217 1 64,000.00",
+  "IMEI NO: P-12568801-D",
+  "Net Total 1 64,000.00",
+].join("\n");
 async function openForm(page: Page) {
+  await page.route("**/api/manager/scan/", (r) =>
+    r.fulfill({ json: { scan: "scan-123", text: READING } }),
+  );
   await page.route("**/api/live/", (r) => r.fulfill({ status: 204 }));
   await page.route("**/api/manager/branches/", (r) =>
     r.fulfill({
@@ -40,7 +57,9 @@ test("a PDF invoice fills the form, passes the check and offers WhatsApp", async
   await page.getByRole("button", { name: "Check" }).click();
   await expect(page.getByRole("button", { name: "Send link in WhatsApp" })).toBeVisible();
   expect(sent).toContain("SI2627VLR31054");
-  expect(sent).not.toContain("%PDF"); // the PDF itself is never uploaded
+  // Django checks its own reading, found by the scan id: no text from the phone.
+  expect(sent).toContain("scan-123");
+  expect(sent).not.toContain("ocr_text");
 });
 
 test("Django's mismatch verdict is shown, with the scan sent for checking", async ({ page }) => {
@@ -62,9 +81,9 @@ test("Django's mismatch verdict is shown, with the scan sent for checking", asyn
   await expect(page.getByRole("alert").first()).toContainText(
     "Data mismatch: Invoice does not show this invoice number.",
   );
-  // The phone no longer judges: everything goes to Django, scan included.
+  // The phone no longer judges: Django compares its own reading.
   expect(sent).toContain("SI2627VLR31099");
-  expect(sent).toContain("SI2627VLR31054");
+  expect(sent).toContain("scan-123");
 });
 
 test("a chosen branch can be changed", async ({ page }) => {
