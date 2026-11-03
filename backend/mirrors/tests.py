@@ -413,19 +413,23 @@ class BranchFlowTests(TestCase):
         rows = self.client.get("/api/admin/customers/?video=1").json()["results"]
         self.assertEqual([(r["phone"], r["instagram_id"]) for r in rows], [("9845011111", "asha.k")])
 
-    def test_admin_posts_lists_who_posted_where(self):
+    def test_admin_sharer_profiles_per_platform(self):
         token = self.token(self.check())
         ev = lambda body: self.client.post("/api/customers/event/", {"token": token, **body}, content_type="application/json")
+        self.accept(token, video_review=True, instagram_id="asha.k")
+        for kind in ("share_opened_instagram", "shared_instagram", "shared_instagram"):
+            ev({"kind": kind})
         ev({"kind": "posted_instagram", "url": "https://www.instagram.com/p/abc123/"})
-        ev({"kind": "posted_whatsapp"})
+        ev({"kind": "shared_whatsapp"})
         self.client.force_login(self.staff)
-        data = self.client.get("/api/admin/posts/").json()
-        self.assertEqual(data["count"], 2)
-        self.assertEqual(data["totals"]["instagram"], 1)
-        only = self.client.get("/api/admin/posts/?platform=instagram").json()["results"]
-        self.assertEqual([(r["platform"], r["phone"]) for r in only], [("instagram", "9845011111")])
+        ig = self.client.get("/api/admin/sharers/instagram/").json()
+        self.assertEqual(ig["count"], 1)
+        row = ig["results"][0]
+        self.assertEqual((row["instagram_id"], row["shares"], row["proof"]), ("asha.k", 2, "https://www.instagram.com/p/abc123/"))
+        wa = self.client.get("/api/admin/sharers/whatsapp/").json()["results"][0]
+        self.assertEqual((wa["shares"], wa["proof"]), (1, ""))
         self.client.logout()
-        self.assertEqual(self.client.get("/api/admin/posts/").status_code, 403)
+        self.assertEqual(self.client.get("/api/admin/sharers/instagram/").status_code, 403)
 
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)

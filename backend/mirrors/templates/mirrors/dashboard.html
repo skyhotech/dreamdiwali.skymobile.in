@@ -326,7 +326,8 @@
     <a href="#dashboard" data-view="dashboard">Dashboard</a>
     <a href="#mirrors" data-view="mirrors">Mirrors <span class="badge" id="nav-mirrors">–</span></a>
     <a href="#branches" data-view="branches">Branches <span class="badge" id="nav-branches">–</span></a>
-    <a href="#posts" data-view="posts">Posts <span class="badge" id="nav-posts">–</span></a>
+    <a href="#share-instagram" data-view="share-instagram">Instagram sharing <span class="badge" id="nav-sh-instagram">–</span></a>
+    <a href="#share-whatsapp" data-view="share-whatsapp">WhatsApp sharing <span class="badge" id="nav-sh-whatsapp">–</span></a>
     <a href="#video-reviews" data-view="video-reviews">Video reviews <span class="badge" id="nav-video">–</span></a>
     <a href="#rejections" data-view="rejections">Rejections <span class="badge" id="nav-rejections">–</span></a>
     <a href="#server" data-view="server">Server status</a>
@@ -509,11 +510,18 @@
       <div class="cgrid" id="j-list"></div>
     </section>
 
-    <!-- Posts -->
-    <section id="view-posts" hidden>
-      <div class="toolbar"><h2>Posts</h2><select id="po-platform"><option value="">All platforms</option><option value="instagram">Instagram</option><option value="whatsapp">WhatsApp Status</option><option value="facebook">Facebook</option></select></div>
-      <div class="stats" id="po-totals"></div>
-      <div class="cgrid" id="po-list"></div>
+    <!-- Instagram / WhatsApp sharing -->
+    <section id="view-share-instagram" hidden>
+      <h2>📸 Instagram sharing</h2>
+      <p class="hint">Customers who shared their poster on Instagram. A post link is checked as a real Instagram post when the customer submits it.</p>
+      <div class="stats" id="sh-instagram-totals"></div>
+      <div class="cgrid" id="sh-instagram"></div>
+    </section>
+    <section id="view-share-whatsapp" hidden>
+      <h2>💬 WhatsApp sharing</h2>
+      <p class="hint">Customers who shared their poster on WhatsApp. WhatsApp Status can't be checked by a website, so "Status confirmed" is the customer's own confirmation.</p>
+      <div class="stats" id="sh-whatsapp-totals"></div>
+      <div class="cgrid" id="sh-whatsapp"></div>
     </section>
 
     <!-- Video reviews -->
@@ -672,7 +680,7 @@
   lightbox.addEventListener("click", () => lightbox.classList.remove("open"));
 
   // ---------------- Router ----------------
-  const views = { posts: loadPosts, "video-reviews": loadVideoReviews, rejections: loadRejections, server: loadServer, journey: loadJourney, "spin-items": loadSpinItems, dashboard: loadDashboard, mirrors: loadMirrors, branches: loadBranches, customers: () => loadCustomers(true) };
+  const views = { "share-instagram": () => loadSharers("instagram"), "share-whatsapp": () => loadSharers("whatsapp"), "video-reviews": loadVideoReviews, rejections: loadRejections, server: loadServer, journey: loadJourney, "spin-items": loadSpinItems, dashboard: loadDashboard, mirrors: loadMirrors, branches: loadBranches, customers: () => loadCustomers(true) };
   function route() {
     const view = (location.hash.slice(1) || "dashboard").split("/")[0];
     const name = views[view] ? view : "dashboard";
@@ -694,7 +702,7 @@
   async function loadDashboard() {
     const [s, recent] = await Promise.all([api("stats/"), api("customers/?page_size=12")]);
     api("rejections/").then((r) => ($("#nav-rejections").textContent = r.length)).catch(() => {});
-    api("posts/").then((r) => ($("#nav-posts").textContent = (r.totals.instagram || 0) + (r.totals.whatsapp || 0) + (r.totals.facebook || 0))).catch(() => {});
+    for (const p of ["instagram", "whatsapp"]) api(`sharers/${p}/`).then((r) => ($(`#nav-sh-${p}`).textContent = r.count)).catch(() => {});
     api("customers/?video=1&page_size=1").then((r) => ($("#nav-video").textContent = r.count)).catch(() => {});
     $("#s-today").textContent = s.customers_today;
     $("#s-customers").textContent = s.customers;
@@ -930,35 +938,35 @@
     show(Math.min(Number(grid.dataset.page) || 1, pages));
   }
 
-  // ---------------- Posts ----------------
-  let poPage = 1;
-  const PO_LABEL = { instagram: "📸 Instagram", whatsapp: "💬 WhatsApp Status", facebook: "📘 Facebook", more: "Other" };
-  async function loadPosts() {
-    const platform = $("#po-platform").value;
-    const data = await api(`posts/?page=${poPage}${platform ? "&platform=" + platform : ""}`, { fresh: true });
-    const t = data.totals;
-    $("#nav-posts").textContent = (t.instagram || 0) + (t.whatsapp || 0) + (t.facebook || 0);
-    $("#po-totals").innerHTML = ["instagram", "whatsapp", "facebook"].map((k) => `<div class="card stat"><span>${PO_LABEL[k]}</span><b>${t[k] || 0}</b></div>`).join("");
-    const list = $("#po-list");
-    list.innerHTML = data.results.length ? "" : `<div class="empty-note">No posts yet.</div>`;
+  // ---------------- Instagram / WhatsApp sharing ----------------
+  const shPage = { instagram: 1, whatsapp: 1 };
+  async function loadSharers(platform) {
+    const data = await api(`sharers/${platform}/?page=${shPage[platform]}`, { fresh: true });
+    const ig = platform === "instagram";
+    $(`#nav-sh-${platform}`).textContent = data.count;
+    $(`#sh-${platform}-totals`).innerHTML = `<div class="card stat"><span>Customers who shared</span><b>${data.count}</b></div>
+      <div class="card stat"><span>${ig ? "Post links verified" : "Status confirmed"}</span><b>${data.proved}</b></div>`;
+    const list = $(`#sh-${platform}`);
+    list.innerHTML = data.results.length ? "" : `<div class="empty-note">Nobody has shared on ${ig ? "Instagram" : "WhatsApp"} yet.</div>`;
     for (const r of data.results) {
       const el = document.createElement("div");
-      el.className = `cust po-card po-${r.platform}`;
+      el.className = `cust po-card po-${platform}`;
+      const proof = r.proof
+        ? (ig ? `<span class="pill">✓ Post link verified</span>` : `<span class="pill">✓ Status confirmed</span>`)
+        : `<span class="pill warn">${ig ? "Shared · no post link yet" : "Shared · Status not confirmed"}</span>`;
       el.innerHTML = `<div class="info">
-          <span class="po-platform">${PO_LABEL[r.platform] || r.platform}</span>
-          <b>${esc(r.name || r.phone)}</b>
-          ${r.instagram_id ? `<a class="vr-ig" href="https://instagram.com/${encodeURIComponent(r.instagram_id)}" target="_blank" rel="noopener">@${esc(r.instagram_id)}</a>` : ""}
+          <div class="vr-head">${r.instagram_id ? `<a class="vr-ig" href="https://instagram.com/${encodeURIComponent(r.instagram_id)}" target="_blank" rel="noopener">@${esc(r.instagram_id)}</a>` : `<b>${esc(r.name || r.phone)}</b>`}${proof}</div>
+          ${r.instagram_id ? `<b>${esc(r.name || r.phone)}</b>` : ""}
           <small>${esc(r.phone)} · ${esc(r.branch || "No branch")}${r.reward ? " · 🎁 " + esc(rewardLabel(r.reward)) : ""}</small>
-          ${r.url ? `<a class="vr-post" href="${esc(r.url)}" target="_blank" rel="noopener">▶ Open the post</a>` : `<small class="hint">Confirmed by the customer (WhatsApp has no post link)</small>`}
-          <small>${new Date(r.at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</small>
+          <small>Shared ${r.shares} time${r.shares === 1 ? "" : "s"} · last ${new Date(r.last).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</small>
+          ${ig && r.proof ? `<a class="vr-post" href="${esc(r.proof)}" target="_blank" rel="noopener">▶ Open the post</a>` : ""}
         </div>
-        <div class="acts"><button class="details primary">Customer</button>${r.url ? `<a class="btn" href="${esc(r.url)}" target="_blank" rel="noopener">Open post</a>` : ""}</div>`;
+        <div class="acts"><button class="details primary">Customer</button>${r.instagram_id ? `<a class="btn" href="https://instagram.com/${encodeURIComponent(r.instagram_id)}" target="_blank" rel="noopener">Profile</a>` : ""}</div>`;
       $("button.details", el).addEventListener("click", () => customerDetail(r.customer).catch((e) => toast(e.message, true)));
       list.appendChild(el);
     }
-    pagerNav(list, poPage, Math.ceil(data.count / PER_PAGE), (n) => { poPage = n; loadPosts().catch((e) => toast(e.message, true)); });
+    pagerNav(list, shPage[platform], Math.ceil(data.count / PER_PAGE), (n) => { shPage[platform] = n; loadSharers(platform).catch((e) => toast(e.message, true)); });
   }
-  $("#po-platform").addEventListener("change", () => { poPage = 1; loadPosts().catch((e) => toast(e.message, true)); });
 
   // ---------------- Video reviews ----------------
   let vrPage = 1;
