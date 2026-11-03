@@ -153,7 +153,8 @@ export function ManagerIntake() {
         product: f.product || found.product || "",
         imei: f.imei || found.imei || "",
         invoice: f.invoice || found.invoice || "",
-        bill: f.bill || found.bill || "",
+        // The bill value is always typed by the manager.
+        bill: f.bill,
       }));
     } catch (e) {
       scan.current = null;

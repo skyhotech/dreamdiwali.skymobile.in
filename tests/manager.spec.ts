@@ -31,7 +31,9 @@ test("a PDF invoice fills the form, passes the check and offers WhatsApp", async
   await expect(page.locator("#m-phone")).toHaveValue("9787372973");
   await expect(page.locator("#m-imei")).toHaveValue("P-12568801-D");
   await expect(page.getByLabel("Invoice number")).toHaveValue("SI2627VLR31054");
-  await expect(page.getByLabel("Bill value")).toHaveValue("64000");
+  // Never filled from the bill: the manager types it.
+  await expect(page.getByLabel("Bill value")).toHaveValue("");
+  await page.getByLabel("Bill value").fill("64000");
   // The branch is always the manager's own choice.
   await expect(page.getByLabel("Branch")).toHaveValue("");
   await chooseBranch(page, "ARNI-1");
@@ -48,6 +50,7 @@ test("an invoice number that differs from the bill is a data mismatch", async ({
   await page.locator("#m-image").setInputFiles(INVOICE);
   await expect(page.getByLabel("Invoice number")).toHaveValue("SI2627VLR31054", { timeout: 20_000 });
   await page.getByLabel("Invoice number").fill("SI2627VLR31099");
+  await page.getByLabel("Bill value").fill("64000");
   await chooseBranch(page, "ARCOT");
   await page.getByRole("button", { name: "Check" }).click();
   await expect(page.getByRole("alert").first()).toContainText("Data mismatch");
@@ -68,7 +71,7 @@ test("a bill below ₹10,000 gets no link and an explanation window", async ({ p
   await page.route("**/api/manager/check/", (r) => ((checked = true), r.fulfill({ json: {} })));
   await openForm(page);
   await page.locator("#m-image").setInputFiles(INVOICE);
-  await expect(page.getByLabel("Bill value")).toHaveValue("64000", { timeout: 20_000 });
+  await expect(page.getByLabel("Invoice number")).toHaveValue("SI2627VLR31054", { timeout: 20_000 });
   await page.getByLabel("Bill value").fill("9999");
   await chooseBranch(page, "ARCOT");
   await page.getByRole("button", { name: "Check" }).click();
@@ -88,6 +91,7 @@ test("an IMEI or mobile number that differs from the bill is a data mismatch", a
   await page.locator("#m-image").setInputFiles(INVOICE);
   await expect(page.locator("#m-imei")).toHaveValue("P-12568801-D", { timeout: 20_000 });
   await chooseBranch(page, "ARCOT");
+  await page.getByLabel("Bill value").fill("64000");
   await page.locator("#m-imei").fill("P-99999999-D");
   await page.getByRole("button", { name: "Check" }).click();
   await expect(page.getByRole("alert").first()).toContainText("IMEI");
