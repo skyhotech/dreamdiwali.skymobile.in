@@ -31,6 +31,7 @@ from .serializers import (
     branch_link,
     spin_link,
     CustomerDetailSerializer,
+    CustomerEventSerializer,
     CustomerIntakeSerializer,
     EventSerializer,
     SpinItemSerializer,
@@ -481,6 +482,11 @@ class CustomerViewSet(
         qs = Customer.objects.select_related("mirror").prefetch_related("events")
         if self.request.query_params.get("abandoned"):
             qs = qs.filter(ABANDONED)
+        reached = self.request.query_params.get("reached")
+        if reached == "shared":
+            qs = qs.filter(events__kind__in=CustomerEvent.SHARE_KINDS).distinct()
+        elif reached:
+            qs = qs.filter(events__kind=reached).distinct()
         mirror = self.request.query_params.get("mirror")
         if mirror:
             qs = qs.filter(mirror_id=mirror)
@@ -503,6 +509,12 @@ class CustomerViewSet(
             if f:
                 f.delete(save=False)
         instance.delete()
+
+    @action(detail=False, methods=["get"])
+    def failed(self, request):
+        """Latest checks that were refused; these never became customers."""
+        rows = CustomerEvent.objects.filter(kind="check_failed").order_by("-created_at")[:200]
+        return Response(CustomerEventSerializer(rows, many=True).data)
 
     @action(detail=False, methods=["get"], url_path="export")
     def export(self, request):

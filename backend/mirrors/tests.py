@@ -113,6 +113,15 @@ class BranchFlowTests(TestCase):
         self.client.logout()
         self.assertEqual(self.client.get("/api/admin/spin-items/").status_code, 403)
 
+    def test_journey_steps_list_their_customers(self):
+        self.spin(self.token(self.check()))
+        self.check("bad")
+        self.client.force_login(self.staff)
+        spun = self.client.get("/api/admin/customers/?reached=spun").json()["results"]
+        self.assertEqual(len(spun), 1)
+        self.assertEqual(self.client.get("/api/admin/customers/?reached=shared").json()["count"], 0)
+        self.assertEqual(len(self.client.get("/api/admin/customers/failed/").json()), 1)
+
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)
         self.assertTrue(Branch.objects.filter(slug="thiruvannamalai-1").exists())

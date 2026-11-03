@@ -110,6 +110,19 @@
   .bhead h3 { margin: 0; font-size: 20px; }
   .tag { font-size: 11px; padding: 1px 8px; border-radius: 99px; background: #f6ecd9; color: #7a5a1f; align-self: flex-start; }
   [hidden] { display: none !important; }
+  .j-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .j-node { flex: 1 1 120px; min-height: 92px; display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 12px; text-align: center;
+    border: 2px solid var(--line); border-radius: 14px; background: #fff; color: inherit; text-decoration: none; opacity: 0; animation: j-in .4s ease forwards; transition: transform .15s, border-color .15s; }
+  .j-node b { font-size: 26px; }
+  .j-node span { font-size: 13px; }
+  .j-node:hover { transform: translateY(-3px); border-color: #d6a447; }
+  .j-node.on { border-color: #d6a447; background: #fff7e6; }
+  .j-node.warn b { color: #b3261e; }
+  .j-arrow { flex: none; width: 22px; height: 3px; border-radius: 3px; background: linear-gradient(90deg, #eadfce 30%, #d6a447 50%, #eadfce 70%); background-size: 300% 100%; animation: j-flow 1.6s linear infinite; }
+  @keyframes j-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  @keyframes j-flow { from { background-position: 100% 0; } to { background-position: 0 0; } }
+  @media (prefers-reduced-motion: reduce) { .j-node { animation: none; opacity: 1; } .j-arrow { animation: none; } }
+  @media (max-width: 760px) { .j-node { flex-basis: 100%; } .j-arrow { width: 3px; height: 16px; margin: 0 auto; } }
   .menu-btn { display: none; align-items: center; gap: 8px; margin-bottom: 14px; min-height: 44px; padding: 0 14px;
     border: 0; border-radius: 10px; background: var(--side); color: #fff; font: inherit; }
   .menu-shade { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
@@ -156,6 +169,7 @@
   <aside id="side-menu">
     <h1>✦ SKY Mirror</h1>
     <a href="#dashboard" data-view="dashboard">Dashboard</a>
+    <a href="#journey" data-view="journey">Customer journey</a>
     <a href="#mirrors" data-view="mirrors">Mirrors <span class="badge" id="nav-mirrors">–</span></a>
     <a href="#branches" data-view="branches">Branches <span class="badge" id="nav-branches">–</span></a>
     <a href="#spin-items" data-view="spin-items">Spin wheel items</a>
@@ -178,7 +192,6 @@
         <div class="card stat"><span>Gifts given</span><b id="s-gifts">–</b></div>
         <div class="card stat"><span>Branches</span><b id="s-branches">–</b></div>
       </div>
-      <div class="card" style="margin-bottom:14px"><b>Customer journey</b><div id="s-funnel" style="margin-top:10px"></div></div>
       <div class="grid2">
         <div class="card"><b>Selfies, last 7 days</b><div class="bars" id="s-bars"></div></div>
         <div class="card"><b>Most used mirrors</b><div id="s-top" style="margin-top:10px"></div></div>
@@ -311,6 +324,15 @@
       </div>
     </section>
 
+    <!-- Customer journey -->
+    <section id="view-journey" hidden>
+      <h2>Customer journey</h2>
+      <div class="j-flow" id="j-flow"></div>
+      <div class="j-flow" id="j-side" style="margin-top:12px"></div>
+      <h3 id="j-title" style="margin:18px 0 10px"></h3>
+      <div class="cgrid" id="j-list"></div>
+    </section>
+
     <!-- Spin wheel items -->
     <section id="view-spin-items" hidden>
       <h2>Spin wheel items</h2>
@@ -388,7 +410,7 @@
   lightbox.addEventListener("click", () => lightbox.classList.remove("open"));
 
   // ---------------- Router ----------------
-  const views = { "spin-items": loadSpinItems, dashboard: loadDashboard, mirrors: loadMirrors, branches: loadBranches, customers: () => loadCustomers(true) };
+  const views = { journey: loadJourney, "spin-items": loadSpinItems, dashboard: loadDashboard, mirrors: loadMirrors, branches: loadBranches, customers: () => loadCustomers(true) };
   function route() {
     const view = (location.hash.slice(1) || "dashboard").split("/")[0];
     const name = views[view] ? view : "dashboard";
@@ -419,7 +441,6 @@
     $("#nav-customers").textContent = s.customers;
     $("#s-bars").innerHTML = bars(s.per_day);
     $("#s-top").innerHTML = rankRows(s.top_mirrors, "No selfies yet.");
-    $("#s-funnel").innerHTML = funnelRows(s.funnel) + `<div class="row" style="justify-content:space-between;padding:6px 0"><span>Failed checks</span><b>${s.failed_checks}</b></div><div class="row" style="justify-content:space-between;padding:6px 0"><span>Abandoned</span><b>${s.abandoned}</b></div>`;
     $("#s-branch-top").innerHTML = s.top_branches.length
       ? s.top_branches.map((b) => `<a href="#branches/${b.id}" class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);color:inherit;text-decoration:none"><span>📍 ${esc(b.name)}</span><b>${b.n}</b></a>`).join("")
       : `<p class="hint">No branches yet. <a href="#branches">Add your first branch</a>.</p>`;
@@ -651,9 +672,26 @@
   });
 
   // ---------------- Customers ----------------
-  const FUNNEL = { checked: "Purchases checked", whatsapp_sent: "WhatsApp links sent", link_opened: "Links opened", spun: "Spun the wheel", poster_saved: "Posters made", shared: "Shared" };
-  function funnelRows(f) {
-    return Object.entries(FUNNEL).map(([k, label]) => `<div class="row" style="justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><span>${label}</span><b>${f[k]}</b></div>`).join("");
+  const FUNNEL = { checked: "Purchases checked", whatsapp_sent: "WhatsApp links sent", link_opened: "Links opened", spun: "Wheel spins", poster_saved: "Posters made", shared: "Shared" };
+  async function loadJourney() {
+    const s = await api("stats/"), step = location.hash.split("/")[1] || "";
+    const steps = Object.keys(FUNNEL);
+    const node = (key, label, n, extra = "", i = 0) => `<a class="j-node ${extra} ${step === key ? "on" : ""}" href="#journey/${key}" style="animation-delay:${i * 0.1}s"><b>${n}</b><span>${label}</span></a>`;
+    $("#j-flow").innerHTML = steps.map((k, i) => node(k, FUNNEL[k], s.funnel[k], "", i)).join(`<i class="j-arrow"></i>`);
+    $("#j-side").innerHTML = node("abandoned", "Abandoned", s.abandoned, "warn", 6) + node("failed", "Failed checks", s.failed_checks, "warn", 7);
+    const list = $("#j-list");
+    list.innerHTML = "";
+    $("#j-title").textContent = step ? (FUNNEL[step] || { abandoned: "Abandoned", failed: "Failed checks" }[step] || "") : "Tap a step to see its customers";
+    if (!step) return;
+    if (step === "failed") {
+      const rows = await api("customers/failed/");
+      list.innerHTML = rows.length ? rows.map((e) => `<div class="cust"><div class="info"><b>${esc(e.phone || "No number")}</b><small>${esc(Object.values(e.detail.errors || {}).flat().join(" "))}</small><small>Branch: ${esc(e.detail.branch || "—")}</small><small>${new Date(e.created_at).toLocaleString()}</small></div></div>`).join("") : `<div class="empty-note">No failed checks.</div>`;
+      return;
+    }
+    const query = step === "abandoned" ? "abandoned=1" : "reached=" + encodeURIComponent(step);
+    const data = await api(`customers/?page_size=100&${query}`);
+    if (!data.results.length) list.innerHTML = `<div class="empty-note">No customers at this step yet.</div>`;
+    for (const c of data.results) list.appendChild(customerCard(c));
   }
   const EVENTS = { ...FUNNEL, checked: "Purchase checked", whatsapp_sent: "WhatsApp link sent", link_opened: "Link opened", poster_saved: "Poster made", shared_instagram: "Shared: Instagram", shared_facebook: "Shared: Facebook", shared_whatsapp: "Shared: WhatsApp", shared_more: "Shared: other" };
   async function customerDetail(id) {
