@@ -468,6 +468,11 @@ class ManagerScan(APIView):
             return Response({"invoice": [str(exc)]}, status=400)
         finally:
             _OCR_WORK.release()
+        from .serializers import NOT_AN_INVOICE, looks_like_invoice
+
+        # A QR poster or a photo of the box: say so now, not at Check.
+        if not looks_like_invoice(text):
+            return Response({"invoice": [NOT_AN_INVOICE]}, status=400)
         scan = secrets.token_urlsafe(16)
         cache.set(f"invoice-scan:{scan}", text, SCAN_SECONDS)
         return Response({"scan": scan, "text": text})

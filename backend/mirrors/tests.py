@@ -24,7 +24,7 @@ OTHER_IMEI = "356938035643809"
 
 def bill_text(phone, imei, invoice=None, name="Asha", product="Phone 15"):
     return (
-        f"Invoice No : {invoice or 'INV-' + imei}\nBilled To,\n{name}\nPh: {phone}\n"
+        f"TAX INVOICE\nInvoice No : {invoice or 'INV-' + imei}\nBilled To,\n{name}\nPh: {phone}\n"
         f"{product}\nIMEI NO: {imei}\nNet Total 1 24,999.00\n"
     )
 
@@ -363,6 +363,25 @@ class BranchFlowTests(TestCase):
 
     def test_rejections_are_staff_only(self):
         self.assertEqual(self.client.get("/api/admin/rejections/").status_code, 403)
+
+    def test_a_mismatch_says_what_the_bill_shows(self):
+        text = bill_text("7695837705", IMEI, "SI2627RPT-12260")
+        res = self.check(invoice_number="SI2627RPT-12261", ocr_text=text)
+        message = res.json()["invoice_image"][0]
+        self.assertIn("invoice number", message)
+        self.assertIn("The bill shows invoice number SI2627RPT-12260", message)
+        self.assertIn("mobile number 7695837705", message)
+
+    def test_imei_run_into_the_next_column_is_still_found(self):
+        from .serializers import invoice_imeis
+
+        # Seen on a real PDF: IMEI 860209082539285 followed directly by HSN 85171300.
+        self.assertEqual(invoice_imeis("BLUE MOBILEIMEI NO: 86020908253928585171300"), ["860209082539285"])
+
+    def test_a_qr_poster_or_box_photo_is_not_an_invoice(self):
+        poster = "SKY Dream Diwali\nscan the QR code or open this link:\nhttps://example/?branch=x"
+        res = self.check(ocr_text=poster)
+        self.assertIn("doesn't look like a SKY invoice", res.json()["invoice_image"][0])
 
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)

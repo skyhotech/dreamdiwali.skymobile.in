@@ -391,8 +391,34 @@ def _printed(text, labelled, typed):
 def invoice_imeis(text):
     """The phone IMEIs on a bill: 15-digit numbers that pass the IMEI check,
     found by their digits so a garbled "IMEI NO" label doesn't matter."""
-    runs = re.findall(r"(?<!\d)\d{15}(?!\d)", re.sub(r"(?<=\d)[ -](?=\d)", "", text))
-    return list(dict.fromkeys(n for n in runs if imei_valid(n)))
+    runs = re.findall(r"\d{15,}", re.sub(r"(?<=\d)[ -](?=\d)", "", text))
+    # PDFs can run the IMEI straight into the next column (its HSN code), so a
+    # longer run is checked at its start and its end as well.
+    found = []
+    for run in runs:
+        for n in {run[:15], run[-15:]} if len(run) > 15 else {run}:
+            if imei_valid(n):
+                found.append(n)
+    return list(dict.fromkeys(found))
+
+
+def invoice_shows(text):
+    """What the bill itself says, to tell the manager what to correct."""
+    number = _INVOICE_LINE.findall(text)[:1]
+    at = re.search(r"billed\s*to", text, re.I)
+    phone = re.search(r"ph\w*\s*[.:;\-]*\s*(?:\+?91)?(\d{10})", text[at.start():] if at else text, re.I)
+    return {
+        "invoice number": re.sub(r"\s+", "", number[0]).split("Invoice")[0] if number else "",
+        "IMEI": ", ".join(invoice_imeis(text)),
+        "mobile number": phone[1] if phone else "",
+    }
+
+
+def looks_like_invoice(text):
+    """A SKY bill names itself and its customer; a QR poster or a photo of the
+    box doesn't."""
+    words = len(re.findall(r"tax\s*invoice|invoice\s*no|billed\s*to|gstin|net\s*total", text, re.I))
+    return words >= 2
 
 
 def invoice_missing(text, data):
@@ -412,6 +438,12 @@ def invoice_missing(text, data):
     if not (phone[1].endswith(data["phone"]) if phone else data["phone"] in text):
         missing.append("mobile number")
     return missing
+
+
+NOT_AN_INVOICE = (
+    "This doesn't look like a SKY invoice. Please upload the invoice PDF or a "
+    "clear photo of the whole bill."
+)
 
 
 # Only purchases of at least this much get a spin link. Kept in sync with
@@ -469,11 +501,16 @@ class CustomerIntakeSerializer(serializers.Serializer):
             data["imei"] = ""  # not a phone: no IMEI to keep or check
         elif not data.get("imei"):
             raise serializers.ValidationError({"imei": ["Enter the IMEI shown on the invoice."]})
+        if not looks_like_invoice(text):
+            raise serializers.ValidationError({"invoice_image": [NOT_AN_INVOICE]})
         missing = invoice_missing(text, data)
         if missing:
-            raise serializers.ValidationError(
-                {"invoice_image": [f"Invoice does not show this {' or '.join(missing)}."]}
-            )
+            shows = invoice_shows(text)
+            hints = [f"{m} {shows[m]}" for m in missing if shows.get(m)]
+            message = f"Invoice does not show this {' or '.join(missing)}."
+            if hints:
+                message += f" The bill shows {'; '.join(hints)}."
+            raise serializers.ValidationError({"invoice_image": [message]})
         return data
 
 
