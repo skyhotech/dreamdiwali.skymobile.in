@@ -87,6 +87,7 @@ test("an IMEI or mobile number that differs from the bill is a data mismatch", a
   await openForm(page);
   await page.locator("#m-image").setInputFiles(INVOICE);
   await expect(page.locator("#m-imei")).toHaveValue("P-12568801-D", { timeout: 20_000 });
+  await chooseBranch(page, "ARCOT");
   await page.locator("#m-imei").fill("P-99999999-D");
   await page.getByRole("button", { name: "Check" }).click();
   await expect(page.getByRole("alert").first()).toContainText("IMEI");
