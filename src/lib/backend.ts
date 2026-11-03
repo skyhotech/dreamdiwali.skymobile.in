@@ -351,13 +351,17 @@ export const saveProfile = (
   handle: string,
 ) =>
   postJson<{ handle: string }>("/customers/profile/", { token, platform, handle });
-/** Records the link to the customer's own post, as proof they posted. */
-export const savePostLink = (token: string, platform: string, url: string) =>
+/** Records the link to the customer's own post, as proof they posted
+ *  (WhatsApp has no post link: the customer's confirmation is sent alone). */
+export const savePostLink = (token: string, platform: string, url = "") =>
   postJson<{ ok: boolean }>("/customers/event/", {
     token,
     kind: `posted_${platform}`,
-    url,
+    ...(url && { url }),
   });
+/** Instagram and WhatsApp are done: the server unlocks the gift. */
+export const unlockGift = (token: string) =>
+  postJson<{ ok: boolean }>("/customers/event/", { token, kind: "gift_unlocked" });
 // The uploaded poster's public address, once the server has it.
 let posterUrl = "";
 export const getPosterUrl = () => posterUrl;

@@ -285,6 +285,8 @@ class CustomerEvent(models.Model):
     OPEN_KINDS = [f"share_opened_{p}" for p in PLATFORMS]
     SHARE_KINDS = [f"shared_{p}" for p in PLATFORMS]
     POSTED_KINDS = [f"posted_{p}" for p in PLATFORMS]
+    # Shared on Instagram and WhatsApp: the gift may be collected.
+    GIFT_UNLOCKED = "gift_unlocked"
 
     customer = models.ForeignKey(
         Customer, null=True, blank=True, on_delete=models.CASCADE, related_name="events"

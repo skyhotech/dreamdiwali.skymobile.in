@@ -3856,3 +3856,51 @@ html.no-pull-refresh body {
     animation: none;
   }
 }
+.share-wizard {
+  text-align: center;
+}
+.share-wizard form {
+  text-align: left;
+}
+.wizard-steps {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  font-weight: 700;
+}
+.wizard-steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  background: #f1e8da;
+  color: #8a7a68;
+}
+.wizard-steps li.now {
+  background: #7a1631;
+  color: #fff4dc;
+}
+.wizard-steps li.done {
+  background: #2b9f6b;
+  color: #fff;
+}
+.ig-icon {
+  background: linear-gradient(135deg, #feda75, #fa7e1e, #d62976, #962fbf) !important;
+}
+.gift-icon {
+  background: linear-gradient(135deg, #d6a447, #f3cf7a) !important;
+  color: #7a1631 !important;
+}
+.gift-name {
+  font-size: 22px;
+  font-weight: 800;
+  color: #7a1631;
+}
+.share-wizard {
+  position: relative;
+}

@@ -395,6 +395,16 @@ class BranchFlowTests(TestCase):
         res = self.check(scan_override="")
         self.assertIn("upload the invoice again", res.json()["scan"][0])
 
+    def test_gift_unlocks_only_after_instagram_link_and_whatsapp(self):
+        token = self.token(self.check())
+        post = lambda body: self.client.post("/api/customers/event/", {"token": token, **body}, content_type="application/json")
+        self.assertEqual(post({"kind": "gift_unlocked"}).status_code, 400)
+        self.assertEqual(post({"kind": "posted_instagram", "url": "https://example.com/x"}).status_code, 400)
+        self.assertEqual(post({"kind": "posted_instagram", "url": "https://www.instagram.com/reel/C1a2b3/"}).status_code, 200)
+        self.assertEqual(post({"kind": "gift_unlocked"}).status_code, 400)  # WhatsApp still to do
+        self.assertEqual(post({"kind": "posted_whatsapp"}).status_code, 200)
+        self.assertEqual(post({"kind": "gift_unlocked"}).status_code, 200)
+
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)
         self.assertTrue(Branch.objects.filter(slug="thiruvannamalai-1").exists())

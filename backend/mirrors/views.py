@@ -609,8 +609,12 @@ class CustomerEventView(APIView):
         customer = Customer.objects.filter(spin_token=ser.validated_data["token"]).first()
         if customer is None:
             return Response({"detail": INVALID_LINK}, status=status.HTTP_404_NOT_FOUND)
-        url = ser.validated_data.get("url", "")
-        _log(customer, ser.validated_data["kind"], **({"url": url} if url else {}))
+        url, kind = ser.validated_data.get("url", ""), ser.validated_data["kind"]
+        if kind == CustomerEvent.GIFT_UNLOCKED:
+            done = set(customer.events.values_list("kind", flat=True))
+            if not {"posted_instagram", "posted_whatsapp"} <= done:
+                return Response({"detail": "Share on Instagram and WhatsApp first."}, status=400)
+        _log(customer, kind, **({"url": url} if url else {}))
         return Response({"ok": True})
 
 

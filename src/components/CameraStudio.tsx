@@ -37,6 +37,7 @@ import { UploadStatus } from "./StatusNotices";
 import { ShareButtons } from "./ShareButtons";
 import { trackShare } from "../lib/backend";
 import { CameraAlert } from "./CameraAlert";
+import { ShareWizard } from "./ShareWizard";
 import { WhatsAppButton, WhatsAppNudge, shareOnWhatsapp } from "./WhatsAppShare";
 // Hands-free capture: how strong a smile counts, and how long a cue is held.
 const SMILE_THRESHOLD = 0.6;
@@ -60,7 +61,8 @@ export default function CameraStudio() {
     [completed, setCompleted] = useState(false),
     [poster, setPoster] = useState<Blob | null>(null),
     [captionMessage, setCaptionMessage] = useState(""),
-    [whatsappNudge, setWhatsappNudge] = useState(false);
+    [whatsappNudge, setWhatsappNudge] = useState(false),
+    [wizard, setWizard] = useState(false);
   const busyRef = useRef(false);
   const camera = useCamera(
     product ? "environment" : "user",
@@ -262,6 +264,8 @@ export default function CameraStudio() {
     c.width = c.height = 1;
     setPoster(blob);
     s.setSavedPoster(blob);
+    // The poster is ready: the step-by-step sharing window opens.
+    setWizard(true);
     // No automatic share here (it isn't a tap, so phones would refuse it):
     // the customer taps Post on Instagram, which opens the share sheet.
     setMessage("Your poster is ready! Tap Post on Instagram to share it.");
@@ -471,7 +475,15 @@ export default function CameraStudio() {
           </div>
         )}
       </aside>
-      {whatsappNudge && poster && (
+      {wizard && poster && (
+        <ShareWizard
+          poster={poster}
+          caption={caption}
+          filename={`${filename}.jpg`}
+          onClose={() => setWizard(false)}
+        />
+      )}
+      {whatsappNudge && poster && !wizard && (
         <WhatsAppNudge
           onShare={() => void shareOnWhatsapp(poster, caption, `${filename}.jpg`)}
           onClose={() => setWhatsappNudge(false)}

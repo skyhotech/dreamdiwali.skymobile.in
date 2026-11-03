@@ -150,7 +150,12 @@ async function takeSelfie(page: Page) {
 // The prize wheel opens after the first product photo, spins by itself and
 // the prize is added to the poster automatically.
 // The wheel now comes before the camera; these tests start with a prize won.
-async function spinAndClaim(_page: import("@playwright/test").Page) {}
+// After the product photo the guided share window opens: these camera tests
+// close it to reach the poster (the window has its own test).
+async function spinAndClaim(page: import("@playwright/test").Page) {
+  const close = page.getByRole("dialog").getByRole("button", { name: "Close" });
+  await close.waitFor({ timeout: 15_000 }).then(() => close.click(), () => {});
+}
 test("rear camera appears in the small product box, then captures and shares", async ({
   page,
 }) => {
@@ -691,4 +696,42 @@ test("inside Instagram's built-in browser: open in a real browser", async ({ bro
   await expect(alert).toContainText("Safari");
   await expect(alert.getByRole("button", { name: "Copy link" })).toBeVisible();
   await context.close();
+});
+
+test("guided sharing: Instagram link, WhatsApp, then the gift", async ({ page }) => {
+  const events: { kind: string; url?: string }[] = [];
+  await page.route("**/api/customers/event/", (r) => {
+    const body = r.request().postDataJSON() as { kind: string; url?: string };
+    events.push(body);
+    const bad = body.kind === "posted_instagram" && !/instagram\.com\/(p|reel|stories)\//.test(body.url ?? "");
+    return bad
+      ? r.fulfill({ status: 400, json: { url: ["Paste the link to your Instagram post, reel or story."] } })
+      : r.fulfill({ json: { ok: true } });
+  });
+  await mockCamera(page);
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "share", { value: async () => {} });
+    Object.defineProperty(navigator, "canShare", { value: () => true });
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: async () => {} } });
+  });
+  await takeSelfie(page);
+  await page.getByRole("button", { name: "Capture product and post on Instagram", exact: true }).click();
+  const wizard = page.getByRole("dialog");
+  await expect(wizard).toContainText("Step 1: Share on Instagram");
+  await wizard.getByRole("button", { name: "Share on Instagram" }).click();
+  await wizard.getByLabel("Link to your Instagram post").fill("https://example.com/not-instagram");
+  await wizard.getByRole("button", { name: "Check my post" }).click();
+  await expect(wizard).toContainText("Instagram post, reel or story");
+  await wizard.getByLabel("Link to your Instagram post").fill("https://www.instagram.com/reel/C1a2b3/");
+  await wizard.getByRole("button", { name: "Check my post" }).click();
+  await expect(wizard).toContainText("Step 2: Share on WhatsApp");
+  await wizard.getByRole("button", { name: "Share on WhatsApp" }).click();
+  await wizard.getByLabel("I have posted it on my WhatsApp Status").check();
+  await wizard.getByRole("button", { name: "Continue" }).click();
+  await expect(wizard).toContainText("Step 3: Share with more friends");
+  await wizard.getByRole("button", { name: "Done" }).click();
+  await expect(wizard.getByRole("heading", { name: "Get your gift from the store!" })).toBeVisible();
+  await expect(wizard).toContainText("Power Bank");
+  const kinds = events.map((e) => e.kind);
+  for (const k of ["posted_instagram", "posted_whatsapp", "gift_unlocked"]) expect(kinds).toContain(k);
 });

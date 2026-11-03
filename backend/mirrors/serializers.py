@@ -288,16 +288,31 @@ class ReviewSerializer(SpinSerializer):
     review = serializers.CharField(max_length=1000, required=False, allow_blank=True)
 
 
+# A real Instagram post, reel or story address.
+INSTAGRAM_POST = re.compile(
+    r"^https?://(?:www\.)?instagram\.com/(?:p|reel|reels|tv|stories/[A-Za-z0-9._]+|[A-Za-z0-9._]+/(?:p|reel))/[A-Za-z0-9_-]+",
+    re.I,
+)
+
+
 class EventSerializer(SpinSerializer):
     kind = serializers.ChoiceField(
         choices=CustomerEvent.OPEN_KINDS + CustomerEvent.SHARE_KINDS + CustomerEvent.POSTED_KINDS
+        + [CustomerEvent.GIFT_UNLOCKED]
     )
     # The customer's own post, pasted as proof (posted_* only).
     url = serializers.URLField(max_length=300, required=False, allow_blank=True)
 
     def validate(self, data):
-        if data["kind"].startswith("posted_") and not data.get("url"):
+        kind, url = data["kind"], data.get("url", "")
+        if kind == "posted_whatsapp":
+            return data  # WhatsApp gives no post link: the customer confirms
+        if kind.startswith("posted_") and not url:
             raise serializers.ValidationError({"url": ["Paste the link to your post."]})
+        if kind == "posted_instagram" and not INSTAGRAM_POST.match(url):
+            raise serializers.ValidationError(
+                {"url": ["Paste the link to your Instagram post, reel or story."]}
+            )
         return data
 
 
