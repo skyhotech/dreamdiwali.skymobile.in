@@ -1,0 +1,4 @@
+# Development and testing only; production installs requirements.txt.
+pytest==9.2.0
+pytest-django==4.14.0
+selenium==4.52.0
