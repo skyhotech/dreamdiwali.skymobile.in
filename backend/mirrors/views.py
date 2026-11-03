@@ -30,6 +30,7 @@ from .serializers import (
     PublicBranchSerializer,
     branch_link,
     spin_link,
+    ApprovalSerializer,
     CustomerDetailSerializer,
     CustomerEventSerializer,
     CustomerIntakeSerializer,
@@ -77,11 +78,14 @@ def _link_unsent(customers):
 
 def _failed_attempts():
     """Abandoned at the check: each number's latest refusal, dropped as soon as
-    that number passes, so a successful retry clears it."""
+    that number passes or an admin approves or dismisses it."""
     passed = Customer.objects.filter(spin_token__isnull=False).values("phone")
     rows, seen = [], set()
     failed = CustomerEvent.objects.filter(kind="check_failed").exclude(phone__in=passed)
     for event in failed.order_by("-created_at"):
+        if event.detail.get("resolved"):
+            seen.add(event.phone)
+            continue
         if not event.phone or event.phone not in seen:
             seen.add(event.phone)
             rows.append(event)
@@ -345,6 +349,54 @@ class ManagerBranches(APIView):
         return Response(PublicBranchSerializer(branches, many=True).data)
 
 
+def _save_purchase(data, branch, **log):
+    """Files a checked purchase (by the manager's check or an admin's
+    approval) and gives it a spin link."""
+    try:
+        with transaction.atomic():
+            customer = Customer.objects.select_for_update().filter(phone=data["phone"]).first()
+            if customer and customer.reward:
+                raise ValidationError({"phone": ["This customer has already claimed a gift."]})
+            others = Customer.objects.exclude(pk=customer.pk if customer else None)
+            if data["imei"] and others.filter(imei=data["imei"]).exists():
+                raise ValidationError({"imei": ["This IMEI is already registered."]})
+            if others.filter(branch=branch, invoice_number=data["invoice_number"]).exists():
+                raise ValidationError(
+                    {"invoice_number": ["This invoice is already registered at this branch."]}
+                )
+            customer = customer or Customer(
+                phone=data["phone"], session=f"phone-{data['phone']}"
+            )
+            new = customer.pk is None
+            # Changed details get a fresh link; the old one stops working.
+            changed = not new and (
+                customer.name, customer.email, customer.product_details, customer.imei,
+                customer.invoice_number, customer.bill_value, customer.branch_id,
+            ) != (
+                data["name"], data.get("email", ""), data["product_details"], data["imei"],
+                data["invoice_number"], data["bill_value"], branch.pk,
+            )
+            customer.name = data["name"]
+            customer.email = data.get("email", "")
+            customer.product_details = data["product_details"]
+            customer.imei = data["imei"]
+            customer.invoice_number = data["invoice_number"]
+            customer.bill_value = data["bill_value"]
+            customer.branch, customer.branch_name = branch, branch.name
+            customer.consent_at = customer.consent_at or timezone.now()
+            customer.ocr_text = data["ocr_text"]
+            customer.blur_score = data["blur_score"]
+            if changed or not customer.spin_token:
+                customer.spin_token = secrets.token_urlsafe(24)
+                customer.link_version += 1
+            customer.save()
+            _log(customer, "checked", version=customer.link_version, link_changed=changed, **log)
+    except IntegrityError:
+        # Two counters submitted the same purchase at the same moment.
+        raise ValidationError({"imei": ["This purchase is already registered."]})
+    return customer
+
+
 class ManagerCheck(APIView):
     """Checks a purchase and, if it holds up, saves it and returns the spin
     link. Pressing Check again after a correction updates the same customer
@@ -378,49 +430,7 @@ class ManagerCheck(APIView):
         ser = CustomerIntakeSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         data = ser.validated_data
-        branch = _branch(data["branch"])
-        try:
-            with transaction.atomic():
-                customer = Customer.objects.select_for_update().filter(phone=data["phone"]).first()
-                if customer and customer.reward:
-                    raise ValidationError({"phone": ["This customer has already claimed a gift."]})
-                others = Customer.objects.exclude(pk=customer.pk if customer else None)
-                if others.filter(imei=data["imei"]).exists():
-                    raise ValidationError({"imei": ["This IMEI is already registered."]})
-                if others.filter(branch=branch, invoice_number=data["invoice_number"]).exists():
-                    raise ValidationError(
-                        {"invoice_number": ["This invoice is already registered at this branch."]}
-                    )
-                customer = customer or Customer(
-                    phone=data["phone"], session=f"phone-{data['phone']}"
-                )
-                new = customer.pk is None
-                # Changed details get a fresh link; the old one stops working.
-                changed = not new and (
-                    customer.name, customer.email, customer.product_details, customer.imei,
-                    customer.invoice_number, customer.bill_value, customer.branch_id,
-                ) != (
-                    data["name"], data.get("email", ""), data["product_details"], data["imei"],
-                    data["invoice_number"], data["bill_value"], branch.pk,
-                )
-                customer.name = data["name"]
-                customer.email = data.get("email", "")
-                customer.product_details = data["product_details"]
-                customer.imei = data["imei"]
-                customer.invoice_number = data["invoice_number"]
-                customer.bill_value = data["bill_value"]
-                customer.branch, customer.branch_name = branch, branch.name
-                customer.consent_at = customer.consent_at or timezone.now()
-                customer.ocr_text = data["ocr_text"]
-                customer.blur_score = data["blur_score"]
-                if changed or not customer.spin_token:
-                    customer.spin_token = secrets.token_urlsafe(24)
-                    customer.link_version += 1
-                customer.save()
-                _log(customer, "checked", version=customer.link_version, link_changed=changed)
-        except IntegrityError:
-            # Two counters submitted the same purchase at the same moment.
-            raise ValidationError({"imei": ["This purchase is already registered."]})
+        customer = _save_purchase(data, _branch(data["branch"]))
         return Response({"phone": customer.phone, "link": spin_link(customer.spin_token)})
 
 
@@ -537,6 +547,21 @@ def live_visitors():
 
 def live_count():
     return len(live_visitors())
+
+
+class ClientError(APIView):
+    """A crash on a customer's phone, with its browser, to fix pages that
+    break only on some phones."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [MirrorPollThrottle]
+
+    def post(self, request):
+        detail = {k: str(request.data.get(k, ""))[:1500] for k in ("where", "message", "stack", "url")}
+        detail["browser"] = request.headers.get("User-Agent", "")[:300]
+        CustomerEvent.objects.create(kind="client_error", detail=detail)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class LivePing(APIView):
@@ -801,6 +826,47 @@ def _customer_stats(customers):
         "rewards": [{"id": r["reward"], "n": r["n"]} for r in rewards],
         "top_mirrors": [{"name": m["mirror_name"], "n": m["n"]} for m in top],
     }
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminUser])
+def rejections(request):
+    """Refused checks still waiting: what was typed and what Django read."""
+    return Response(CustomerEventSerializer(_failed_attempts()[:200], many=True, context={"ids": True}).data)
+
+
+def _resolve(event, how, user):
+    """Marks a refusal (and that number's earlier ones) as handled."""
+    for e in CustomerEvent.objects.filter(kind="check_failed", phone=event.phone):
+        e.detail = {**e.detail, "resolved": how, "resolved_by": user.get_username()}
+        e.save(update_fields=["detail"])
+
+
+@api_view(["POST"])
+@permission_classes([IsAdminUser])
+def approve_rejection(request, pk):
+    """An admin checked the refused purchase by hand: file it with the
+    corrected details and return the spin link to send."""
+    event = CustomerEvent.objects.filter(pk=pk, kind="check_failed").first()
+    if event is None:
+        return Response({"detail": "This rejection no longer exists."}, status=404)
+    ser = ApprovalSerializer(data=request.data)
+    ser.is_valid(raise_exception=True)
+    data = ser.validated_data
+    data["ocr_text"] = event.detail.get("ocr_text", "")
+    customer = _save_purchase(data, _branch(data["branch"]), approved_by=request.user.get_username())
+    _resolve(event, "approved", request.user)
+    return Response({"phone": customer.phone, "link": spin_link(customer.spin_token)})
+
+
+@api_view(["POST"])
+@permission_classes([IsAdminUser])
+def dismiss_rejection(request, pk):
+    event = CustomerEvent.objects.filter(pk=pk, kind="check_failed").first()
+    if event is None:
+        return Response({"detail": "This rejection no longer exists."}, status=404)
+    _resolve(event, "dismissed", request.user)
+    return Response({"ok": True})
 
 
 @api_view(["GET"])

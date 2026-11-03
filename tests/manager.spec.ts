@@ -12,7 +12,7 @@ const READING = [
   "Ph: 9787372973",
   "SNo Particulars HSN/SAC Qty",
   "1 SONY LED TV 85287217 1 64,000.00",
-  "IMEI NO: P-12568801-D",
+  "IMEI NO: 490154203237518",
   "Net Total 1 64,000.00",
 ].join("\n");
 async function openForm(page: Page) {
@@ -46,7 +46,8 @@ test("a PDF invoice fills the form, passes the check and offers WhatsApp", async
   await page.locator("#m-image").setInputFiles(INVOICE);
   await expect(page.getByLabel("Customer name")).toHaveValue("M MAHENDRAN", { timeout: 20_000 });
   await expect(page.locator("#m-phone")).toHaveValue("9787372973");
-  await expect(page.locator("#m-imei")).toHaveValue("P-12568801-D");
+  // A phone's bill: the IMEI field appears, filled in.
+  await expect(page.locator("#m-imei")).toHaveValue("490154203237518");
   await expect(page.getByLabel("Invoice number")).toHaveValue("SI2627VLR31054");
   // Never filled from the bill: the manager types it.
   await expect(page.getByLabel("Bill value")).toHaveValue("");
@@ -110,4 +111,16 @@ test("a bill below ₹10,000 gets no link and an explanation window", async ({ p
   await expect(notice).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Send link in WhatsApp" })).toHaveCount(0);
   expect(checked).toBe(false);
+});
+
+test("a bill without a phone IMEI hides the IMEI field", async ({ page }) => {
+  await openForm(page);
+  // Registered after openForm's own reading, so this TV bill wins.
+  await page.route("**/api/manager/scan/", (r) =>
+    r.fulfill({ json: { scan: "scan-tv", text: READING.replace("490154203237518", "P-12568801-D") } }),
+  );
+  await page.locator("#m-image").setInputFiles(INVOICE);
+  await expect(page.getByLabel("Invoice number")).toHaveValue("SI2627VLR31054", { timeout: 20_000 });
+  await expect(page.locator("#m-imei")).toHaveCount(0);
+  await expect(page.getByText("Use camera")).toHaveCount(0);
 });

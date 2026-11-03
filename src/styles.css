@@ -3781,3 +3781,46 @@ html.no-pull-refresh body {
 .camera-help-steps li + li {
   margin-top: 4px;
 }
+.sky-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  /* Only shows progress: taps always reach the page underneath. */
+  pointer-events: none;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  background: rgba(255, 250, 240, 0.72);
+  backdrop-filter: blur(3px);
+  color: #7a1631;
+  font-weight: 700;
+}
+.sky-loader img {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(122, 22, 49, 0.3);
+  animation: sky-loader-spin 1s linear infinite;
+}
+@keyframes sky-loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sky-loader img {
+    animation-duration: 3s;
+  }
+}
+.crash-screen {
+  display: grid;
+  place-content: center;
+  gap: 12px;
+  min-height: 100dvh;
+  padding: 24px;
+  text-align: center;
+  background: #fffaf0;
+  color: #3c2418;
+}

@@ -21,6 +21,7 @@ api_urlpatterns = [
     path("customers/terms/", views.CustomerTerms.as_view(), name="customer-terms"),
     path("customers/review/", views.CustomerReview.as_view(), name="customer-review"),
     path("live/", views.LivePing.as_view(), name="live-ping"),
+    path("client-error/", views.ClientError.as_view(), name="client-error"),
     path("customers/profile/", views.CustomerProfile.as_view(), name="customer-profile"),
     path("customers/event/", views.CustomerEventView.as_view(), name="customer-event"),
     path("manager/sent/", views.ManagerSent.as_view(), name="manager-sent"),
@@ -29,6 +30,9 @@ api_urlpatterns = [
     path("branches/<slug:slug>/", views.PublicBranch.as_view(), name="public-branch"),
     path("admin/stats/", views.stats, name="admin-stats"),
     path("admin/server/", views.server_status, name="admin-server"),
+    path("admin/rejections/", views.rejections, name="admin-rejections"),
+    path("admin/rejections/<int:pk>/approve/", views.approve_rejection, name="admin-rejection-approve"),
+    path("admin/rejections/<int:pk>/dismiss/", views.dismiss_rejection, name="admin-rejection-dismiss"),
     path("admin/backup.sql", views.database_backup, name="admin-backup"),
     path("admin/", include(router.urls)),
 ]

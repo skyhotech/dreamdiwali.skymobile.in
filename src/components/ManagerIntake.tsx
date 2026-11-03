@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Camera, Check, MessageCircle, ScanLine, Upload, X } from "lucide-react";
+import { Check, MessageCircle, ScanLine, Upload, X } from "lucide-react";
 import skyLogo from "../assets/brand/sky.webp";
 import errorSound from "../assets/rewards/error.mp3";
 import { motion, useAnimationControls } from "motion/react";
@@ -18,12 +18,13 @@ import {
   checkPurchase,
   scanInvoice,
   fetchManagerBranches,
-  imeiOrSerialValid,
+  imeiValid,
   trackSent,
   type BranchOption,
 } from "../lib/backend";
 import {
   extractInvoice,
+  luhnImeis,
   checkSharpness,
 } from "../lib/invoiceScan";
 import { initialBranches, saveBranches } from "../lib/branches";
@@ -62,6 +63,8 @@ export function ManagerIntake() {
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState("Checking…");
   const [filling, setFilling] = useState(false);
+  // The invoice is a phone's: it carries a 15-digit IMEI to fill and check.
+  const [hasImei, setHasImei] = useState(false);
   const [belowMinimum, setBelowMinimum] = useState(false);
   const [link, setLink] = useState("");
   const [sent, setSent] = useState(false);
@@ -140,14 +143,17 @@ export function ManagerIntake() {
     if (!file) return;
     setFilling(true);
     try {
-      const found = extractInvoice((await readFile(file)).text);
+      const { text } = await readFile(file);
+      const found = extractInvoice(text);
+      const phoneImeis = luhnImeis(text);
+      setHasImei(phoneImeis.length > 0);
       // Fills gaps only: what the manager typed stays.
       setForm((f) => ({
         name: f.name || found.name || "",
         phone: f.phone || found.phone || "",
         email: f.email,
         product: f.product || found.product || "",
-        imei: f.imei || found.imei || "",
+        imei: phoneImeis.length ? f.imei || phoneImeis[0] : "",
         invoice: f.invoice || found.invoice || "",
         // The bill value is always typed by the manager.
         bill: f.bill,
@@ -164,7 +170,7 @@ export function ManagerIntake() {
     if (!PHONE_PATTERN.test(form.phone))
       return "Enter a valid 10-digit mobile number.";
     if (!form.product.trim()) return "Enter the product details.";
-    if (!imeiOrSerialValid(form.imei)) return "This IMEI number is not valid.";
+    if (hasImei && !imeiValid(form.imei)) return "This IMEI number is not valid.";
     if (!form.invoice.trim()) return "Enter the invoice number.";
     if (!(Number(form.bill) >= 1)) return "Enter the bill value.";
     if (!branch) return "Select a branch.";
@@ -317,33 +323,38 @@ export function ManagerIntake() {
             autoComplete: "off",
           })}
           {field("product", "Product details", { maxLength: 160 })}
-          <label htmlFor="m-imei">IMEI / serial number</label>
-          <div className="manager-row">
-            <input
-              id="m-imei"
-              className="manager-input"
-              maxLength={30}
-              autoCapitalize="characters"
-              placeholder="Type or scan"
-              value={form.imei}
-              onChange={(e) =>
-                change("imei", e.target.value.replace(/[^a-zA-Z0-9_-]/g, "").toUpperCase())
-              }
-            />
-            <button
-              type="button"
-              className="manager-scan"
-              aria-expanded={scanning}
-              onClick={() => setScanning((v) => !v)}
-            >
-              {scanning ? <X size={18} /> : <ScanLine size={18} />}
-              {scanning ? "Close" : "Scan"}
-            </button>
-          </div>
-          {scanning && (
-            <Suspense fallback={<p className="phone-help">Opening camera…</p>}>
-              <ImeiScanner onScan={onScan} />
-            </Suspense>
+          {/* Phones only: shown when the invoice carries a 15-digit IMEI. */}
+          {hasImei && (
+            <>
+            <label htmlFor="m-imei">IMEI number</label>
+            <div className="manager-row">
+              <input
+                id="m-imei"
+                className="manager-input"
+                maxLength={15}
+                inputMode="numeric"
+                placeholder="Type or scan"
+                value={form.imei}
+                onChange={(e) =>
+                  change("imei", e.target.value.replace(/\D/g, ""))
+                }
+              />
+              <button
+                type="button"
+                className="manager-scan"
+                aria-expanded={scanning}
+                onClick={() => setScanning((v) => !v)}
+              >
+                {scanning ? <X size={18} /> : <ScanLine size={18} />}
+                {scanning ? "Close" : "Scan"}
+              </button>
+            </div>
+            {scanning && (
+              <Suspense fallback={<p className="phone-help">Opening camera…</p>}>
+                <ImeiScanner onScan={onScan} />
+              </Suspense>
+            )}
+            </>
           )}
           {field("invoice", "Invoice number", { maxLength: 40 })}
           {field("bill", "Bill value (₹)", {
@@ -406,7 +417,6 @@ export function ManagerIntake() {
           <label>Invoice image</label>
           <div className="manager-row">
             {[
-              { label: "Use camera", capture: "environment" as const, Icon: Camera },
               { label: "Upload image / PDF", capture: undefined, Icon: Upload },
             ].map(({ label, capture, Icon }) => (
               <label key={label} className="manager-scan manager-pick">

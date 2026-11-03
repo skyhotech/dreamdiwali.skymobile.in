@@ -1,3 +1,4 @@
+import { withLoader } from "./loading";
 import { replaceTemplates, type Template } from "../templates";
 
 // Same-origin by default (Vite proxies /api in dev); set VITE_API_URL otherwise.
@@ -142,7 +143,9 @@ function postJson<T>(
   const key = body instanceof FormData ? "" : path + JSON.stringify(body);
   const running = key && pendingPosts.get(key);
   if (running) return running as Promise<T>;
-  const request = sendJson<T>(path, body, headers);
+  // The wheel shows its own spin; everything else shows the SKY loader.
+  const send = sendJson<T>(path, body, headers);
+  const request = path === "/customers/spin/" ? send : withLoader(send);
   if (key) {
     pendingPosts.set(key, request);
     void request.finally(() => pendingPosts.delete(key)).catch(() => {});
@@ -198,7 +201,8 @@ export const SPIN_TOKEN =
     ? ""
     : (new URLSearchParams(location.search).get("spin") ?? "");
 /** Who a WhatsApp link belongs to; their prize if they already spun. */
-export async function fetchLink(token: string) {
+export const fetchLink = (token: string) => withLoader(readLink(token));
+async function readLink(token: string) {
   let res: Response;
   try {
     res = await fetch(`${API}/customers/link/${encodeURIComponent(token)}/`, {

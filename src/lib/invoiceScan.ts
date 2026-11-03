@@ -67,7 +67,8 @@ function billAmount(text: string) {
 /** 15-digit runs that pass the IMEI check: on a bill these can only be a
  *  phone's IMEI, whatever a scan made of the "IMEI NO" label. */
 export function luhnImeis(text: string) {
-  return (text.match(/(?<!\d)\d{15}(?!\d)/g) ?? []).filter(imeiValid);
+  // Runs of exactly 15 digits (no lookbehind: older iPhones can't parse it).
+  return (text.match(/\d+/g) ?? []).filter((n) => n.length === 15 && imeiValid(n));
 }
 export type InvoiceFields = {
   name: string;

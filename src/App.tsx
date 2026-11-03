@@ -3,6 +3,7 @@ import { MotionConfig } from "motion/react";
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import { Festive } from "./components/Festive";
 import { OfflineBanner } from "./components/StatusNotices";
+import { SkyLoader } from "./components/SkyLoader";
 import { SPIN_TOKEN, fetchLink, spinPrize } from "./lib/backend";
 import { preloadRewards, setWheel } from "./lib/rewards";
 import { useStudio } from "./lib/store";
@@ -105,6 +106,7 @@ function Studio() {
       <MotionConfig reducedMotion="user">
         <main id="main" className="mobile-studio">
           <OfflineBanner />
+          <SkyLoader />
           {SPIN_TOKEN ? (
             <Festive banner>
               <Suspense fallback={<div className="loading">Loading…</div>}>
@@ -127,6 +129,7 @@ function Studio() {
       <MotionConfig reducedMotion="user">
         <main id="main" className="mobile-studio">
           <OfflineBanner />
+          <SkyLoader />
           <Festive banner>
             <Suspense fallback={<div className="loading">Loading…</div>}>
               <SavedPoster url={poster} />
@@ -141,6 +144,7 @@ function Studio() {
       <MotionConfig reducedMotion="user">
         <main id="main" className="mobile-studio">
           <OfflineBanner />
+          <SkyLoader />
           <Festive banner>
             <Suspense fallback={<div className="loading">Loading…</div>}>
               <TermsPage
@@ -162,6 +166,7 @@ function Studio() {
       <MotionConfig reducedMotion="user">
         <main id="main" className="mobile-studio">
           <OfflineBanner />
+          <SkyLoader />
           <Festive banner>
             <Suspense fallback={<div className="loading">Loading…</div>}>
               <SpinWheel
@@ -180,6 +185,7 @@ function Studio() {
       <MotionConfig reducedMotion="user">
         <main id="main" className="mobile-studio">
           <OfflineBanner />
+          <SkyLoader />
           <Festive banner>
             <Suspense fallback={<div className="loading">Loading…</div>}>
               <IphoneOffer token={token} onDone={() => setOfferDone(true)} />
@@ -194,6 +200,7 @@ function Studio() {
       <MotionConfig reducedMotion="user">
         <main id="main" className="mobile-studio">
           <OfflineBanner />
+          <SkyLoader />
           <Festive banner>
             <Suspense fallback={<div className="loading">Loading…</div>}>
               <ReviewForm token={token} onDone={() => setReviewed(true)} />
@@ -206,6 +213,7 @@ function Studio() {
     <MotionConfig reducedMotion="user">
       <main id="main" className="mobile-studio">
         <OfflineBanner />
+          <SkyLoader />
         <Suspense fallback={<div className="loading">Opening camera…</div>}>
           {["selfie", "selfieReview", "product"].includes(step) ? (
             <CameraStudio key={step === "product" ? "product" : "selfie"} />

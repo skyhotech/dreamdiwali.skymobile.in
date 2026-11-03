@@ -119,11 +119,6 @@ class BranchFlowTests(TestCase):
         self.client.post("/api/manager/sent/", {"phone": "9845011111"})
         self.assertEqual(self.client.get("/api/admin/stats/").json()["abandoned"], 0)
 
-    def test_serial_may_be_all_digits(self):
-        res = self.check(imei="12568801", ocr_text=bill_text("9845011111", "12568801"),
-                         invoice_number="INV-12568801")
-        self.assertEqual(res.status_code, 200)
-
     def test_admin_image_links_stay_on_the_current_site(self):
         Customer.objects.create(phone="9845022222", session="s", poster="customers/p.jpg")
         self.client.force_login(self.staff)
@@ -325,6 +320,50 @@ class BranchFlowTests(TestCase):
         self.assertEqual(row["posts"], [{"platform": "instagram", "url": "https://www.instagram.com/p/abc123/"}])
         self.assertEqual((row["instagram_id"], row["facebook_profile"]), ("asha.k", "https://facebook.com/asha.k"))
 
+    def test_phone_imei_is_checked_against_the_bill(self):
+        bad = self.check(imei="490154203237519")  # fails the IMEI check
+        self.assertIn("not valid", bad.json()["imei"][0])
+        res = self.check(imei=OTHER_IMEI, ocr_text=bill_text("9845011111", IMEI, "SI2627VLR31054"),
+                         invoice_number="SI2627VLR31054")
+        self.assertIn("IMEI", res.json()["invoice_image"][0])
+        missing = self.check(imei="", ocr_text=bill_text("9845011111", IMEI, "SI2627VLR31054"),
+                             invoice_number="SI2627VLR31054")
+        self.assertIn("Enter the IMEI", missing.json()["imei"][0])
+
+    def test_a_bill_without_a_phone_imei_needs_none(self):
+        text = bill_text("9845011111", "P-12568801-D", "SI2627VLR31054")  # a TV's serial
+        res = self.check(imei="", invoice_number="SI2627VLR31054", ocr_text=text)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(Customer.objects.get().imei, "")
+
+    def test_admin_approves_a_rejection_with_corrections(self):
+        self.check(invoice_number="SI2627VLR31099", ocr_text=bill_text("9845011111", IMEI, "SI2627VLR31054"))
+        self.client.force_login(self.staff)
+        rows = self.client.get("/api/admin/rejections/").json()
+        self.assertEqual(len(rows), 1)
+        self.assertIn("SI2627VLR31054", rows[0]["detail"]["ocr_text"])
+        body = {"name": "Asha K", "phone": "9845011111", "product_details": "Phone 15",
+                "imei": IMEI, "invoice_number": "SI2627VLR31054", "bill_value": "24999",
+                "branch": "anna-nagar"}
+        res = self.client.post(f"/api/admin/rejections/{rows[0]['id']}/approve/", body,
+                               content_type="application/json")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("?spin=", res.json()["link"])
+        c = Customer.objects.get()
+        self.assertEqual((c.name, c.invoice_number), ("Asha K", "SI2627VLR31054"))
+        self.assertEqual(self.client.get("/api/admin/rejections/").json(), [])
+        self.assertEqual(c.events.get(kind="checked").detail["approved_by"], "staff@sky.in")
+
+    def test_dismissed_rejections_leave_the_list(self):
+        self.check(invoice_number="SI2627VLR31099", ocr_text=bill_text("9845011111", IMEI, "SI2627VLR31054"))
+        self.client.force_login(self.staff)
+        pk = self.client.get("/api/admin/rejections/").json()[0]["id"]
+        self.client.post(f"/api/admin/rejections/{pk}/dismiss/")
+        self.assertEqual(self.client.get("/api/admin/rejections/").json(), [])
+
+    def test_rejections_are_staff_only(self):
+        self.assertEqual(self.client.get("/api/admin/rejections/").status_code, 403)
+
     def test_excel_branches_are_seeded(self):
         self.assertEqual(Branch.objects.exclude(name="Anna Nagar").count(), 31)
         self.assertTrue(Branch.objects.filter(slug="thiruvannamalai-1").exists())
@@ -349,11 +388,6 @@ class BranchFlowTests(TestCase):
         self.assertEqual(ok.status_code, 200)
         bad = self.check(invoice_number="SI2627VLR31055", ocr_text=text)
         self.assertEqual(bad.status_code, 400)
-
-    def test_tv_serial_is_read_from_the_imei_label(self):
-        text = bill_text("9845011111", "P-12568801-D", "SI2627VLR31054")
-        res = self.check(imei="P-12568801-D", invoice_number="SI2627VLR31054", ocr_text=text)
-        self.assertEqual(res.status_code, 200)
 
     def test_scanner_letter_mixups_still_match(self):
         res = self.check(ocr_text=bill_text("9845011111", IMEI, f"lNV-{IMEI.replace('0', 'O')}"))
@@ -385,13 +419,6 @@ class BranchFlowTests(TestCase):
         self.assertIn("IMEI", data["ocr_text"])
         funnel = self.client.get("/api/admin/stats/").json()["funnel"]
         self.assertEqual((funnel["spun"], funnel["shared"]), (1, 1))
-
-    def test_imei_is_checked_and_matched_to_the_bill(self):
-        bad = self.check(imei="490154203237519")  # fails the Luhn check
-        self.assertIn("not valid", bad.json()["imei"][0])
-        res = self.check(imei=OTHER_IMEI, ocr_text=bill_text("9845011111", IMEI, f"INV-{OTHER_IMEI}"),
-                         invoice_number=f"INV-{OTHER_IMEI}")
-        self.assertIn("IMEI", res.json()["invoice_image"][0])
 
     def test_imei_is_found_when_a_scan_garbles_its_label(self):
         text = (f"Invoice No : SI2627A14813\nBilled To,\nAsha\nPh: 9845011111\n"

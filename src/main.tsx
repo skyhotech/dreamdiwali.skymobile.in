@@ -1,6 +1,9 @@
+import "./lib/legacy";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { CrashScreen } from "./components/CrashScreen";
+import { catchErrors } from "./lib/errors";
 import "./styles.css";
 import {
   SPIN_TOKEN,
@@ -40,10 +43,13 @@ addEventListener("vite:preloadError", (e) => {
   e.preventDefault();
   location.reload();
 });
+catchErrors();
 startUploadSync();
 startLivePing();
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <CrashScreen>
+      <App />
+    </CrashScreen>
   </React.StrictMode>,
 );

@@ -255,6 +255,14 @@
     aside { position: sticky; top: 0; height: 100vh; height: 100dvh; overflow-y: auto; align-self: start; }
   }
   .menu-btn { position: sticky; top: 8px; z-index: 40; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+  .rj-list { display: grid; gap: 14px; }
+  .rj-card { border-left: 5px solid #b3261e; }
+  .rj-why { margin: 4px 0 8px; color: #b3261e; font-weight: 600; }
+  .rj-ocr { max-height: 260px; overflow: auto; white-space: pre-wrap; font-size: 12px; background: #fbf6ee; padding: 10px; border-radius: 8px; }
+  .sky-loader { pointer-events: none; position: fixed; inset: 0; z-index: 200; display: grid; place-content: center; justify-items: center; gap: 12px; background: rgba(255,250,240,.7); backdrop-filter: blur(3px); color: #7a1631; font-weight: 700; }
+  .sky-loader[hidden] { display: none !important; }
+  .sky-loader img { width: 90px; height: 90px; border-radius: 50%; background: #fff; box-shadow: 0 10px 30px rgba(122,22,49,.3); animation: sky-spin 1s linear infinite; }
+  @keyframes sky-spin { to { transform: rotate(360deg); } }
   .menu-btn { display: none; align-items: center; gap: 8px; margin-bottom: 14px; min-height: 44px; padding: 0 14px;
     border: 0; border-radius: 10px; background: var(--side); color: #fff; font: inherit; }
   .menu-shade { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
@@ -303,6 +311,7 @@
     <a href="#dashboard" data-view="dashboard">Dashboard</a>
     <a href="#mirrors" data-view="mirrors">Mirrors <span class="badge" id="nav-mirrors">–</span></a>
     <a href="#branches" data-view="branches">Branches <span class="badge" id="nav-branches">–</span></a>
+    <a href="#rejections" data-view="rejections">Rejections <span class="badge" id="nav-rejections">–</span></a>
     <a href="#server" data-view="server">Server status</a>
     <a href="#spin-items" data-view="spin-items">Spin wheel items</a>
     <a href="#customers" data-view="customers">Customers <span class="badge" id="nav-customers">–</span></a>
@@ -312,6 +321,7 @@
   </aside>
 
   <div class="menu-shade" id="menu-shade"></div>
+  <div class="sky-loader" id="sky-loader" role="status" hidden><img src="/static/mirrors/sky-logo.webp" alt=""><span>Please wait…</span></div>
   <main>
     <button class="menu-btn" id="menu-btn" aria-expanded="false" aria-controls="side-menu">☰ Menu</button>
     <!-- Dashboard -->
@@ -482,6 +492,13 @@
       <div class="cgrid" id="j-list"></div>
     </section>
 
+    <!-- Rejections -->
+    <section id="view-rejections" hidden>
+      <h2>Rejections</h2>
+      <p class="hint">Purchases refused by the invoice check. Compare the manager's entry with what was read from the invoice, correct anything, then approve to send the customer their spin link on WhatsApp.</p>
+      <div class="rj-list" id="rj-list"></div>
+    </section>
+
     <!-- Server status -->
     <section id="view-server" hidden>
       <div class="toolbar"><h2>Server status</h2><span class="hint"><i class="live-dot"></i>Updates every 5 seconds · <span id="sv-at">–</span></span></div>
@@ -558,7 +575,23 @@
   // Any button pressed for a change stays disabled until that change finishes.
   let pressed = null;
   document.addEventListener("click", (e) => { pressed = e.target.closest("button"); }, true);
+  // The SKY logo spins in the centre while any request is running.
+  let loading = 0, loaderTimer = 0;
+  function loader(on) {
+    loading += on ? 1 : -1;
+    clearTimeout(loaderTimer);
+    if (loading > 0) {
+      loaderTimer = setTimeout(() => ($("#sky-loader").hidden = false), 250);
+      setTimeout(() => ($("#sky-loader").hidden = true), 15000); // never spin forever
+    }
+    else $("#sky-loader").hidden = true;
+  }
   async function api(path, opts = {}) {
+    if (opts.fresh && !opts.loader) return apiGuarded(path, opts);
+    loader(true);
+    try { return await apiGuarded(path, opts); } finally { loader(false); }
+  }
+  async function apiGuarded(path, opts = {}) {
     const method = (opts.method || "GET").toUpperCase(), button = method === "GET" ? null : pressed;
     // Its own mark, so forms that disable their button first still work.
     if (button?.dataset.busy) throw new Error("Already working on it…");
@@ -608,7 +641,7 @@
   lightbox.addEventListener("click", () => lightbox.classList.remove("open"));
 
   // ---------------- Router ----------------
-  const views = { server: loadServer, journey: loadJourney, "spin-items": loadSpinItems, dashboard: loadDashboard, mirrors: loadMirrors, branches: loadBranches, customers: () => loadCustomers(true) };
+  const views = { rejections: loadRejections, server: loadServer, journey: loadJourney, "spin-items": loadSpinItems, dashboard: loadDashboard, mirrors: loadMirrors, branches: loadBranches, customers: () => loadCustomers(true) };
   function route() {
     const view = (location.hash.slice(1) || "dashboard").split("/")[0];
     const name = views[view] ? view : "dashboard";
@@ -629,6 +662,7 @@
   // ---------------- Dashboard ----------------
   async function loadDashboard() {
     const [s, recent] = await Promise.all([api("stats/"), api("customers/?page_size=12")]);
+    api("rejections/").then((r) => ($("#nav-rejections").textContent = r.length)).catch(() => {});
     $("#s-today").textContent = s.customers_today;
     $("#s-customers").textContent = s.customers;
     $("#s-active").textContent = s.active_mirrors;
@@ -824,6 +858,43 @@
     try { await api(`mirrors/${current.id}/`, { method: "DELETE" }); toast("Mirror deleted"); closeEditor(); await loadMirrors(); }
     catch (err) { toast(err.message, true); }
   });
+
+  // ---------------- Rejections ----------------
+  const RJ_FIELDS = [["name", "Customer name"], ["phone", "Mobile number"], ["email", "Mail ID"], ["product_details", "Product"], ["imei", "IMEI (phones only)"], ["invoice_number", "Invoice number"], ["bill_value", "Bill value (₹)"]];
+  async function loadRejections() {
+    const [rows, bs] = await Promise.all([api("rejections/", { fresh: true }), api("branches/")]);
+    $("#nav-rejections").textContent = rows.length;
+    const list = $("#rj-list");
+    list.innerHTML = rows.length ? "" : `<div class="empty-note">No rejections waiting. 🎉</div>`;
+    for (const r of rows) {
+      const d = r.detail, el = document.createElement("form");
+      el.className = "card rj-card fields";
+      const why = Object.values(d.errors || {}).flat().join(" ");
+      el.innerHTML = `<div class="toolbar"><b>${esc(d.name || r.phone || "Unknown customer")}</b><small>${new Date(r.created_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</small></div>
+        <p class="rj-why">⚠ ${esc(why || "Refused")}</p>
+        <div class="two">${RJ_FIELDS.map(([k, label]) => `<label class="f">${label}<input name="${k}" value="${esc(k === "phone" ? r.phone || d.phone || "" : d[k] || "")}"></label>`).join("")}
+          <label class="f">Branch<select name="branch">${bs.map((b) => `<option value="${esc(b.slug)}" ${b.slug === d.branch ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</select></label></div>
+        ${d.ocr_text ? `<details><summary>What was read from the invoice</summary><pre class="rj-ocr">${esc(d.ocr_text)}</pre></details>` : `<p class="hint">No invoice reading was saved for this refusal.</p>`}
+        <div class="row" style="margin-top:10px"><button class="primary" type="submit">✓ Approve & send link</button><button type="button" class="rj-dismiss">Dismiss</button></div>`;
+      el.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const body = Object.fromEntries(new FormData(el));
+        try {
+          const res = await api(`rejections/${r.id}/approve/`, { method: "POST", json: body });
+          const text = `Hi ${body.name}, thank you for shopping at SKY Mobile & Electronics! 🪔 Spin the wheel for your Diwali gift: ${res.link}`;
+          window.open(`https://wa.me/91${res.phone}?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+          toast("Approved — WhatsApp opened with the spin link");
+          loadRejections();
+        } catch (err) { toast(err.message, true); }
+      });
+      $(".rj-dismiss", el).addEventListener("click", async () => {
+        if (!confirm("Dismiss this rejection without sending a link?")) return;
+        try { await api(`rejections/${r.id}/dismiss/`, { method: "POST" }); toast("Dismissed"); loadRejections(); }
+        catch (err) { toast(err.message, true); }
+      });
+      list.appendChild(el);
+    }
+  }
 
   // ---------------- Server status ----------------
   const bytes = (n) => { const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0; while (n >= 1024 && i < 4) { n /= 1024; i++; } return `${n.toFixed(i > 1 ? 1 : 0)} ${u[i]}`; };

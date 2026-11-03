@@ -41,5 +41,7 @@ export default defineConfig({
     ],
   },
   worker: { format: "es" },
-  build: { target: "es2022" },
+  // Older phones in the stores (iOS 13+, Chrome 80+): newer syntax would
+  // stop the whole page loading there, leaving it blank.
+  build: { target: ["es2019", "safari13", "chrome80"] },
 });

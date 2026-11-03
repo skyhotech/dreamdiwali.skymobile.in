@@ -211,7 +211,7 @@ class CustomerSerializer(serializers.ModelSerializer):
 class CustomerEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomerEvent
-        fields = ["kind", "detail", "phone", "created_at"]
+        fields = ["id", "kind", "detail", "phone", "created_at"]
 
 
 class CustomerDetailSerializer(CustomerSerializer):
@@ -388,6 +388,13 @@ def _printed(text, labelled, typed):
     return any(_fuzzy_in(want, place, _slack(want)) for place in places)
 
 
+def invoice_imeis(text):
+    """The phone IMEIs on a bill: 15-digit numbers that pass the IMEI check,
+    found by their digits so a garbled "IMEI NO" label doesn't matter."""
+    runs = re.findall(r"(?<!\d)\d{15}(?!\d)", re.sub(r"(?<=\d)[ -](?=\d)", "", text))
+    return list(dict.fromkeys(n for n in runs if imei_valid(n)))
+
+
 def invoice_missing(text, data):
     """Which typed details don't match the bill: invoice number, IMEI or serial,
     and the customer's number under Billed To. Each is read from its place.
@@ -395,15 +402,10 @@ def invoice_missing(text, data):
     missing = []
     if not _printed(text, _INVOICE_LINE.findall(text)[:1], data["invoice_number"]):
         missing.append("invoice number")
-    # P-12568801-D, P_12568801_D and 12568801 are the same serial.
-    # A scan can garble the "IMEI NO" label; a 15-digit run that passes the
-    # IMEI check can only be a phone's IMEI.
-    found = _IMEI_LABEL.findall(text) or [
-        n for n in re.findall(r"(?<!\d)\d{15}(?!\d)", text) if imei_valid(n)
-    ]
-    want, imeis = _compact(data["imei"]), [_compact(v) for v in found]
-    if not (any(want in v or v in want or _fuzzy_in(want, v, _slack(want)) for v in imeis)
-            if imeis else _printed(text, [], want)):
+    # Only phones carry a 15-digit IMEI; for other products there is nothing
+    # to check, and the form hides the field.
+    phone_imeis = invoice_imeis(text)
+    if phone_imeis and data.get("imei", "") not in phone_imeis:
         missing.append("IMEI")
     at = re.search(r"billed\s*to", text, re.I)
     phone = re.search(r"ph\w*\s*[.:;\-]*\s*((?:\+?91)?\d{10})", text[at.start():] if at else text, re.I)
@@ -430,16 +432,12 @@ class CustomerIntakeSerializer(serializers.Serializer):
     )
     email = serializers.EmailField(required=False, allow_blank=True)
     product_details = serializers.CharField(max_length=160)
-    imei = serializers.CharField(max_length=30)
+    # Phones only: blank when the bill has no 15-digit IMEI (TVs and others).
+    imei = serializers.CharField(max_length=30, required=False, allow_blank=True)
 
     def validate_imei(self, value):
-        value = value.strip().upper()
-        # A phone's 15-digit IMEI must pass the Luhn check; other products
-        # print a serial in any format.
-        ok = imei_valid(value) if re.fullmatch(r"\d{15}", value) else re.fullmatch(
-            r"[A-Z0-9][A-Z0-9_-]{3,29}", value
-        )
-        if not ok:
+        value = re.sub(r"\s", "", value)
+        if value and not (re.fullmatch(r"\d{15}", value) and imei_valid(value)):
             raise serializers.ValidationError("This IMEI number is not valid.")
         return value
     invoice_number = serializers.CharField(max_length=40)
@@ -467,6 +465,10 @@ class CustomerIntakeSerializer(serializers.Serializer):
                 {"invoice_image": ["Please upload the invoice again."]}
             )
         data["ocr_text"] = text
+        if not invoice_imeis(text):
+            data["imei"] = ""  # not a phone: no IMEI to keep or check
+        elif not data.get("imei"):
+            raise serializers.ValidationError({"imei": ["Enter the IMEI shown on the invoice."]})
         missing = invoice_missing(text, data)
         if missing:
             raise serializers.ValidationError(
@@ -491,3 +493,15 @@ class CustomerUploadSerializer(serializers.Serializer):
     reward = serializers.CharField(max_length=40, required=False, allow_blank=True)
     poster = serializers.ImageField(validators=[_limit_size])
     branch = serializers.CharField(max_length=60, required=False, allow_blank=True)
+
+
+class ApprovalSerializer(CustomerIntakeSerializer):
+    """An admin's manual approval of a refused check: the details as the admin
+    corrected them. The invoice comparison is the admin's own judgement."""
+
+    scan = serializers.CharField(required=False, allow_blank=True)
+    blur_score = serializers.FloatField(required=False, default=0)
+
+    def validate(self, data):
+        data["ocr_text"] = ""
+        return data
