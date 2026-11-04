@@ -803,6 +803,17 @@ footer p {
   width: 32px;
   height: 32px;
 }
+.stage-flip {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  color: #eee;
+  background: #172b2877;
+  width: 32px;
+  height: 32px;
+  z-index: 3;
+}
+.stage-flip:hover,
 .stage-close:hover {
   background: #172b28;
 }

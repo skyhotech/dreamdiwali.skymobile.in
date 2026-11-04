@@ -3,12 +3,12 @@ import {
   Camera,
   Instagram,
   RefreshCw,
-  CameraOff,
   Copy,
   ExternalLink,
   Download,
   UserPlus,
   Sparkles,
+  SwitchCamera,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useCamera } from "../hooks/useCamera";
@@ -54,23 +54,25 @@ const AUTO_GESTURES: Record<string, string> = {
 export default function CameraStudio() {
   const s = useStudio(),
     product = s.step === "product";
-  const [closed, setClosed] = useState(false),
-    [busy, setBusy] = useState(false),
+  const [busy, setBusy] = useState(false),
     [message, setMessage] = useState(""),
     [flash, setFlash] = useState(false),
     [completed, setCompleted] = useState(false),
     [poster, setPoster] = useState<Blob | null>(null),
     [captionMessage, setCaptionMessage] = useState(""),
     [whatsappNudge, setWhatsappNudge] = useState(false),
-    [wizard, setWizard] = useState(false);
+    [wizard, setWizard] = useState(false),
+    // The customer swapped front/back camera; reset for each new shot.
+    [flipped, setFlipped] = useState(false);
   const busyRef = useRef(false);
+  useEffect(() => setFlipped(false), [product]);
   const camera = useCamera(
-    product ? "environment" : "user",
-    !closed && !completed,
+    product !== flipped ? "environment" : "user",
+    !completed,
   );
   const effect = useExpression(
     camera.videoRef,
-    camera.ready && !product && !closed,
+    camera.ready && !product,
   );
   // Hands-free selfie: a smile or ✌️ / 👍 / ✋ held briefly starts a 3-2-1.
   const [autoCapture, setAutoCapture] = useState(true),
@@ -80,7 +82,6 @@ export default function CameraStudio() {
     autoCapture &&
     !product &&
     !completed &&
-    !closed &&
     !busy &&
     camera.ready &&
     effect.ready;
@@ -282,7 +283,6 @@ export default function CameraStudio() {
     setCompleted(false);
     setPoster(null);
     setMessage("");
-    setClosed(false);
   }
   return (
     <div
@@ -411,11 +411,17 @@ export default function CameraStudio() {
           </button>
           {!completed && (
             <button
-              className="stage-close icon-button"
-              aria-label={closed ? "Resume camera" : "Pause camera"}
-              onClick={() => setClosed((v) => !v)}
+              className="stage-flip icon-button"
+              aria-label={
+                camera.facingMode === "user"
+                  ? "Switch to back camera"
+                  : "Switch to front camera"
+              }
+              disabled={busy}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => setFlipped((v) => !v)}
             >
-              {closed ? <Camera size={18} /> : <CameraOff size={18} />}
+              <SwitchCamera size={18} />
             </button>
           )}
           {flash && <div className="shutter-flash" />}
@@ -432,9 +438,7 @@ export default function CameraStudio() {
                 ? product
                   ? "Selfie saved. Capture your purchase in the small box."
                   : "Tap Post on Instagram to take your selfie."
-                : closed
-                  ? "Camera paused. Tap the camera icon to resume."
-                  : "Starting camera…")}
+                : "Starting camera…")}
         </div>
         {camera.error && (
           <button

@@ -261,7 +261,20 @@ test("product camera automatically falls back to front camera", async ({
     page.getByRole("textbox", { name: "Your SKY Instagram caption" }),
   ).toBeVisible();
 });
-test("filter controls, uploads and flip controls are absent", async ({
+test("the flip button swaps between front and back camera", async ({ page }) => {
+  await mockCamera(page);
+  await page.goto("/?spin=test-token");
+  const flip = page.getByRole("button", { name: "Switch to back camera" });
+  await expect(page.getByRole("button", { name: "Post on Instagram", exact: true })).toBeEnabled();
+  await flip.click();
+  await expect.poll(() => page.evaluate(() =>
+    (window as unknown as { cameraCalls: string[] }).cameraCalls.at(-1))).toContain('"exact":"environment"');
+  await page.getByRole("button", { name: "Switch to front camera" }).click();
+  await expect.poll(() => page.evaluate(() =>
+    (window as unknown as { cameraCalls: string[] }).cameraCalls.at(-1))).toContain('"ideal":"user"');
+  await expect(page.getByRole("button", { name: /Pause camera|Resume camera/ })).toHaveCount(0);
+});
+test("filter controls and uploads are absent", async ({
   page,
 }) => {
   await mockCamera(page);
@@ -274,7 +287,7 @@ test("filter controls, uploads and flip controls are absent", async ({
   ).toBeEnabled();
   await expect(
     page.getByRole("button", {
-      name: /Smile filter|Smile to capture|Upload photo|Flip camera/,
+      name: /Smile filter|Smile to capture|Upload photo/,
     }),
   ).toHaveCount(0);
   await expect(page.locator("input[type=file]")).toHaveCount(0);
@@ -300,7 +313,7 @@ test("a blank or covered-camera selfie is refused", async ({ page }) => {
     }),
   ).toHaveCount(0);
 });
-test("permission denial offers retry without upload or flip suggestions", async ({
+test("permission denial offers retry without upload suggestions", async ({
   page,
 }) => {
   await page.addInitScript(() => {
