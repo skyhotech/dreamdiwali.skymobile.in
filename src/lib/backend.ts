@@ -361,6 +361,19 @@ export const savePostLink = (token: string, platform: string, url = "") =>
     kind: `posted_${platform}`,
     ...(url && { url }),
   });
+/** The customer's WhatsApp Status screenshot, for staff to verify. */
+export function uploadWhatsappProof(token: string, screenshot: File) {
+  const form = new FormData();
+  form.append("token", token);
+  form.append("screenshot", screenshot);
+  return postJson<{ status: string }>("/customers/whatsapp-proof/", form);
+}
+/** "pending", "verified" or "rejected": a quiet check, no loader. */
+export async function whatsappProofStatus(token: string) {
+  const res = await fetch(`${API}/customers/whatsapp-proof/?token=${encodeURIComponent(token)}`);
+  if (!res.ok) throw new Error("status");
+  return ((await res.json()) as { status: string }).status;
+}
 /** Instagram and WhatsApp are done: the server unlocks the gift. */
 export const unlockGift = (token: string) =>
   postJson<{ ok: boolean }>("/customers/event/", { token, kind: "gift_unlocked" });

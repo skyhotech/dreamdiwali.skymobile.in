@@ -24,6 +24,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .images import POSTER_SIZE, SELFIE_SIZE, THUMB_SIZE, compressed_photo, optimized
+from .serializers import MAX_UPLOAD_BYTES
 from .models import Branch, Customer, CustomerEvent, Mirror, SpinItem
 from .serializers import (
     BranchSerializer,
@@ -612,11 +613,67 @@ class CustomerEventView(APIView):
             return Response({"detail": INVALID_LINK}, status=status.HTTP_404_NOT_FOUND)
         url, kind = ser.validated_data.get("url", ""), ser.validated_data["kind"]
         if kind == CustomerEvent.GIFT_UNLOCKED:
+            # The reward is granted only once everything checks out: a checked
+            # Instagram post link and a WhatsApp screenshot verified by staff.
             done = set(customer.events.values_list("kind", flat=True))
-            if not {"posted_instagram", "posted_whatsapp"} <= done:
-                return Response({"detail": "Share on Instagram and WhatsApp first."}, status=400)
+            if "posted_instagram" not in done:
+                return Response({"detail": "Share on Instagram first."}, status=400)
+            if customer.whatsapp_proof_status != "verified":
+                return Response({"detail": "Your WhatsApp screenshot is waiting for SKY to verify it."}, status=400)
         _log(customer, kind, **({"url": url} if url else {}))
         return Response({"ok": True})
+
+
+class CustomerWhatsappProof(APIView):
+    """A screenshot of the customer's WhatsApp Status: proof they shared, kept
+    for staff to verify. GET tells the customer whether it is verified yet."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [CustomerSpinThrottle, RepeatThrottle]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get(self, request):
+        customer = Customer.objects.filter(spin_token=str(request.query_params.get("token", ""))).first()
+        if customer is None:
+            return Response({"detail": INVALID_LINK}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"status": customer.whatsapp_proof_status or ""})
+
+    def post(self, request):
+        customer = Customer.objects.filter(spin_token=str(request.data.get("token", ""))).first()
+        if customer is None:
+            return Response({"detail": INVALID_LINK}, status=status.HTTP_404_NOT_FOUND)
+        shot = request.FILES.get("screenshot")
+        if shot is None:
+            return Response({"screenshot": ["Upload a screenshot of your WhatsApp Status."]}, status=400)
+        if shot.size > MAX_UPLOAD_BYTES:
+            return Response({"screenshot": ["The screenshot is too large (max 12 MB)."]}, status=400)
+        if optimized(shot, THUMB_SIZE) is None:
+            return Response({"screenshot": ["That file isn't an image."]}, status=400)
+        small = compressed_photo(shot, SELFIE_SIZE)
+        old = customer.whatsapp_proof.name
+        customer.whatsapp_proof = small or shot
+        customer.whatsapp_proof_status = "pending"
+        customer.save(update_fields=["whatsapp_proof", "whatsapp_proof_status", "updated_at"])
+        if old:
+            storage = customer.whatsapp_proof.storage
+            transaction.on_commit(lambda: storage.delete(old))
+        _log(customer, "posted_whatsapp", proof=customer.whatsapp_proof.url)
+        return Response({"status": "pending"})
+
+
+@api_view(["POST"])
+@permission_classes([IsAdminUser])
+def verify_whatsapp(request, pk):
+    """Staff mark a WhatsApp Status screenshot as verified or rejected."""
+    customer = Customer.objects.filter(pk=pk).first()
+    if customer is None or not customer.whatsapp_proof:
+        return Response({"detail": "No WhatsApp screenshot for this customer."}, status=404)
+    verdict = "verified" if request.data.get("verified") in (True, "true", "1") else "rejected"
+    customer.whatsapp_proof_status = verdict
+    customer.save(update_fields=["whatsapp_proof_status", "updated_at"])
+    _log(customer, f"whatsapp_{verdict}", by=request.user.get_username())
+    return Response({"status": verdict})
 
 
 class CustomerProfile(APIView):
@@ -865,8 +922,12 @@ def sharers(request, platform):
     if platform not in ("instagram", "whatsapp", "facebook"):
         return Response({"detail": "Unknown platform."}, status=404)
     kinds = [f"share_opened_{platform}", f"shared_{platform}", f"posted_{platform}"]
+    events = CustomerEvent.objects.filter(kind__in=kinds, customer__isnull=False)
+    proof_filter = request.query_params.get("proof")
+    if platform == "whatsapp" and proof_filter in ("pending", "verified", "rejected"):
+        events = events.filter(customer__whatsapp_proof_status=proof_filter)
     rows = (
-        CustomerEvent.objects.filter(kind__in=kinds, customer__isnull=False)
+        events
         .values("customer").annotate(last=Max("created_at"),
                                      shares=Count("id", filter=Q(kind=f"shared_{platform}")),
                                      opened=Count("id", filter=Q(kind=f"share_opened_{platform}")))
@@ -879,7 +940,7 @@ def sharers(request, platform):
     customers = {c.pk: c for c in Customer.objects.filter(pk__in=[r["customer"] for r in chunk])}
     proof = {}
     for e in CustomerEvent.objects.filter(customer__in=customers, kind=f"posted_{platform}").order_by("created_at"):
-        proof[e.customer_id] = e.detail.get("url", "") or "confirmed"
+        proof[e.customer_id] = e.detail.get("url", "") or "screenshot"
     results = []
     for r in chunk:
         c = customers[r["customer"]]
@@ -888,6 +949,8 @@ def sharers(request, platform):
             "instagram_id": c.instagram_id, "facebook": c.facebook_profile, "reward": c.reward,
             "shares": max(r["shares"], 1 if r["opened"] else 0), "last": r["last"],
             "proof": proof.get(c.pk, ""),
+            "screenshot": c.whatsapp_proof.url if c.whatsapp_proof else "",
+            "screenshot_status": c.whatsapp_proof_status,
         })
     return Response({"count": total, "results": results,
                      "proved": len(set(CustomerEvent.objects.filter(kind=f"posted_{platform}").values_list("customer", flat=True)))})

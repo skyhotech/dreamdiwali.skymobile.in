@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Facebook, Gift, Instagram, MessageCircle, Share2, X } from "lucide-react";
 import { motion } from "motion/react";
-import { savePostLink, saveProfile, trackShare, unlockGift } from "../lib/backend";
+import { savePostLink, saveProfile, trackShare, unlockGift, uploadWhatsappProof, whatsappProofStatus } from "../lib/backend";
 import { getReward } from "../lib/rewards";
 import { copyCaption, sharePoster } from "../lib/sharing";
 import { useStudio } from "../lib/store";
 import { shareOnWhatsapp } from "./WhatsAppShare";
-type Step = "id" | "instagram" | "whatsapp" | "more" | "gift";
-const STEPS: Step[] = ["id", "instagram", "whatsapp", "more", "gift"];
+type Step = "id" | "instagram" | "whatsapp" | "more" | "waiting" | "gift";
+const STEPS: Step[] = ["id", "instagram", "whatsapp", "more", "waiting", "gift"];
+// How often the waiting screen asks whether staff verified the screenshot.
+const CHECK_MS = 15_000;
 const KEY = "sky-share-step";
 // Resumes where the customer left off on this link.
 function savedStep(token: string | null): Step {
@@ -46,7 +48,6 @@ export function ShareWizard({
   const [opened, setOpened] = useState(false);
   const [link, setLink] = useState("");
   const [handle, setHandle] = useState(useStudio.getState().instagramId);
-  const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const go = (next: Step) => {
@@ -95,12 +96,12 @@ export function ShareWizard({
   async function shareWhatsapp() {
     if (await shareOnWhatsapp(poster, caption, filename)) setOpened(true);
   }
-  async function confirmWhatsapp() {
-    if (!token || !confirmed) return;
+  async function uploadProof(file: File | undefined) {
+    if (!token || !file) return;
     setBusy(true);
     setError("");
     try {
-      await savePostLink(token, "whatsapp");
+      await uploadWhatsappProof(token, file);
       go("more");
     } catch (err) {
       setError((err as Error).message);
@@ -108,21 +109,35 @@ export function ShareWizard({
       setBusy(false);
     }
   }
+  // The gift is granted only after staff verify the WhatsApp screenshot.
   async function finish() {
-    if (!token) return;
-    setBusy(true);
-    setError("");
-    try {
-      await unlockGift(token);
-      go("gift");
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusy(false);
-    }
+    go("waiting");
   }
+  const [rejected, setRejected] = useState(false);
+  useEffect(() => {
+    if (step !== "waiting" || !token) return;
+    let live = true;
+    const check = async () => {
+      try {
+        const status = await whatsappProofStatus(token);
+        if (!live) return;
+        if (status === "verified") {
+          await unlockGift(token);
+          if (live) go("gift");
+        } else setRejected(status === "rejected");
+      } catch {
+        // A lost check on a bad network: the next one tries again.
+      }
+    };
+    void check();
+    const timer = window.setInterval(() => void check(), CHECK_MS);
+    return () => {
+      live = false;
+      window.clearInterval(timer);
+    };
+  }, [step, token]);
   // The step tracker starts at Instagram; the ID comes before it.
-  const index = Math.max(0, STEPS.indexOf(step) - 1);
+  const index = Math.min(3, Math.max(0, STEPS.indexOf(step) - 1));
   return (
     <div className="notice-shade" role="presentation">
       <motion.div
@@ -163,7 +178,7 @@ export function ShareWizard({
         )}
         {step !== "gift" && step !== "id" && (
           <ol className="wizard-steps" aria-label="Steps">
-            {["Instagram", "WhatsApp", "More"].map((label, i) => (
+            {["Instagram", "WhatsApp", "More", "Verify"].map((label, i) => (
               <li key={label} className={i < index ? "done" : i === index ? "now" : ""}>
                 {i < index ? <Check size={14} aria-hidden="true" /> : i + 1} {label}
               </li>
@@ -215,18 +230,21 @@ export function ShareWizard({
             </button>
             {opened && (
               <>
-                <label className="terms-check">
-                  <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
-                  I have posted it on my WhatsApp Status
+                <p>Posted? Open your WhatsApp Status, take a screenshot, and upload it here as proof.</p>
+                <label className="spin-button phone-continue wizard-upload">
+                  {busy ? "Uploading…" : "Upload Status screenshot"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    disabled={busy}
+                    aria-label="WhatsApp Status screenshot"
+                    onChange={(e) => {
+                      void uploadProof(e.target.files?.[0]);
+                      e.target.value = "";
+                    }}
+                  />
                 </label>
-                <button
-                  type="button"
-                  className="spin-button phone-continue"
-                  disabled={busy || !confirmed}
-                  onClick={() => void confirmWhatsapp()}
-                >
-                  {busy ? "Saving…" : "Continue"}
-                </button>
               </>
             )}
           </>
@@ -264,6 +282,26 @@ export function ShareWizard({
             <button type="button" className="spin-button phone-continue" disabled={busy} onClick={() => void finish()}>
               {busy ? "Saving…" : "Done"}
             </button>
+          </>
+        )}
+        {step === "waiting" && (
+          <>
+            <span className="notice-icon wa-icon" aria-hidden="true"><MessageCircle size={28} /></span>
+            {rejected ? (
+              <>
+                <h2 id="wizard-title">Please upload a clearer screenshot</h2>
+                <p>SKY couldn't verify your WhatsApp Status. Share it again and upload a new screenshot.</p>
+                <button type="button" className="spin-button phone-continue" onClick={() => go("whatsapp")}>
+                  Back to WhatsApp
+                </button>
+              </>
+            ) : (
+              <>
+                <h2 id="wizard-title">Waiting for SKY to verify</h2>
+                <p>Our staff are checking your Instagram post and WhatsApp Status. Your gift unlocks here as soon as they verify it. Keep this page open, or show it at the counter.</p>
+                <div className="wizard-wait" aria-hidden="true" />
+              </>
+            )}
           </>
         )}
         {step === "gift" && (

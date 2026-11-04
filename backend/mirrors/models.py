@@ -208,6 +208,12 @@ class Customer(models.Model):
     terms_accepted_at = models.DateTimeField(null=True, blank=True)
     video_review = models.BooleanField(default=False)
     instagram_id = models.CharField(max_length=30, blank=True)
+    # Screenshot of the customer's WhatsApp Status, checked by staff.
+    whatsapp_proof = models.ImageField(upload_to=customer_path, blank=True)
+    whatsapp_proof_status = models.CharField(
+        max_length=10, blank=True,
+        choices=[("pending", "Pending"), ("verified", "Verified"), ("rejected", "Rejected")],
+    )
     # Asked when the customer shares on Facebook.
     facebook_profile = models.CharField(max_length=200, blank=True)
     # Asked straight after the spin, before the mirror selfie.

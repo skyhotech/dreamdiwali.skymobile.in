@@ -731,13 +731,26 @@ test("guided sharing: Instagram link, WhatsApp, then the gift", async ({ page })
   await wizard.getByLabel("Link to your Instagram post").fill("https://www.instagram.com/reel/C1a2b3/");
   await wizard.getByRole("button", { name: "Check my post" }).click();
   await expect(wizard).toContainText("Step 2: Share on WhatsApp");
+  // WhatsApp: share, then a screenshot of the Status as proof.
+  let verified = false;
+  await page.route("**/api/customers/whatsapp-proof/**", (r) =>
+    r.request().method() === "POST"
+      ? r.fulfill({ json: { status: "pending" } })
+      : r.fulfill({ json: { status: verified ? "verified" : "pending" } }),
+  );
   await wizard.getByRole("button", { name: "Share on WhatsApp" }).click();
-  await wizard.getByLabel("I have posted it on my WhatsApp Status").check();
-  await wizard.getByRole("button", { name: "Continue" }).click();
+  await wizard.getByLabel("WhatsApp Status screenshot").setInputFiles({
+    name: "status.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"),
+  });
   await expect(wizard).toContainText("Step 3: Share with more friends");
   await wizard.getByRole("button", { name: "Done" }).click();
-  await expect(wizard.getByRole("heading", { name: "Get your gift from the store!" })).toBeVisible();
+  // No gift until staff verify the screenshot.
+  await expect(wizard.getByRole("heading", { name: "Waiting for SKY to verify" })).toBeVisible();
+  verified = true;
+  await expect(wizard.getByRole("heading", { name: "Get your gift from the store!" })).toBeVisible({ timeout: 20_000 });
   await expect(wizard).toContainText("Power Bank");
   const kinds = events.map((e) => e.kind);
-  for (const k of ["posted_instagram", "posted_whatsapp", "gift_unlocked"]) expect(kinds).toContain(k);
+  for (const k of ["posted_instagram", "gift_unlocked"]) expect(kinds).toContain(k);
 });

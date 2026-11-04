@@ -203,7 +203,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             "consent_at", "has_face", "repeat_of", "repeat_of_phone",
             "poster_thumb", "selfie_thumb", "branch", "branch_name",
             "email", "product_details", "imei", "invoice_number", "bill_value",
-            "invoice_image", "blur_score", "link_version", "stage", "shared_on", "posts", "facebook_profile", "rating", "review", "terms_accepted_at", "video_review", "instagram_id",
+            "invoice_image", "blur_score", "link_version", "stage", "shared_on", "posts", "facebook_profile", "whatsapp_proof", "whatsapp_proof_status", "rating", "review", "terms_accepted_at", "video_review", "instagram_id",
         ]
         read_only_fields = fields
 
@@ -306,7 +306,8 @@ class EventSerializer(SpinSerializer):
     def validate(self, data):
         kind, url = data["kind"], data.get("url", "")
         if kind == "posted_whatsapp":
-            return data  # WhatsApp gives no post link: the customer confirms
+            # Recorded only by a Status screenshot upload (CustomerWhatsappProof).
+            raise serializers.ValidationError({"kind": ["Upload a screenshot of your WhatsApp Status."]})
         if kind.startswith("posted_") and not url:
             raise serializers.ValidationError({"url": ["Paste the link to your post."]})
         if kind == "posted_instagram" and not INSTAGRAM_POST.match(url):

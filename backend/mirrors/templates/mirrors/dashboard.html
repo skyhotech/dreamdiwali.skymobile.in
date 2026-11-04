@@ -278,6 +278,8 @@
   .po-whatsapp { border-left-color: #25d366; }
   .po-facebook { border-left-color: #1877f2; }
   .po-platform { font-size: 12px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); }
+  .wa-shot { width: 100%; max-height: 280px; object-fit: contain; border-radius: 10px; background: #111; }
+  a.sales-row:hover span { text-decoration: underline; }
   .menu-btn { display: none; align-items: center; gap: 8px; margin-bottom: 14px; min-height: 44px; padding: 0 14px;
     border: 0; border-radius: 10px; background: var(--side); color: #fff; font: inherit; }
   .menu-shade { display: none; position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); }
@@ -520,6 +522,7 @@
     <section id="view-share-whatsapp" hidden>
       <h2>💬 WhatsApp sharing</h2>
       <p class="hint">Customers who shared their poster on WhatsApp. WhatsApp Status can't be checked by a website, so "Status confirmed" is the customer's own confirmation.</p>
+      <div class="toolbar"><span></span><select id="sh-wa-filter"><option value="">Everyone who shared</option><option value="pending">⏳ Screenshots waiting for your check</option></select></div>
       <div class="stats" id="sh-whatsapp-totals"></div>
       <div class="cgrid" id="sh-whatsapp"></div>
     </section>
@@ -723,7 +726,8 @@
     const shares = PLATFORMS.map(([k, label, color]) => ({ label, color, opened: s.share_opened[k] || 0, n: s.shares[k] || 0, posted: s.posted[k] || 0 })).sort((a, b) => b.n - a.n);
     const most = Math.max(1, ...shares.map((p) => p.opened));
     $("#s-share-top").textContent = shares[0].n ? `Most shared: ${shares[0].label}` : "No shares yet";
-    $("#s-shares").innerHTML = shares.map((p) => `<div class="sales-row"><span>${p.label}</span><b>${p.n}</b><i style="width:${(p.opened / most) * 100}%;background:${p.color}"></i><small>${p.opened} opened · ${p.n} shared · ${p.posted} post link${p.posted === 1 ? "" : "s"} submitted</small></div>`).join("");
+    const SHARE_PAGES = { Instagram: "#share-instagram", WhatsApp: "#share-whatsapp" };
+    $("#s-shares").innerHTML = shares.map((p) => `<a class="sales-row" href="${SHARE_PAGES[p.label] || "#customers"}" title="See who shared on ${p.label}"><span>${p.label}</span><b>${p.n}</b><i style="width:${(p.opened / most) * 100}%;background:${p.color}"></i><small>${p.opened} opened · ${p.n} shared · ${p.posted} post link${p.posted === 1 ? "" : "s"} submitted</small></a>`).join("");
     const avg = s.rating.avg;
     $("#s-rating").innerHTML = avg ? `${"★".repeat(Math.round(avg))}<i>${"★".repeat(5 - Math.round(avg))}</i> <b>${avg.toFixed(1)}</b> from ${s.rating.n} review${s.rating.n === 1 ? "" : "s"}` : "No ratings yet";
     $("#s-reviews").innerHTML = s.reviews.map((r) => `<div class="cust"><div class="info"><span class="pro-stars">${"★".repeat(r.rating)}<i>${"★".repeat(5 - r.rating)}</i></span>${r.review ? `<q>${esc(r.review)}</q>` : ""}<small>${esc(r.name)} · ${esc(r.branch_name || "")}</small></div></div>`).join("");
@@ -941,11 +945,12 @@
   // ---------------- Instagram / WhatsApp sharing ----------------
   const shPage = { instagram: 1, whatsapp: 1 };
   async function loadSharers(platform) {
-    const data = await api(`sharers/${platform}/?page=${shPage[platform]}`, { fresh: true });
+    const only = platform === "whatsapp" ? $("#sh-wa-filter").value : "";
+    const data = await api(`sharers/${platform}/?page=${shPage[platform]}${only ? "&proof=" + only : ""}`, { fresh: true });
     const ig = platform === "instagram";
     $(`#nav-sh-${platform}`).textContent = data.count;
     $(`#sh-${platform}-totals`).innerHTML = `<div class="card stat"><span>Customers who shared</span><b>${data.count}</b></div>
-      <div class="card stat"><span>${ig ? "Post links verified" : "Status confirmed"}</span><b>${data.proved}</b></div>`;
+      <div class="card stat"><span>${ig ? "Post links verified" : "Screenshots uploaded"}</span><b>${data.proved}</b></div>`;
     const list = $(`#sh-${platform}`);
     list.innerHTML = data.results.length ? "" : `<div class="empty-note">Nobody has shared on ${ig ? "Instagram" : "WhatsApp"} yet.</div>`;
     for (const r of data.results) {
@@ -960,13 +965,25 @@
           <small>${esc(r.phone)} · ${esc(r.branch || "No branch")}${r.reward ? " · 🎁 " + esc(rewardLabel(r.reward)) : ""}</small>
           <small>Shared ${r.shares} time${r.shares === 1 ? "" : "s"} · last ${new Date(r.last).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</small>
           ${ig && r.proof ? `<a class="vr-post" href="${esc(r.proof)}" target="_blank" rel="noopener">▶ Open the post</a>` : ""}
+          ${!ig && r.screenshot ? `<a href="${esc(r.screenshot)}" target="_blank" rel="noopener"><img class="wa-shot" src="${esc(r.screenshot)}" alt="WhatsApp Status screenshot"></a>
+            <span class="pill ${r.screenshot_status === "verified" ? "" : "warn"}">${{ verified: "✓ Verified — gift unlocked", rejected: "✕ Rejected", pending: "⏳ Waiting for your check" }[r.screenshot_status] || ""}</span>
+            <div class="row"><button class="primary wa-ok">✓ Verify</button><button class="danger wa-no">✕ Reject</button></div>` : ""}
         </div>
         <div class="acts"><button class="details primary">Customer</button>${r.instagram_id ? `<a class="btn" href="https://instagram.com/${encodeURIComponent(r.instagram_id)}" target="_blank" rel="noopener">Profile</a>` : ""}</div>`;
       $("button.details", el).addEventListener("click", () => customerDetail(r.customer).catch((e) => toast(e.message, true)));
+      for (const [sel, verified] of [[".wa-ok", true], [".wa-no", false]]) {
+        const btn = el.querySelector(sel);
+        if (btn) btn.addEventListener("click", async () => {
+          try { await api(`customers/${r.customer}/whatsapp-verify/`, { method: "POST", json: { verified } }); toast(verified ? "Verified — the customer's gift is unlocked" : "Rejected — the customer is asked for a new screenshot"); loadSharers(platform); }
+          catch (err) { toast(err.message, true); }
+        });
+      }
       list.appendChild(el);
     }
     pagerNav(list, shPage[platform], Math.ceil(data.count / PER_PAGE), (n) => { shPage[platform] = n; loadSharers(platform).catch((e) => toast(e.message, true)); });
   }
+
+  $("#sh-wa-filter").addEventListener("change", () => { shPage.whatsapp = 1; loadSharers("whatsapp").catch((e) => toast(e.message, true)); });
 
   // ---------------- Video reviews ----------------
   let vrPage = 1;

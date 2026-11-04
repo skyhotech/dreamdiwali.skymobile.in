@@ -402,8 +402,19 @@ class BranchFlowTests(TestCase):
         self.assertEqual(post({"kind": "posted_instagram", "url": "https://example.com/x"}).status_code, 400)
         self.assertEqual(post({"kind": "posted_instagram", "url": "https://www.instagram.com/reel/C1a2b3/"}).status_code, 200)
         self.assertEqual(post({"kind": "gift_unlocked"}).status_code, 400)  # WhatsApp still to do
-        self.assertEqual(post({"kind": "posted_whatsapp"}).status_code, 200)
+        self.assertEqual(post({"kind": "posted_whatsapp"}).status_code, 400)  # needs a screenshot
+        res = self.client.post("/api/customers/whatsapp-proof/", {"token": token, "screenshot": jpeg("status.jpg")})
+        self.assertEqual(res.json(), {"status": "pending"})
+        self.assertEqual(post({"kind": "gift_unlocked"}).status_code, 400)  # staff haven't verified yet
+        c = Customer.objects.get()
+        self.client.force_login(self.staff)
+        res = self.client.post(f"/api/admin/customers/{c.pk}/whatsapp-verify/", {"verified": True},
+                               content_type="application/json")
+        self.assertEqual(res.json(), {"status": "verified"})
+        self.assertEqual(self.client.get(f"/api/customers/whatsapp-proof/?token={token}").json(), {"status": "verified"})
         self.assertEqual(post({"kind": "gift_unlocked"}).status_code, 200)
+        row = self.client.get("/api/admin/sharers/whatsapp/").json()["results"][0]
+        self.assertEqual(row["screenshot_status"], "verified")
 
     def test_admin_lists_video_review_customers(self):
         token = self.token(self.check())
