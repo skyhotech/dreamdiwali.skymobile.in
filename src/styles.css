@@ -3919,3 +3919,32 @@ html.no-pull-refresh body {
   border-radius: 50%;
   animation: sky-loader-spin 0.9s linear infinite;
 }
+.wizard-progress {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+  font-weight: 600;
+}
+.wizard-progress li {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #fff4dc;
+}
+.wizard-progress li.done {
+  background: #e6f6ee;
+  color: #1d6b47;
+}
+.wizard-progress li.bad {
+  background: #fdecea;
+  color: #b3261e;
+}
+a.spin-button.phone-continue {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+}

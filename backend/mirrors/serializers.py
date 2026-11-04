@@ -165,11 +165,28 @@ def wheel_items(items):
     ]
 
 
+def reward_progress(customer, kinds):
+    """Every check the reward depends on, and whether it is done."""
+    return {
+        "instagram_post": "posted_instagram" in kinds,
+        "instagram_follow": customer.follow_proof_status or "",
+        "whatsapp_status": customer.whatsapp_proof_status or "",
+        "google_review_opened": "google_review_opened" in kinds,
+        "ready": "posted_instagram" in kinds
+        and customer.follow_proof_status == "verified"
+        and customer.whatsapp_proof_status == "verified",
+    }
+
+
 class CustomerSerializer(serializers.ModelSerializer):
     mirror_slug = serializers.CharField(source="mirror.slug", read_only=True, default=None)
     has_face = serializers.SerializerMethodField()
     repeat_of_phone = serializers.CharField(source="repeat_of.phone", read_only=True, default=None)
     stage = serializers.CharField(read_only=True)
+    progress = serializers.SerializerMethodField()
+
+    def get_progress(self, obj):
+        return reward_progress(obj, {e.kind for e in obj.events.all()})
     shared_on = serializers.SerializerMethodField()
     posts = serializers.SerializerMethodField()
 
@@ -203,7 +220,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             "consent_at", "has_face", "repeat_of", "repeat_of_phone",
             "poster_thumb", "selfie_thumb", "branch", "branch_name",
             "email", "product_details", "imei", "invoice_number", "bill_value",
-            "invoice_image", "blur_score", "link_version", "stage", "shared_on", "posts", "facebook_profile", "whatsapp_proof", "whatsapp_proof_status", "rating", "review", "terms_accepted_at", "video_review", "instagram_id",
+            "invoice_image", "blur_score", "link_version", "stage", "shared_on", "posts", "facebook_profile", "whatsapp_proof", "whatsapp_proof_status", "follow_proof", "follow_proof_status", "progress", "rating", "review", "terms_accepted_at", "video_review", "instagram_id",
         ]
         read_only_fields = fields
 
@@ -298,7 +315,7 @@ INSTAGRAM_POST = re.compile(
 class EventSerializer(SpinSerializer):
     kind = serializers.ChoiceField(
         choices=CustomerEvent.OPEN_KINDS + CustomerEvent.SHARE_KINDS + CustomerEvent.POSTED_KINDS
-        + [CustomerEvent.GIFT_UNLOCKED]
+        + [CustomerEvent.GIFT_UNLOCKED] + CustomerEvent.STEP_KINDS
     )
     # The customer's own post, pasted as proof (posted_* only).
     url = serializers.URLField(max_length=300, required=False, allow_blank=True)

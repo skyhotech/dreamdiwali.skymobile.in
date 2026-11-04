@@ -965,7 +965,7 @@
           <small>${esc(r.phone)} · ${esc(r.branch || "No branch")}${r.reward ? " · 🎁 " + esc(rewardLabel(r.reward)) : ""}</small>
           <small>Shared ${r.shares} time${r.shares === 1 ? "" : "s"} · last ${new Date(r.last).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</small>
           ${ig && r.proof ? `<a class="vr-post" href="${esc(r.proof)}" target="_blank" rel="noopener">▶ Open the post</a>` : ""}
-          ${!ig && r.screenshot ? `<a href="${esc(r.screenshot)}" target="_blank" rel="noopener"><img class="wa-shot" src="${esc(r.screenshot)}" alt="WhatsApp Status screenshot"></a>
+          ${r.screenshot ? `<small>${ig ? "Screenshot: following @skymobileandelectronics" : "Screenshot: WhatsApp Status"}</small><a href="${esc(r.screenshot)}" target="_blank" rel="noopener"><img class="wa-shot" src="${esc(r.screenshot)}" alt="${ig ? "Instagram following" : "WhatsApp Status"} screenshot"></a>
             <span class="pill ${r.screenshot_status === "verified" ? "" : "warn"}">${{ verified: "✓ Verified — gift unlocked", rejected: "✕ Rejected", pending: "⏳ Waiting for your check" }[r.screenshot_status] || ""}</span>
             <div class="row"><button class="primary wa-ok">✓ Verify</button><button class="danger wa-no">✕ Reject</button></div>` : ""}
         </div>
@@ -974,7 +974,7 @@
       for (const [sel, verified] of [[".wa-ok", true], [".wa-no", false]]) {
         const btn = el.querySelector(sel);
         if (btn) btn.addEventListener("click", async () => {
-          try { await api(`customers/${r.customer}/whatsapp-verify/`, { method: "POST", json: { verified } }); toast(verified ? "Verified — the customer's gift is unlocked" : "Rejected — the customer is asked for a new screenshot"); loadSharers(platform); }
+          try { await api(`customers/${r.customer}/${ig ? "follow" : "whatsapp"}-verify/`, { method: "POST", json: { verified } }); toast(verified ? "Verified — the gift unlocks once every check passes" : "Rejected — the customer is asked for a new screenshot"); loadSharers(platform); }
           catch (err) { toast(err.message, true); }
         });
       }
@@ -1308,7 +1308,7 @@
     for (const c of data.results) list.appendChild(customerCard(c));
     paginate(list);
   }
-  const EVENTS = { ...FUNNEL, share_opened_instagram: "Opened Instagram", share_opened_facebook: "Opened Facebook", share_opened_whatsapp: "Opened WhatsApp", share_opened_more: "Opened share sheet", posted_instagram: "Posted on Instagram (link checked)", posted_whatsapp: "Posted on WhatsApp Status (confirmed)", gift_unlocked: "🎁 Gift unlocked — collect at store", posted_facebook: "Posted on Facebook (link)", profile_instagram: "Gave Instagram ID", profile_facebook: "Gave Facebook profile", terms_accepted: "Terms accepted", reviewed: "Rated the visit", checked: "Purchase checked", whatsapp_sent: "WhatsApp link sent", link_opened: "Link opened", poster_saved: "Poster made", shared_instagram: "Shared: Instagram", shared_facebook: "Shared: Facebook", shared_whatsapp: "Shared: WhatsApp", shared_more: "Shared: other" };
+  const EVENTS = { ...FUNNEL, follow_opened: "Opened our Instagram to follow", follow_proof_sent: "Uploaded Instagram follow screenshot", follow_verified: "Instagram follow verified", follow_rejected: "Instagram follow rejected", whatsapp_verified: "WhatsApp Status verified", whatsapp_rejected: "WhatsApp Status rejected", google_review_opened: "Opened the Google review page", share_opened_instagram: "Opened Instagram", share_opened_facebook: "Opened Facebook", share_opened_whatsapp: "Opened WhatsApp", share_opened_more: "Opened share sheet", posted_instagram: "Posted on Instagram (link checked)", posted_whatsapp: "Posted on WhatsApp Status (confirmed)", gift_unlocked: "🎁 Gift unlocked — collect at store", posted_facebook: "Posted on Facebook (link)", profile_instagram: "Gave Instagram ID", profile_facebook: "Gave Facebook profile", terms_accepted: "Terms accepted", reviewed: "Rated the visit", checked: "Purchase checked", whatsapp_sent: "WhatsApp link sent", link_opened: "Link opened", poster_saved: "Poster made", shared_instagram: "Shared: Instagram", shared_facebook: "Shared: Facebook", shared_whatsapp: "Shared: WhatsApp", shared_more: "Shared: other" };
   // The journey as a railway: a train runs down the line, lighting each station
   // as it arrives. Repeats of a step (two opens) share one station.
   const STATION_MS = 550;
@@ -1334,7 +1334,7 @@
     const d = document.createElement("dialog");
     d.style.cssText = "max-width:640px;width:calc(100% - 32px);border:0;border-radius:12px";
     d.innerHTML = `<div class="toolbar"><b>${esc(c.name || c.phone)}</b><button class="btn">Close</button></div>
-      <table>${row("Phone", c.phone)}${row("Mail", c.email)}${row("Branch", c.branch_name)}${row("Product", c.product_details)}${row("IMEI", c.imei)}${row("Invoice no.", c.invoice_number)}${row("Bill value", c.bill_value)}${row("Reward", c.reward)}${row("Rating", c.rating ? c.rating + " / 5" : "")}${row("Terms accepted", c.terms_accepted_at ? new Date(c.terms_accepted_at).toLocaleString() : "Not yet")}${row("Video review", c.video_review ? "Yes, will make one" : "No")}${row("Instagram", c.instagram_id ? "@" + c.instagram_id : "")}${row("Facebook", c.facebook_profile)}${row("Review", c.review)}${row("Mirror", c.mirror_name)}${row("Photo sharpness", c.blur_score)}${row("Link", c.link)}${row("Link version", c.link_version)}</table>
+      <table>${row("Phone", c.phone)}${row("Mail", c.email)}${row("Branch", c.branch_name)}${row("Product", c.product_details)}${row("IMEI", c.imei)}${row("Invoice no.", c.invoice_number)}${row("Bill value", c.bill_value)}${row("Reward", c.reward)}${row("Rating", c.rating ? c.rating + " / 5" : "")}${row("Terms accepted", c.terms_accepted_at ? new Date(c.terms_accepted_at).toLocaleString() : "Not yet")}${row("Video review", c.video_review ? "Yes, will make one" : "No")}${row("Instagram", c.instagram_id ? "@" + c.instagram_id : "")}${row("Reward checks", c.progress ? `Post link ${c.progress.instagram_post ? "✓" : "✕"} · Follow ${c.progress.instagram_follow || "✕"} · WhatsApp ${c.progress.whatsapp_status || "✕"} · Google review ${c.progress.google_review_opened ? "opened" : "—"}${c.progress.ready ? " → 🎁 ready" : ""}` : "")}${row("Facebook", c.facebook_profile)}${row("Review", c.review)}${row("Mirror", c.mirror_name)}${row("Photo sharpness", c.blur_score)}${row("Link", c.link)}${row("Link version", c.link_version)}</table>
       <div class="row" style="flex-wrap:wrap;gap:8px;margin:12px 0">${pics.map(([n, u]) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="${n}" style="height:160px;border-radius:8px"></a>`).join("")}</div>
       ${c.posts && c.posts.length ? `<b>Posts (proof submitted)</b><ul>${c.posts.map((p) => `<li>${esc(p.platform)}: <a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.url)}</a></li>`).join("")}</ul>` : ""}
       <b>Journey</b>${journeyTrack(c.events)}

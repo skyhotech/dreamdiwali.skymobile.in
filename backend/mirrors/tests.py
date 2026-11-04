@@ -411,7 +411,12 @@ class BranchFlowTests(TestCase):
         res = self.client.post(f"/api/admin/customers/{c.pk}/whatsapp-verify/", {"verified": True},
                                content_type="application/json")
         self.assertEqual(res.json(), {"status": "verified"})
-        self.assertEqual(self.client.get(f"/api/customers/whatsapp-proof/?token={token}").json(), {"status": "verified"})
+        self.assertEqual(self.client.get(f"/api/customers/whatsapp-proof/?token={token}").json()["status"], "verified")
+        self.assertEqual(post({"kind": "gift_unlocked"}).status_code, 400)  # Instagram follow not proven yet
+        self.client.post("/api/customers/follow-proof/", {"token": token, "screenshot": jpeg("follow.jpg")})
+        self.client.post(f"/api/admin/customers/{c.pk}/follow-verify/", {"verified": True}, content_type="application/json")
+        progress = self.client.get(f"/api/customers/follow-proof/?token={token}").json()["progress"]
+        self.assertEqual((progress["instagram_follow"], progress["ready"]), ("verified", True))
         self.assertEqual(post({"kind": "gift_unlocked"}).status_code, 200)
         row = self.client.get("/api/admin/sharers/whatsapp/").json()["results"][0]
         self.assertEqual(row["screenshot_status"], "verified")

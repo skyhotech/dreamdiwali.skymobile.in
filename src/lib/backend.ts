@@ -361,18 +361,26 @@ export const savePostLink = (token: string, platform: string, url = "") =>
     kind: `posted_${platform}`,
     ...(url && { url }),
   });
-/** The customer's WhatsApp Status screenshot, for staff to verify. */
-export function uploadWhatsappProof(token: string, screenshot: File) {
+/** A proof screenshot (WhatsApp Status, or our Instagram showing
+ *  "Following") for staff to verify. */
+export function uploadProof(token: string, kind: "whatsapp" | "follow", screenshot: File) {
   const form = new FormData();
   form.append("token", token);
   form.append("screenshot", screenshot);
-  return postJson<{ status: string }>("/customers/whatsapp-proof/", form);
+  return postJson<{ status: string }>(`/customers/${kind}-proof/`, form);
 }
-/** "pending", "verified" or "rejected": a quiet check, no loader. */
-export async function whatsappProofStatus(token: string) {
-  const res = await fetch(`${API}/customers/whatsapp-proof/?token=${encodeURIComponent(token)}`);
-  if (!res.ok) throw new Error("status");
-  return ((await res.json()) as { status: string }).status;
+export type RewardProgress = {
+  instagram_post: boolean;
+  instagram_follow: string;
+  whatsapp_status: string;
+  google_review_opened: boolean;
+  ready: boolean;
+};
+/** Every check the reward depends on: a quiet check, no loader. */
+export async function rewardProgress(token: string) {
+  const res = await fetch(`${API}/customers/follow-proof/?token=${encodeURIComponent(token)}`);
+  if (!res.ok) throw new Error("progress");
+  return ((await res.json()) as { progress: RewardProgress }).progress;
 }
 /** Instagram and WhatsApp are done: the server unlocks the gift. */
 export const unlockGift = (token: string) =>
