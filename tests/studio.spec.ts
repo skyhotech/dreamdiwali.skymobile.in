@@ -153,8 +153,19 @@ async function takeSelfie(page: Page) {
 // After the product photo the guided share window opens: these camera tests
 // close it to reach the poster (the window has its own test).
 async function spinAndClaim(page: import("@playwright/test").Page) {
-  const close = page.getByRole("dialog").getByRole("button", { name: "Close" });
-  await close.waitFor({ timeout: 15_000 }).then(() => close.click(), () => {});
+  await expect(page.locator(".share-page")).toBeVisible({ timeout: 15_000 });
+}
+// From the finished poster to the share page's three buttons.
+async function openSharePage(page: import("@playwright/test").Page) {
+  await page.route("**/api/customers/profile/", (r) => r.fulfill({ json: { handle: "asha.k" } }));
+  await page.route("**/api/customers/event/", (r) => r.fulfill({ json: { ok: true } }));
+  await page.context().route(/https:\/\/(www\.instagram\.com|wa\.me)\//, (r) =>
+    r.fulfill({ contentType: "text/html", body: "<title>app</title>" }),
+  );
+  await spinAndClaim(page);
+  await page.getByRole("textbox", { name: "Instagram ID" }).fill("@asha.k");
+  await page.getByRole("button", { name: "Continue to sharing" }).click();
+  await expect(page.getByRole("heading", { name: "Step 1: Share your poster" })).toBeVisible();
 }
 test("rear camera appears in the small product box, then captures and shares", async ({
   page,
@@ -193,46 +204,19 @@ test("rear camera appears in the small product box, then captures and shares", a
       exact: true,
     })
     .click();
-  await spinAndClaim(page);
-  await expect(
-    page.getByRole("textbox", { name: "Your SKY Instagram caption" }),
-  ).toBeVisible();
-  // Sharing opens from the customer's tap on Post on Instagram.
-  await page
-    .locator(".camera-stage")
-    .getByRole("button", { name: "Post on Instagram", exact: true })
-    .click();
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          (window as unknown as { defaultSkyShare?: unknown }).defaultSkyShare,
-      ),
-    )
-    .toMatchObject({
-      files: 1,
-      text: expect.stringContaining("@skymobileandelectronics"),
-    });
-  // After Instagram, WhatsApp Status is suggested next.
-  await expect(
-    page.getByRole("dialog", { name: "One more step for your iPhone 15 chance!" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Later" }).click();
-  await page.getByRole("button", { name: "Edit poster", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Festive Celebration", exact: true })
-    .click();
-  // Kiosk editor: only the frame slider and posting remain.
-  for (const hidden of [
-    "Generate my poster",
-    "Reset position",
-    "Copy caption",
-    "Clear saved photos",
-  ])
-    await expect(page.getByRole("button", { name: hidden })).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Post on Instagram", exact: true }),
-  ).toBeVisible();
+  await openSharePage(page);
+  // The mirror and selfie are gone: only the share page remains.
+  await expect(page.locator(".camera-stage")).toHaveCount(0);
+  const card = page.locator("#share-instagram");
+  await expect(card.getByLabel("Link to your Instagram post")).toHaveCount(0);
+  // Instagram opens straight away, with the poster saved to the phone.
+  const dl = page.waitForEvent("download"),
+    popup = page.waitForEvent("popup");
+  await card.getByRole("button", { name: "Share on Instagram" }).click();
+  expect((await dl).suggestedFilename()).toMatch(/^SKY-Diwali-.+\.jpg$/);
+  await expect(await popup).toHaveURL("https://www.instagram.com/");
+  // Then the proof field for Instagram.
+  await expect(card.getByLabel("Link to your Instagram post")).toBeVisible();
 });
 test("product camera automatically falls back to front camera", async ({
   page,
@@ -257,9 +241,6 @@ test("product camera automatically falls back to front camera", async ({
     })
     .click();
   await spinAndClaim(page);
-  await expect(
-    page.getByRole("textbox", { name: "Your SKY Instagram caption" }),
-  ).toBeVisible();
 });
 test("the flip button swaps between front and back camera", async ({ page }) => {
   await mockCamera(page);
@@ -380,7 +361,7 @@ test("both bundled original frames load without any upload prompt", async ({
   }
 });
 
-test("Post on Instagram shares the completed poster with generated SKY caption", async ({
+test("Others shares the completed poster with the generated SKY caption", async ({
   page,
 }) => {
   await mockCamera(page);
@@ -416,15 +397,8 @@ test("Post on Instagram shares the completed poster with generated SKY caption",
       exact: true,
     })
     .click();
-  await spinAndClaim(page);
-  // Sharing opens from the customer's tap (phones refuse it otherwise).
-  await expect(
-    page.getByRole("status").filter({ hasText: "Your poster is ready" }),
-  ).toBeVisible();
-  await page
-    .locator(".camera-stage")
-    .getByRole("button", { name: "Post on Instagram", exact: true })
-    .click();
+  await openSharePage(page);
+  await page.getByRole("button", { name: "Share on other apps" }).click();
   await expect
     .poll(() =>
       page.evaluate(
@@ -438,9 +412,6 @@ test("Post on Instagram shares the completed poster with generated SKY caption",
       height: 2400,
       text: expect.stringContaining("@skymobileandelectronics"),
     });
-  await expect(
-    page.getByRole("textbox", { name: "Your SKY Instagram caption" }),
-  ).toHaveValue(/#DiwaliWithSKY/);
   await expect
     .poll(() =>
       page.evaluate(
@@ -449,21 +420,20 @@ test("Post on Instagram shares the completed poster with generated SKY caption",
       ),
     )
     .toContain("SKY Mobile & Electronics");
+  // A link that isn't a web address is refused before it is sent.
+  const others = page.locator("#share-more");
+  await others.getByLabel("Link to your post").fill("my post");
+  await others.getByRole("button", { name: "Send link" }).click();
+  await expect(others).toContainText("starts with https://");
+  await others.getByLabel("Link to your post").fill("https://x.com/asha/status/1");
+  await others.getByRole("button", { name: "Send link" }).click();
+  await expect(others).toContainText("Proof sent");
 });
 
-test("Instagram fallback downloads poster and opens Instagram with caption ready", async ({
-  page,
-  context,
-}) => {
-  await context.route("https://www.instagram.com/**", (r) =>
-    r.fulfill({ contentType: "text/html", body: "<title>Instagram</title>" }),
-  );
+test("WhatsApp opens directly with the caption and poster link", async ({ page }) => {
   await mockCamera(page);
   await page.addInitScript(() => {
-    Object.defineProperty(navigator, "canShare", { value: () => false });
-    Object.defineProperty(navigator, "clipboard", {
-      value: { writeText: async () => {} },
-    });
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: async () => {} } });
   });
   await takeSelfie(page);
   await page
@@ -472,22 +442,19 @@ test("Instagram fallback downloads poster and opens Instagram with caption ready
       exact: true,
     })
     .click();
-  await spinAndClaim(page);
-  const dl = page.waitForEvent("download"),
-    popup = page.waitForEvent("popup");
-  await page
-    .locator(".camera-stage")
-    .getByRole("button", { name: "Post on Instagram", exact: true })
-    .click();
-  expect((await dl).suggestedFilename()).toMatch(/^SKY-Diwali-.+\.jpg$/);
-  const instagram = await popup;
-  await expect(instagram).toHaveURL("https://www.instagram.com/");
-  await instagram.close();
-  await expect(
-    page
-      .getByRole("status")
-      .filter({ hasText: "Poster downloaded and Instagram opened" }),
-  ).toBeVisible();
+  await openSharePage(page);
+  const popup = page.waitForEvent("popup");
+  await page.getByRole("button", { name: "Share on WhatsApp" }).click();
+  const wa = await popup;
+  expect(decodeURIComponent(new URL(wa.url()).searchParams.get("text") ?? "")).toContain(
+    "@skymobileandelectronics",
+  );
+  await expect(page.getByLabel("WhatsApp Status screenshot")).toBeAttached();
+  // A non-image file is refused.
+  await page.getByLabel("WhatsApp Status screenshot").setInputFiles({
+    name: "note.txt", mimeType: "text/plain", buffer: Buffer.from("hi"),
+  });
+  await expect(page.locator("#share-whatsapp")).toContainText("Choose a screenshot image");
 });
 
 test("selfie, product photos and generated poster persist locally and can be cleared", async ({
@@ -713,39 +680,20 @@ test("inside Instagram's built-in browser: open in a real browser", async ({ bro
 
 test("guided sharing: Instagram link, WhatsApp, then the gift", async ({ page }) => {
   const events: { kind: string; url?: string }[] = [];
-  await page.route("**/api/customers/event/", (r) => {
-    const body = r.request().postDataJSON() as { kind: string; url?: string };
-    events.push(body);
-    const bad = body.kind === "posted_instagram" && !/instagram\.com\/(p|reel|stories)\//.test(body.url ?? "");
-    return bad
-      ? r.fulfill({ status: 400, json: { url: ["Paste the link to your Instagram post, reel or story."] } })
-      : r.fulfill({ json: { ok: true } });
-  });
   await mockCamera(page);
   await page.addInitScript(() => {
-    Object.defineProperty(navigator, "share", { value: async () => {} });
-    Object.defineProperty(navigator, "canShare", { value: () => true });
     Object.defineProperty(navigator, "clipboard", { value: { writeText: async () => {} } });
   });
   await takeSelfie(page);
   await page.getByRole("button", { name: "Capture product and post on Instagram", exact: true }).click();
-  const wizard = page.getByRole("dialog");
-  // First the Instagram ID: sharing opens only once it is saved.
-  await page.route("**/api/customers/profile/", (r) => r.fulfill({ json: { handle: "asha.k" } }));
-  await expect(wizard).toContainText("Your Instagram ID");
-  await expect(wizard.getByRole("button", { name: "Continue to sharing" })).toBeDisabled();
-  await wizard.getByLabel("Instagram ID").fill("@asha.k");
-  await wizard.getByRole("button", { name: "Continue to sharing" }).click();
-  await expect(wizard).toContainText("Step 1: Share on Instagram");
-  await wizard.getByRole("button", { name: "Share on Instagram" }).click();
-  await wizard.getByLabel("Link to your Instagram post").fill("https://example.com/not-instagram");
-  await wizard.getByRole("button", { name: "Check my post" }).click();
-  await expect(wizard).toContainText("Instagram post, reel or story");
-  await wizard.getByLabel("Link to your Instagram post").fill("https://www.instagram.com/reel/C1a2b3/");
-  await wizard.getByRole("button", { name: "Check my post" }).click();
+  await openSharePage(page);
+  await page.route("**/api/customers/event/", (r) => {
+    events.push(r.request().postDataJSON() as { kind: string; url?: string });
+    return r.fulfill({ json: { ok: true } });
+  });
   // Proofs are uploaded; staff verification is simulated by flipping this.
   let verified = false;
-  const progress = () => ({ instagram_post: true, instagram_follow: verified ? "verified" : "pending",
+  const progress = () => ({ instagram_post: true, instagram_proof: "", instagram_follow: verified ? "verified" : "pending",
     whatsapp_status: verified ? "verified" : "pending", google_review_opened: true, ready: verified });
   for (const kind of ["whatsapp", "follow"])
     await page.route(`**/api/customers/${kind}-proof/**`, (r) =>
@@ -755,28 +703,42 @@ test("guided sharing: Instagram link, WhatsApp, then the gift", async ({ page })
     );
   const png = { name: "shot.png", mimeType: "image/png",
     buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") };
+  const continueBtn = page.getByRole("button", { name: "Continue", exact: true });
+  await expect(continueBtn).toBeDisabled();
+  // Instagram: open the app, then the post's link (checked by its pattern).
+  const ig = page.locator("#share-instagram");
+  let popup = page.waitForEvent("popup");
+  await ig.getByRole("button", { name: "Share on Instagram" }).click();
+  await (await popup).close();
+  await ig.getByLabel("Link to your Instagram post").fill("https://example.com/not-instagram");
+  await ig.getByRole("button", { name: "Send link" }).click();
+  await expect(ig).toContainText("Instagram post, reel or story");
+  await ig.getByLabel("Link to your Instagram post").fill("https://www.instagram.com/reel/C1a2b3/");
+  await ig.getByRole("button", { name: "Send link" }).click();
+  await expect(ig).toContainText("Proof sent");
+  // WhatsApp: open the app, then a Status screenshot.
+  popup = page.waitForEvent("popup");
+  await page.getByRole("button", { name: "Share on WhatsApp" }).click();
+  await (await popup).close();
+  await page.getByLabel("WhatsApp Status screenshot").setInputFiles(png);
+  await expect(page.locator("#share-whatsapp")).toContainText("Proof sent");
+  await continueBtn.click();
   // Follow our Instagram: open the profile, then a "Following" screenshot.
-  await expect(wizard).toContainText("Step 2: Follow us on Instagram");
-  await page.context().route("https://www.instagram.com/**", (r) => r.fulfill({ body: "ok" }));
+  await expect(page.getByRole("heading", { name: "Step 2: Follow us on Instagram" })).toBeVisible();
   const profile = page.waitForEvent("popup");
-  await wizard.getByRole("link", { name: "Open our Instagram" }).click();
+  await page.getByRole("link", { name: "Open our Instagram" }).click();
   await (await profile).close();
-  await wizard.getByLabel("Instagram following screenshot").setInputFiles(png);
-  // WhatsApp: share, then a screenshot of the Status.
-  await expect(wizard).toContainText("Step 3: Share on WhatsApp");
-  await wizard.getByRole("button", { name: "Share on WhatsApp" }).click();
-  await wizard.getByLabel("WhatsApp Status screenshot").setInputFiles(png);
-  await expect(wizard).toContainText("Step 4: Share with more friends");
-  await wizard.getByRole("button", { name: "Done" }).click();
+  await page.getByLabel("Instagram following screenshot").setInputFiles(png);
   // Optional Google review, then the progress checklist.
-  await expect(wizard.getByRole("link", { name: "Leave a Google review" })).toHaveAttribute("href", /share\.google/);
-  await wizard.getByRole("button", { name: "Continue" }).click();
-  // No gift until staff verify the screenshot.
-  await expect(wizard.getByRole("heading", { name: "Waiting for SKY to verify" })).toBeVisible();
-  await expect(wizard).toContainText("Following on Instagram: ⏳ being checked");
+  await expect(page.getByRole("link", { name: "Leave a Google review" })).toHaveAttribute("href", /share\.google/);
+  await page.getByRole("button", { name: "Continue" }).click();
+  // No gift until staff verify the screenshots.
+  await expect(page.getByRole("heading", { name: "Waiting for SKY to verify" })).toBeVisible();
+  await expect(page.locator(".share-page")).toContainText("Following on Instagram: ⏳ being checked");
   verified = true;
-  await expect(wizard.getByRole("heading", { name: "Get your gift from the store!" })).toBeVisible({ timeout: 20_000 });
-  await expect(wizard).toContainText("Power Bank");
+  await expect(page.getByRole("heading", { name: "Get your gift from the store!" })).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator(".share-page")).toContainText("Power Bank");
   const kinds = events.map((e) => e.kind);
-  for (const k of ["posted_instagram", "gift_unlocked"]) expect(kinds).toContain(k);
+  for (const k of ["share_opened_instagram", "share_opened_whatsapp", "posted_instagram", "gift_unlocked"])
+    expect(kinds).toContain(k);
 });

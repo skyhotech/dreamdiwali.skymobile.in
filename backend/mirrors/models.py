@@ -220,6 +220,18 @@ class Customer(models.Model):
         max_length=10, blank=True,
         choices=[("pending", "Pending"), ("verified", "Verified"), ("rejected", "Rejected")],
     )
+    # Screenshot of the customer's Instagram post, when they can't paste its link.
+    instagram_proof = models.ImageField(upload_to=customer_path, blank=True)
+    instagram_proof_status = models.CharField(
+        max_length=10, blank=True,
+        choices=[("pending", "Pending"), ("verified", "Verified"), ("rejected", "Rejected")],
+    )
+    # Screenshot of a share on any other app (optional).
+    more_proof = models.ImageField(upload_to=customer_path, blank=True)
+    more_proof_status = models.CharField(
+        max_length=10, blank=True,
+        choices=[("pending", "Pending"), ("verified", "Verified"), ("rejected", "Rejected")],
+    )
     # Asked when the customer shares on Facebook.
     facebook_profile = models.CharField(max_length=200, blank=True)
     # Asked straight after the spin, before the mirror selfie.
@@ -300,7 +312,8 @@ class CustomerEvent(models.Model):
     # Shared on Instagram and WhatsApp: the gift may be collected.
     GIFT_UNLOCKED = "gift_unlocked"
     # Opened the Instagram profile to follow / the Google review page (optional).
-    STEP_KINDS = ["follow_opened", "google_review_opened"]
+    STEP_KINDS = ["follow_opened", "google_review_opened",
+                  "returned_instagram", "returned_whatsapp", "returned_more"]
 
     customer = models.ForeignKey(
         Customer, null=True, blank=True, on_delete=models.CASCADE, related_name="events"

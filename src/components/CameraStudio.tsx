@@ -3,8 +3,6 @@ import {
   Camera,
   Instagram,
   RefreshCw,
-  Copy,
-  ExternalLink,
   Download,
   UserPlus,
   Sparkles,
@@ -13,7 +11,7 @@ import {
 import { motion } from "motion/react";
 import { useCamera } from "../hooks/useCamera";
 import { useExpression } from "../hooks/useExpression";
-import { useStudio, MAX_PRODUCTS } from "../lib/store";
+import { useStudio } from "../lib/store";
 import {
   BLANK_PHOTO,
   capture,
@@ -34,11 +32,9 @@ import { getTemplate, templates } from "../templates";
 import { Poster } from "./Poster";
 import { Templates } from "./Templates";
 import { UploadStatus } from "./StatusNotices";
-import { ShareButtons } from "./ShareButtons";
 import { trackShare } from "../lib/backend";
 import { CameraAlert } from "./CameraAlert";
 import { ShareWizard } from "./ShareWizard";
-import { WhatsAppButton, WhatsAppNudge, shareOnWhatsapp } from "./WhatsAppShare";
 // Hands-free capture: how strong a smile counts, and how long a cue is held.
 const SMILE_THRESHOLD = 0.6;
 const HOLD_MS = 500;
@@ -59,9 +55,7 @@ export default function CameraStudio() {
     [flash, setFlash] = useState(false),
     [completed, setCompleted] = useState(false),
     [poster, setPoster] = useState<Blob | null>(null),
-    [captionMessage, setCaptionMessage] = useState(""),
-    [whatsappNudge, setWhatsappNudge] = useState(false),
-    [wizard, setWizard] = useState(false),
+    [, setCaptionMessage] = useState(""),
     // The customer swapped front/back camera; reset for each new shot.
     [flipped, setFlipped] = useState(false);
   const busyRef = useRef(false);
@@ -159,7 +153,6 @@ export default function CameraStudio() {
           text,
         });
         if (token) trackShare(token, "shared_instagram");
-        setWhatsappNudge(true);
       } else {
         download(blob, name);
         window.open(
@@ -265,8 +258,6 @@ export default function CameraStudio() {
     c.width = c.height = 1;
     setPoster(blob);
     s.setSavedPoster(blob);
-    // The poster is ready: the step-by-step sharing window opens.
-    setWizard(true);
     // No automatic share here (it isn't a tap, so phones would refuse it):
     // the customer taps Post on Instagram, which opens the share sheet.
     setMessage("Your poster is ready! Tap Post on Instagram to share it.");
@@ -284,6 +275,17 @@ export default function CameraStudio() {
     setPoster(null);
     setMessage("");
   }
+  // The poster is ready: the mirror and selfie give way to the share page.
+  if (completed && poster)
+    return (
+      <div className="workspace share-workspace">
+        <ShareWizard poster={poster} caption={caption} filename={`${filename}.jpg`} />
+        <UploadStatus />
+        <button className="text-button" onClick={retake}>
+          <RefreshCw size={13} /> Retake product
+        </button>
+      </div>
+    );
   return (
     <div
       className={`workspace camera-workspace inline-product-workspace ${product ? "product-workspace" : ""}`}
@@ -479,83 +481,6 @@ export default function CameraStudio() {
           </div>
         )}
       </aside>
-      {wizard && poster && (
-        <ShareWizard
-          poster={poster}
-          caption={caption}
-          filename={`${filename}.jpg`}
-          onClose={() => setWizard(false)}
-        />
-      )}
-      {whatsappNudge && poster && !wizard && (
-        <WhatsAppNudge
-          onShare={() => void shareOnWhatsapp(poster, caption, `${filename}.jpg`)}
-          onClose={() => setWhatsappNudge(false)}
-        />
-      )}
-      {completed && (
-        <section className="inline-caption-panel">
-          {poster && (
-            <WhatsAppButton
-              label="Share on WhatsApp Status"
-              onShare={() => void shareOnWhatsapp(poster, caption, `${filename}.jpg`)}
-            />
-          )}
-          {poster && (
-            <ShareButtons
-              poster={poster}
-              caption={caption}
-              filename={`${filename}.jpg`}
-            />
-          )}
-          <label htmlFor="inline-sky-caption">Your SKY Instagram caption</label>
-          <textarea
-            id="inline-sky-caption"
-            readOnly
-            rows={5}
-            value={caption}
-            onFocus={(e) => e.currentTarget.select()}
-          />
-          <div>
-            <button
-              className="text-button"
-              onClick={() =>
-                void copyCaption(caption).then((ok) =>
-                  setCaptionMessage(
-                    ok
-                      ? "Caption copied."
-                      : "Select and copy the caption above.",
-                  ),
-                )
-              }
-            >
-              <Copy size={14} /> Copy caption
-            </button>
-            <a
-              href="https://www.instagram.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-button"
-            >
-              <ExternalLink size={14} /> Open Instagram
-            </a>
-          </div>
-          <p role="status">{captionMessage}</p>
-          <UploadStatus />
-          {s.products.length < MAX_PRODUCTS && (
-            <button
-              className="text-button"
-              onClick={() => {
-                setCompleted(false);
-                setPoster(null);
-                setMessage("");
-              }}
-            >
-              Add another product
-            </button>
-          )}
-        </section>
-      )}
     </div>
   );
 }

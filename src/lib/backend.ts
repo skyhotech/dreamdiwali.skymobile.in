@@ -363,7 +363,8 @@ export const savePostLink = (token: string, platform: string, url = "") =>
   });
 /** A proof screenshot (WhatsApp Status, or our Instagram showing
  *  "Following") for staff to verify. */
-export function uploadProof(token: string, kind: "whatsapp" | "follow", screenshot: File) {
+export type ProofKind = "whatsapp" | "follow" | "instagram" | "more";
+export function uploadProof(token: string, kind: ProofKind, screenshot: File) {
   const form = new FormData();
   form.append("token", token);
   form.append("screenshot", screenshot);
@@ -371,6 +372,8 @@ export function uploadProof(token: string, kind: "whatsapp" | "follow", screensh
 }
 export type RewardProgress = {
   instagram_post: boolean;
+  /** A post screenshot sent instead of the link, and staff's verdict. */
+  instagram_proof: string;
   instagram_follow: string;
   whatsapp_status: string;
   google_review_opened: boolean;

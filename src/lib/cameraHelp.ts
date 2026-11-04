@@ -6,6 +6,7 @@ export type CameraProblem =
   | "in-app"
   | "site-blocked"
   | "device-blocked"
+  | "overlay"
   | "busy"
   | "missing"
   | "insecure"
@@ -91,6 +92,19 @@ export async function cameraHelp(errorName: string): Promise<CameraHelp> {
             "Also open Settings → Security & privacy → Privacy → turn ON \"Camera access\".",
             "Come back here and tap Try again.",
           ],
+    };
+  // Android Chrome refuses to even ask ("This site can't ask for your
+  // permission") while another app draws over the screen.
+  if (isAndroid && state !== "denied")
+    return {
+      problem: "overlay",
+      title: "Close apps drawn over the screen",
+      steps: [
+        "Chrome can't ask for the camera while another app is shown on top of the screen.",
+        "Turn off: internet speed meter, chat bubbles / chat heads, screen dimmer or blue-light filter, screen recorder.",
+        "Or open Settings → Apps → Special app access → Display over other apps, and switch those apps OFF.",
+        "Come back here, tap Try again, then tap Allow.",
+      ],
     };
   return {
     problem: "site-blocked",

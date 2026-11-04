@@ -965,16 +965,16 @@
           <small>${esc(r.phone)} · ${esc(r.branch || "No branch")}${r.reward ? " · 🎁 " + esc(rewardLabel(r.reward)) : ""}</small>
           <small>Shared ${r.shares} time${r.shares === 1 ? "" : "s"} · last ${new Date(r.last).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</small>
           ${ig && r.proof ? `<a class="vr-post" href="${esc(r.proof)}" target="_blank" rel="noopener">▶ Open the post</a>` : ""}
-          ${r.screenshot ? `<small>${ig ? "Screenshot: following @skymobileandelectronics" : "Screenshot: WhatsApp Status"}</small><a href="${esc(r.screenshot)}" target="_blank" rel="noopener"><img class="wa-shot" src="${esc(r.screenshot)}" alt="${ig ? "Instagram following" : "WhatsApp Status"} screenshot"></a>
-            <span class="pill ${r.screenshot_status === "verified" ? "" : "warn"}">${{ verified: "✓ Verified — gift unlocked", rejected: "✕ Rejected", pending: "⏳ Waiting for your check" }[r.screenshot_status] || ""}</span>
-            <div class="row"><button class="primary wa-ok">✓ Verify</button><button class="danger wa-no">✕ Reject</button></div>` : ""}
+          ${(r.shots || []).map((s) => `<div class="shot" data-kind="${esc(s.kind)}"><small>Screenshot: ${esc(s.label)}</small><a href="${esc(s.url)}" target="_blank" rel="noopener"><img class="wa-shot" src="${esc(s.url)}" alt="${esc(s.label)} screenshot"></a>
+            <span class="pill ${s.status === "verified" ? "" : "warn"}">${{ verified: "✓ Verified", rejected: "✕ Rejected", pending: "⏳ Waiting for your check" }[s.status] || ""}</span>
+            <div class="row"><button class="primary wa-ok">✓ Verify</button><button class="danger wa-no">✕ Reject</button></div></div>`).join("")}
         </div>
         <div class="acts"><button class="details primary">Customer</button>${r.instagram_id ? `<a class="btn" href="https://instagram.com/${encodeURIComponent(r.instagram_id)}" target="_blank" rel="noopener">Profile</a>` : ""}</div>`;
       $("button.details", el).addEventListener("click", () => customerDetail(r.customer).catch((e) => toast(e.message, true)));
-      for (const [sel, verified] of [[".wa-ok", true], [".wa-no", false]]) {
-        const btn = el.querySelector(sel);
+      for (const shot of el.querySelectorAll(".shot")) for (const [sel, verified] of [[".wa-ok", true], [".wa-no", false]]) {
+        const btn = shot.querySelector(sel);
         if (btn) btn.addEventListener("click", async () => {
-          try { await api(`customers/${r.customer}/${ig ? "follow" : "whatsapp"}-verify/`, { method: "POST", json: { verified } }); toast(verified ? "Verified — the gift unlocks once every check passes" : "Rejected — the customer is asked for a new screenshot"); loadSharers(platform); }
+          try { await api(`customers/${r.customer}/${shot.dataset.kind}-verify/`, { method: "POST", json: { verified } }); toast(verified ? "Verified — the gift unlocks once every check passes" : "Rejected — the customer is asked for a new screenshot"); loadSharers(platform); }
           catch (err) { toast(err.message, true); }
         });
       }
@@ -1308,7 +1308,7 @@
     for (const c of data.results) list.appendChild(customerCard(c));
     paginate(list);
   }
-  const EVENTS = { ...FUNNEL, follow_opened: "Opened our Instagram to follow", follow_proof_sent: "Uploaded Instagram follow screenshot", follow_verified: "Instagram follow verified", follow_rejected: "Instagram follow rejected", whatsapp_verified: "WhatsApp Status verified", whatsapp_rejected: "WhatsApp Status rejected", google_review_opened: "Opened the Google review page", share_opened_instagram: "Opened Instagram", share_opened_facebook: "Opened Facebook", share_opened_whatsapp: "Opened WhatsApp", share_opened_more: "Opened share sheet", posted_instagram: "Posted on Instagram (link checked)", posted_whatsapp: "Posted on WhatsApp Status (confirmed)", gift_unlocked: "🎁 Gift unlocked — collect at store", posted_facebook: "Posted on Facebook (link)", profile_instagram: "Gave Instagram ID", profile_facebook: "Gave Facebook profile", terms_accepted: "Terms accepted", reviewed: "Rated the visit", checked: "Purchase checked", whatsapp_sent: "WhatsApp link sent", link_opened: "Link opened", poster_saved: "Poster made", shared_instagram: "Shared: Instagram", shared_facebook: "Shared: Facebook", shared_whatsapp: "Shared: WhatsApp", shared_more: "Shared: other" };
+  const EVENTS = { ...FUNNEL, follow_opened: "Opened our Instagram to follow", instagram_proof_sent: "Uploaded Instagram post screenshot", instagram_verified: "Instagram post screenshot verified", instagram_rejected: "Instagram post screenshot rejected", more_proof_sent: "Uploaded a share screenshot (other app)", returned_instagram: "Came back after Instagram", returned_whatsapp: "Came back after WhatsApp", returned_more: "Came back after sharing elsewhere", follow_proof_sent: "Uploaded Instagram follow screenshot", follow_verified: "Instagram follow verified", follow_rejected: "Instagram follow rejected", whatsapp_verified: "WhatsApp Status verified", whatsapp_rejected: "WhatsApp Status rejected", google_review_opened: "Opened the Google review page", share_opened_instagram: "Opened Instagram", share_opened_facebook: "Opened Facebook", share_opened_whatsapp: "Opened WhatsApp", share_opened_more: "Opened share sheet", posted_instagram: "Posted on Instagram (link checked)", posted_whatsapp: "Posted on WhatsApp Status (confirmed)", gift_unlocked: "🎁 Gift unlocked — collect at store", posted_facebook: "Posted on Facebook (link)", profile_instagram: "Gave Instagram ID", profile_facebook: "Gave Facebook profile", terms_accepted: "Terms accepted", reviewed: "Rated the visit", checked: "Purchase checked", whatsapp_sent: "WhatsApp link sent", link_opened: "Link opened", poster_saved: "Poster made", shared_instagram: "Shared: Instagram", shared_facebook: "Shared: Facebook", shared_whatsapp: "Shared: WhatsApp", shared_more: "Shared: other" };
   // The journey as a railway: a train runs down the line, lighting each station
   // as it arrives. Repeats of a step (two opens) share one station.
   const STATION_MS = 550;

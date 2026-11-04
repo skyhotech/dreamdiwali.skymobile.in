@@ -3959,3 +3959,119 @@ a.spin-button.phone-continue {
   gap: 8px;
   text-decoration: none;
 }
+/* The share page: replaces the mirror once the poster is ready. */
+.share-workspace {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+}
+.share-page {
+  width: 100%;
+  max-width: 480px;
+  color: #172b28;
+  background: #fffaf0;
+  border-radius: 20px;
+  padding: 20px 16px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  text-align: center;
+}
+.share-page h2 {
+  margin: 8px 0;
+}
+.share-page form {
+  display: grid;
+  gap: 10px;
+}
+.share-cards {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.share-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #e5d9bf;
+  border-radius: 18px;
+  background: #fff;
+  text-align: left;
+}
+.share-card.done {
+  border-color: #25d366;
+}
+.share-card h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.share-card p {
+  margin: 0;
+  font-size: 14px;
+}
+.share-round {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.share-round-ig {
+  background: linear-gradient(45deg, #f9ce34, #ee2a7b 45%, #6228d7);
+}
+.share-round-wa {
+  background: linear-gradient(135deg, #25d366, #128c7e);
+}
+.share-round-more {
+  background: #172b28;
+}
+.proof-link {
+  display: flex;
+  gap: 8px;
+}
+.proof-link input {
+  flex: 1;
+  min-width: 0;
+}
+.proof-link input[aria-invalid="true"] {
+  border-color: #c62828;
+}
+.proof-link .spin-button {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.proof-or {
+  text-align: center;
+  font-size: 13px;
+  opacity: 0.7;
+}
+.proof-shot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  border: 2px dashed #b8a676;
+  border-radius: 999px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.proof-done {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #128c7e;
+  font-weight: 700;
+}

@@ -624,7 +624,15 @@ class CustomerEventView(APIView):
 
 
 PROOFS = {"whatsapp": ("whatsapp_proof", "whatsapp_proof_status", "posted_whatsapp"),
-          "follow": ("follow_proof", "follow_proof_status", "follow_proof_sent")}
+          "follow": ("follow_proof", "follow_proof_status", "follow_proof_sent"),
+          "instagram": ("instagram_proof", "instagram_proof_status", "instagram_proof_sent"),
+          "more": ("more_proof", "more_proof_status", "more_proof_sent")}
+
+
+# The screenshots shown on each admin sharing page.
+SHOTS = {"instagram": [("instagram", "Instagram post"), ("follow", "Following @skymobileandelectronics")],
+         "whatsapp": [("whatsapp", "WhatsApp Status")],
+         "facebook": []}
 
 
 class CustomerProof(APIView):
@@ -931,12 +939,17 @@ def sharers(request, platform):
         return Response({"detail": "Unknown platform."}, status=404)
     kinds = [f"share_opened_{platform}", f"shared_{platform}", f"posted_{platform}"]
     if platform == "instagram":
-        kinds += ["follow_opened", "follow_proof_sent"]
+        kinds += ["follow_opened", "follow_proof_sent", "instagram_proof_sent", "returned_instagram"]
+    if platform == "whatsapp":
+        kinds += ["returned_whatsapp"]
     events = CustomerEvent.objects.filter(kind__in=kinds, customer__isnull=False)
     proof_filter = request.query_params.get("proof")
     if proof_filter in ("pending", "verified", "rejected"):
-        field = "whatsapp_proof_status" if platform == "whatsapp" else "follow_proof_status"
-        events = events.filter(**{f"customer__{field}": proof_filter})
+        fields = SHOTS[platform]
+        match = Q()
+        for kind, _ in fields:
+            match |= Q(**{f"customer__{PROOFS[kind][1]}": proof_filter})
+        events = events.filter(match)
     rows = (
         events
         .values("customer").annotate(last=Max("created_at"),
@@ -960,9 +973,12 @@ def sharers(request, platform):
             "instagram_id": c.instagram_id, "facebook": c.facebook_profile, "reward": c.reward,
             "shares": max(r["shares"], 1 if r["opened"] else 0), "last": r["last"],
             "proof": proof.get(c.pk, ""),
-            "screenshot": (c.whatsapp_proof if platform == "whatsapp" else c.follow_proof).url
-            if (c.whatsapp_proof if platform == "whatsapp" else c.follow_proof) else "",
-            "screenshot_status": c.whatsapp_proof_status if platform == "whatsapp" else c.follow_proof_status,
+            # Every screenshot staff can verify for this platform.
+            "shots": [
+                {"kind": kind, "label": label, "url": getattr(c, PROOFS[kind][0]).url,
+                 "status": getattr(c, PROOFS[kind][1])}
+                for kind, label in SHOTS.get(platform, []) if getattr(c, PROOFS[kind][0])
+            ],
         })
     return Response({"count": total, "results": results,
                      "proved": len(set(CustomerEvent.objects.filter(kind=f"posted_{platform}").values_list("customer", flat=True)))})

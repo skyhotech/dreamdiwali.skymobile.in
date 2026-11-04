@@ -168,11 +168,13 @@ def wheel_items(items):
 def reward_progress(customer, kinds):
     """Every check the reward depends on, and whether it is done."""
     return {
-        "instagram_post": "posted_instagram" in kinds,
+        # A pasted post link, or a post screenshot that staff verified.
+        "instagram_post": "posted_instagram" in kinds or customer.instagram_proof_status == "verified",
+        "instagram_proof": customer.instagram_proof_status or "",
         "instagram_follow": customer.follow_proof_status or "",
         "whatsapp_status": customer.whatsapp_proof_status or "",
         "google_review_opened": "google_review_opened" in kinds,
-        "ready": "posted_instagram" in kinds
+        "ready": ("posted_instagram" in kinds or customer.instagram_proof_status == "verified")
         and customer.follow_proof_status == "verified"
         and customer.whatsapp_proof_status == "verified",
     }
@@ -312,6 +314,10 @@ INSTAGRAM_POST = re.compile(
 )
 
 
+# Any public web address, for shares on other apps.
+WEB_LINK = re.compile(r"^https?://(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?::\d+)?(?:[/?#]\S*)?$")
+
+
 class EventSerializer(SpinSerializer):
     kind = serializers.ChoiceField(
         choices=CustomerEvent.OPEN_KINDS + CustomerEvent.SHARE_KINDS + CustomerEvent.POSTED_KINDS
@@ -327,6 +333,8 @@ class EventSerializer(SpinSerializer):
             raise serializers.ValidationError({"kind": ["Upload a screenshot of your WhatsApp Status."]})
         if kind.startswith("posted_") and not url:
             raise serializers.ValidationError({"url": ["Paste the link to your post."]})
+        if kind.startswith("posted_") and not WEB_LINK.match(url):
+            raise serializers.ValidationError({"url": ["Paste a full link that starts with https://"]})
         if kind == "posted_instagram" and not INSTAGRAM_POST.match(url):
             raise serializers.ValidationError(
                 {"url": ["Paste the link to your Instagram post, reel or story."]}

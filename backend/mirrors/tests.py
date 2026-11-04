@@ -419,7 +419,29 @@ class BranchFlowTests(TestCase):
         self.assertEqual((progress["instagram_follow"], progress["ready"]), ("verified", True))
         self.assertEqual(post({"kind": "gift_unlocked"}).status_code, 200)
         row = self.client.get("/api/admin/sharers/whatsapp/").json()["results"][0]
-        self.assertEqual(row["screenshot_status"], "verified")
+        self.assertEqual([(x["kind"], x["status"]) for x in row["shots"]], [("whatsapp", "verified")])
+
+    def test_instagram_screenshot_counts_once_staff_verify_it(self):
+        token = self.token(self.check())
+        post = lambda body: self.client.post("/api/customers/event/", {"token": token, **body},
+                                             content_type="application/json")
+        self.assertEqual(post({"kind": "posted_more", "url": "not a link"}).status_code, 400)
+        self.assertEqual(post({"kind": "posted_more", "url": "https://x.com/asha/status/1"}).status_code, 200)
+        self.assertEqual(post({"kind": "returned_instagram"}).status_code, 200)
+        c = Customer.objects.get()
+        self.client.force_login(self.staff)
+        for kind in ("instagram", "follow", "whatsapp"):
+            self.client.post(f"/api/customers/{kind}-proof/", {"token": token, "screenshot": jpeg(f"{kind}.jpg")})
+            if kind != "instagram":
+                self.client.post(f"/api/admin/customers/{c.pk}/{kind}-verify/", {"verified": True},
+                                 content_type="application/json")
+        progress = self.client.get(f"/api/customers/follow-proof/?token={token}").json()["progress"]
+        self.assertEqual((progress["instagram_proof"], progress["ready"]), ("pending", False))
+        self.client.post(f"/api/admin/customers/{c.pk}/instagram-verify/", {"verified": True},
+                         content_type="application/json")
+        self.assertTrue(self.client.get(f"/api/customers/follow-proof/?token={token}").json()["progress"]["ready"])
+        row = self.client.get("/api/admin/sharers/instagram/").json()["results"][0]
+        self.assertEqual({x["kind"] for x in row["shots"]}, {"instagram", "follow"})
 
     def test_admin_lists_video_review_customers(self):
         token = self.token(self.check())

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isAndroid } from "../lib/cameraHelp";
 const messages: Record<string, string> = {
   NotAllowedError:
     "Camera permission was denied. Allow camera access in your browser settings, then retry.",
@@ -155,7 +156,10 @@ export function useCamera(facing: "user" | "environment", active: boolean) {
     const again = () => {
       if (!document.hidden) setRetry((v) => v + 1);
     };
-    const timer = window.setInterval(again, ASK_AGAIN_MS);
+    // Not on Android: there, asking again while an overlay app is on screen
+    // only re-shows Chrome's "can't ask for your permission" box; the
+    // customer taps Try again once the overlay is off.
+    const timer = isAndroid ? 0 : window.setInterval(again, ASK_AGAIN_MS);
     let status: PermissionStatus | null = null;
     navigator.permissions
       ?.query({ name: "camera" as PermissionName })
