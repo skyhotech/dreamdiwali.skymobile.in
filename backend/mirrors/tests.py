@@ -442,6 +442,11 @@ class BranchFlowTests(TestCase):
         self.assertTrue(self.client.get(f"/api/customers/follow-proof/?token={token}").json()["progress"]["ready"])
         row = self.client.get("/api/admin/sharers/instagram/").json()["results"][0]
         self.assertEqual({x["kind"] for x in row["shots"]}, {"instagram", "follow"})
+        data = self.client.get("/api/admin/sharers/instagram/").json()
+        steps = {j["key"]: j["n"] for j in data["journey"]}
+        self.assertEqual((steps["returned"], steps["proof"], steps["verified"], steps["followed"]), (1, 1, 1, 1))
+        self.assertEqual(self.client.get("/api/admin/sharers/instagram/?stage=gift").json()["count"], 0)
+        self.assertEqual(self.client.get("/api/admin/sharers/whatsapp/?stage=verified").json()["count"], 1)
 
     def test_admin_lists_video_review_customers(self):
         token = self.token(self.check())

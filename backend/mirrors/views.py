@@ -629,6 +629,26 @@ PROOFS = {"whatsapp": ("whatsapp_proof", "whatsapp_proof_status", "posted_whatsa
           "more": ("more_proof", "more_proof_status", "more_proof_sent")}
 
 
+# Each sharing page's journey, step by step, like the customer journey.
+def _share_journey(platform):
+    opened = [("opened", "Tapped Share", Q(events__kind=f"share_opened_{platform}")),
+              ("shared", "Shared", Q(events__kind=f"shared_{platform}")),
+              ("returned", "Came back", Q(events__kind=f"returned_{platform}"))]
+    gift = [("gift", "Gift unlocked", Q(events__kind=CustomerEvent.GIFT_UNLOCKED))]
+    if platform == "instagram":
+        return opened + [
+            ("proof", "Sent link or screenshot", Q(events__kind__in=["posted_instagram", "instagram_proof_sent"])),
+            ("verified", "Post verified", Q(events__kind="posted_instagram") | Q(instagram_proof_status="verified")),
+            ("followed", "Following verified", Q(follow_proof_status="verified")),
+        ] + gift
+    if platform == "whatsapp":
+        return opened + [
+            ("proof", "Sent Status screenshot", Q(events__kind="posted_whatsapp")),
+            ("verified", "Status verified", Q(whatsapp_proof_status="verified")),
+        ] + gift
+    return opened
+
+
 # The screenshots shown on each admin sharing page.
 SHOTS = {"instagram": [("instagram", "Instagram post"), ("follow", "Following @skymobileandelectronics")],
          "whatsapp": [("whatsapp", "WhatsApp Status")],
@@ -943,6 +963,10 @@ def sharers(request, platform):
     if platform == "whatsapp":
         kinds += ["returned_whatsapp"]
     events = CustomerEvent.objects.filter(kind__in=kinds, customer__isnull=False)
+    journey = _share_journey(platform)
+    stage = dict((k, q) for k, _, q in journey).get(request.query_params.get("stage", ""))
+    if stage is not None:
+        events = events.filter(customer__in=Customer.objects.filter(stage).values("id"))
     proof_filter = request.query_params.get("proof")
     if proof_filter in ("pending", "verified", "rejected"):
         fields = SHOTS[platform]
@@ -980,7 +1004,9 @@ def sharers(request, platform):
                 for kind, label in SHOTS.get(platform, []) if getattr(c, PROOFS[kind][0])
             ],
         })
+    counts = Customer.objects.aggregate(**{k: Count("id", filter=q, distinct=True) for k, _, q in journey})
     return Response({"count": total, "results": results,
+                     "journey": [{"key": k, "label": label, "n": counts[k]} for k, label, _ in journey],
                      "proved": len(set(CustomerEvent.objects.filter(kind=f"posted_{platform}").values_list("customer", flat=True)))})
 
 

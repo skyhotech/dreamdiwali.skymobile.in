@@ -516,6 +516,7 @@
     <section id="view-share-instagram" hidden>
       <h2>📸 Instagram sharing</h2>
       <p class="hint">Customers who shared their poster on Instagram. A post link is checked as a real Instagram post when the customer submits it.</p>
+      <div class="card"><b>Instagram journey</b><div class="j-flow" id="sh-instagram-flow" style="margin-top:10px"></div></div>
       <div class="stats" id="sh-instagram-totals"></div>
       <div class="cgrid" id="sh-instagram"></div>
     </section>
@@ -523,6 +524,7 @@
       <h2>💬 WhatsApp sharing</h2>
       <p class="hint">Customers who shared their poster on WhatsApp. WhatsApp Status can't be checked by a website, so "Status confirmed" is the customer's own confirmation.</p>
       <div class="toolbar"><span></span><select id="sh-wa-filter"><option value="">Everyone who shared</option><option value="pending">⏳ Screenshots waiting for your check</option></select></div>
+      <div class="card"><b>WhatsApp journey</b><div class="j-flow" id="sh-whatsapp-flow" style="margin-top:10px"></div></div>
       <div class="stats" id="sh-whatsapp-totals"></div>
       <div class="cgrid" id="sh-whatsapp"></div>
     </section>
@@ -943,11 +945,15 @@
   }
 
   // ---------------- Instagram / WhatsApp sharing ----------------
-  const shPage = { instagram: 1, whatsapp: 1 };
+  const shPage = { instagram: 1, whatsapp: 1 }, shStage = { instagram: "", whatsapp: "" };
   async function loadSharers(platform) {
     const only = platform === "whatsapp" ? $("#sh-wa-filter").value : "";
-    const data = await api(`sharers/${platform}/?page=${shPage[platform]}${only ? "&proof=" + only : ""}`, { fresh: true });
+    const stage = location.hash.split("/")[1] || "";
+    if (shStage[platform] !== stage) { shStage[platform] = stage; shPage[platform] = 1; }
+    const data = await api(`sharers/${platform}/?page=${shPage[platform]}${only ? "&proof=" + only : ""}${stage ? "&stage=" + encodeURIComponent(stage) : ""}`, { fresh: true });
     const ig = platform === "instagram";
+    // Tap a step to list its customers; tap it again to see everyone.
+    $(`#sh-${platform}-flow`).innerHTML = data.journey.map((j, i) => `<a class="j-node ${stage === j.key ? "on" : ""}" href="#share-${platform}${stage === j.key ? "" : "/" + j.key}" style="animation-delay:${i * 0.1}s"><b>${j.n}</b><span>${esc(j.label)}</span></a>`).join(`<i class="j-arrow"></i>`);
     $(`#nav-sh-${platform}`).textContent = data.count;
     $(`#sh-${platform}-totals`).innerHTML = `<div class="card stat"><span>Customers who shared</span><b>${data.count}</b></div>
       <div class="card stat"><span>${ig ? "Post links verified" : "Screenshots uploaded"}</span><b>${data.proved}</b></div>`;
